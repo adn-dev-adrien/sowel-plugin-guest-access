@@ -1,0 +1,41 @@
+{
+  "id": "guest-access",
+  "type": "integration",
+  "name": "Guest Access",
+  "version": "0.1.0",
+  "description": "Brings the gate-opening requests of the gîte and lodge guests from GuestFlow into Sowel",
+  "icon": "DoorOpen",
+  "repo": "adn-dev-adrien/sowel-plugin-guest-access",
+  "author": "adn-dev-adrien",
+  "tags": ["access", "guests"],
+  "i18n": {
+    "fr": {
+      "name": "Accès invités",
+      "description": "Fait remonter dans Sowel les demandes d'ouverture du portail émises par les clients du gîte et de la lodge depuis guestFlow"
+    }
+  },
+  "sowelVersion": ">=1.39.0",
+  "settings": [
+    {
+      "key": "base_url",
+      "label": "GuestFlow URL",
+      "type": "text",
+      "required": true,
+      "placeholder": "http://192.168.0.24:4000"
+    },
+    {
+      "key": "api_key",
+      "label": "GuestFlow gate API key",
+      "type": "password",
+      "required": true
+    },
+    {
+      "key": "wait_seconds",
+      "label": "Long-poll duration (s)",
+      "type": "number",
+      "required": false,
+      "defaultValue": "25"
+    }
+  ],
+  "apiVersion": 2
+}
