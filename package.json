@@ -1,7 +1,7 @@
 {
   "name": "sowel-plugin-guest-access",
-  "version": "0.3.0",
-  "description": "Brings the gate-opening requests of the gîte and lodge guests from GuestFlow into Sowel",
+  "version": "1.0.0",
+  "description": "Holds a channel open to Portier and brings the gate commands of the gîte and lodge guests into Sowel",
   "type": "module",
   "main": "dist/index.js",
   "scripts": {

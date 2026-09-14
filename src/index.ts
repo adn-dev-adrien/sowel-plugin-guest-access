@@ -1,22 +1,33 @@
 /**
  * Sowel Plugin: Guest Access
  *
- * The house's half of the guest gate access (guestFlow's specs/guest-gate-access.md).
- * It brings the open requests of the gîte and lodge guests into Sowel — and it
- * does nothing else: it never touches the gate. A recipe binds to the device
- * exposed here, decides, and answers through an order.
+ * The house's half of the guest gate access (specs/portier-channel.md). It brings the gate
+ * commands of the gîte and lodge guests into Sowel — and it does nothing else: it never touches
+ * the gate. A recipe binds to the device exposed here, decides, and answers through an order.
  *
- * The trust model is the point. GuestFlow is the machine exposed on the
- * internet; it holds no credential over this house and opens no connection
- * towards it. This plugin goes and asks (a long poll, outbound), which is why a
- * compromise of the booking app cannot command anything here.
+ * The trust model is the point. Portier holds the accesses and decides who may open; it opens no
+ * connection towards this house and holds no credential over it. The house opens the channel
+ * itself and answers a challenge with a key that never travels, so the house network keeps
+ * accepting nothing from outside.
  */
 
-import { GatePoller, DEVICE_ID } from "./gate-poller.js";
-import type { DeviceManager, EventBus, Logger, GateState, RequestOutcome } from "./gate-poller.js";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import { decodeHouseKey } from "./frame-signature.js";
+import { COMMAND_STATUSES, DEVICE_ID, GATE_STATES, PortierChannel } from "./portier-channel.js";
+import type {
+  CommandStatus,
+  DeviceManager,
+  EventBus,
+  GateState,
+  Logger,
+  SocketFactory,
+} from "./portier-channel.js";
+import { isAcceptableUrl } from "./url-guard.js";
 
 interface SettingsManager {
   get(key: string): string | undefined;
+  set(key: string, value: string): void;
 }
 
 interface Device {
@@ -32,6 +43,11 @@ interface PluginDeps {
   settingsManager: SettingsManager;
   deviceManager: DeviceManager;
   pluginDir: string;
+}
+
+/** Not part of Sowel's deps: lets a test hand in a fake socket. */
+interface PluginOptions {
+  socketFactory?: SocketFactory;
 }
 
 type IntegrationStatus = "connected" | "disconnected" | "not_configured" | "error";
@@ -65,32 +81,61 @@ interface IntegrationPlugin {
 
 const INTEGRATION_ID = "guest-access";
 const SETTINGS_PREFIX = `integration.${INTEGRATION_ID}.`;
-const DEFAULT_WAIT_SECONDS = 25;
 
-const OUTCOMES: RequestOutcome[] = ["opened", "already_open", "refused", "error"];
+export const DEFAULT_PING_MINUTES = 10;
+const MIN_PING_MINUTES = 1;
+const MAX_PING_MINUTES = 30;
 
 /**
- * Plain HTTP is refused towards anything but this machine.
- *
- * The signature makes a sniffed channel survivable — the secret never travels — but it encrypts
- * nothing: the stay code, the lodging and the guest's name would cross the LAN in clear, on a
- * network that also carries whatever a guest brings. GuestFlow is served over TLS under its public
- * name, so there is no reason left to accept anything else.
- *
- * `localhost` stays allowed: that is a developer running both halves on one machine, where there is
- * no wire to listen to.
+ * Not a form setting: the request counter's last value, kept so the counter goes on counting up
+ * after a restart. Started again from 0, the first command after a restart would publish a value
+ * below the one the recipe last saw, and the recipe — which only fires on a counter going up —
+ * would silently miss that guest.
  */
-export function isAcceptableUrl(raw: string): boolean {
-  let url: URL;
-  try {
-    url = new URL(raw);
-  } catch {
-    return false;
-  }
-  if (url.protocol === "https:") return true;
-  return url.protocol === "http:" && ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname);
+const REQUEST_COUNT_KEY = "requests_count";
+
+/** Same as the manifest's `settings` (a test holds them equal). */
+const SETTINGS_SCHEMA: IntegrationSettingDef[] = [
+  {
+    key: "portier_url",
+    label: "Portier channel URL",
+    type: "text",
+    required: true,
+    placeholder: "wss://portier.<internal zone>/house/v1",
+  },
+  { key: "house_key", label: "House key", type: "password", required: true },
+  {
+    key: "ping_minutes",
+    label: "Channel ping (minutes, 1 to 30)",
+    type: "number",
+    required: false,
+    defaultValue: String(DEFAULT_PING_MINUTES),
+  },
+];
+
+/**
+ * A whole number of minutes from 1 to 30; unset means the default. Anything else is `null`: the
+ * plugin then uses the default rather than send a `pingSeconds` Portier would replace with 600
+ * while this side pings on another rhythm.
+ */
+export function parsePingMinutes(raw: string | undefined): number | null {
+  if (raw === undefined || raw.trim() === "") return DEFAULT_PING_MINUTES;
+  if (!/^\d+$/.test(raw.trim())) return null;
+  const minutes = Number(raw.trim());
+  return minutes >= MIN_PING_MINUTES && minutes <= MAX_PING_MINUTES ? minutes : null;
 }
-const GATE_STATES: GateState[] = ["open", "closed", "unknown"];
+
+/** The version Portier is told, read from the installed manifest. */
+function readPluginVersion(pluginDir: string): string {
+  try {
+    const manifest = JSON.parse(readFileSync(join(pluginDir, "manifest.json"), "utf8")) as {
+      version?: unknown;
+    };
+    return typeof manifest.version === "string" && manifest.version ? manifest.version : "unknown";
+  } catch {
+    return "unknown";
+  }
+}
 
 /** `key` when the core passes a bare order key, `key`/`orderKey` when it passes a dispatch config. */
 function orderKeyOf(orderKeyOrDispatchConfig: string | Record<string, unknown>): string {
@@ -104,124 +149,119 @@ class GuestAccessPlugin implements IntegrationPlugin {
   readonly id = INTEGRATION_ID;
   readonly name = "Guest Access";
   readonly description =
-    "Brings the gate-opening requests of the gîte and lodge guests from GuestFlow into Sowel";
+    "Holds a channel open to Portier and brings the gate commands of the gîte and lodge guests into Sowel";
   readonly icon = "DoorOpen";
   readonly apiVersion = 2;
 
-  private logger: Logger;
-  private eventBus: EventBus;
-  private settingsManager: SettingsManager;
-  private deviceManager: DeviceManager;
-  private poller: GatePoller | null = null;
-  private status: IntegrationStatus = "disconnected";
+  private readonly logger: Logger;
+  private readonly eventBus: EventBus;
+  private readonly settingsManager: SettingsManager;
+  private readonly deviceManager: DeviceManager;
+  private readonly pluginDir: string;
+  private readonly socketFactory?: SocketFactory;
+  private channel: PortierChannel | null = null;
+  /** Set when start() refused the settings: that is an error to fix, not a link going down. */
+  private refusedSettings = false;
 
-  constructor(deps: PluginDeps) {
+  constructor(deps: PluginDeps, options: PluginOptions = {}) {
     this.logger = deps.logger;
     this.eventBus = deps.eventBus;
     this.settingsManager = deps.settingsManager;
     this.deviceManager = deps.deviceManager;
+    this.pluginDir = deps.pluginDir;
+    this.socketFactory = options.socketFactory;
   }
 
   getStatus(): IntegrationStatus {
     if (!this.isConfigured()) return "not_configured";
-    if (!this.poller) return this.status;
-    return this.poller.isConnected() ? "connected" : "error";
+    if (this.refusedSettings) return "error";
+    if (!this.channel) return "disconnected";
+    if (this.channel.isConnected()) return "connected";
+    return this.channel.isKeyRefused() ? "error" : "disconnected";
   }
 
-  /**
-   * All three, or nothing. The signing secret is not optional hardening: without it the plugin
-   * cannot tell GuestFlow's answer from anyone else's on the LAN, and an answer is what makes the
-   * recipe pulse the gate (§4.4). An integration showing « not configured » is a problem someone
-   * fixes; one silently accepting forged requests is not.
-   */
+  /** Both, or nothing: without the address or the key there is no channel to open (spec §3.6). */
   isConfigured(): boolean {
-    return !!this.getSetting("base_url") && !!this.getSetting("api_key") && !!this.getSetting("signing_secret");
+    return !!this.getSetting("portier_url") && !!this.getSetting("house_key");
   }
 
   getSettingsSchema(): IntegrationSettingDef[] {
-    return [
-      {
-        key: "base_url",
-        label: "GuestFlow URL",
-        type: "text",
-        required: true,
-        placeholder: "https://guestflow.adn-dev.fr",
-      },
-      { key: "api_key", label: "GuestFlow gate API key", type: "password", required: true },
-      {
-        key: "signing_secret",
-        label: "GuestFlow signing secret",
-        type: "password",
-        required: true,
-      },
-      {
-        key: "wait_seconds",
-        label: "Long-poll duration (s)",
-        type: "number",
-        required: false,
-        defaultValue: String(DEFAULT_WAIT_SECONDS),
-      },
-    ];
+    return SETTINGS_SCHEMA.map((setting) => ({ ...setting }));
   }
 
   async start(): Promise<void> {
-    if (!this.isConfigured()) {
-      this.status = "not_configured";
-      return;
-    }
-    const baseUrl = this.getSetting("base_url")!;
-    if (!isAcceptableUrl(baseUrl)) {
-      this.status = "error";
+    if (this.channel) return;
+    this.refusedSettings = false;
+    if (!this.isConfigured()) return;
+
+    const url = this.getSetting("portier_url")!;
+    if (!isAcceptableUrl(url)) {
+      this.refusedSettings = true;
       this.logger.error(
-        { baseUrl },
-        "Refusing to start: GuestFlow must be reached over HTTPS (use its public name, "
-          + "https://guestflow.adn-dev.fr). Plain HTTP is only accepted towards localhost.",
+        { url },
+        "Refusing to start: the Portier channel must be a wss:// address (ws:// is only accepted towards localhost)",
       );
       return;
     }
 
-    const waitSeconds = Number(this.getSetting("wait_seconds") ?? DEFAULT_WAIT_SECONDS);
-    this.poller = new GatePoller({
+    const houseKey = decodeHouseKey(this.getSetting("house_key")!);
+    if (!houseKey) {
+      this.refusedSettings = true;
+      this.logger.error(
+        {},
+        "Refusing to start: the house key must be the base64url text of 32 bytes (43 characters), as Portier holds it",
+      );
+      return;
+    }
+
+    const rawPing = this.getSetting("ping_minutes");
+    let pingMinutes = parsePingMinutes(rawPing);
+    if (pingMinutes === null) {
+      this.logger.warn(
+        { ping_minutes: rawPing },
+        `ping_minutes must be a whole number from ${MIN_PING_MINUTES} to ${MAX_PING_MINUTES} — using ${DEFAULT_PING_MINUTES}`,
+      );
+      pingMinutes = DEFAULT_PING_MINUTES;
+    }
+
+    this.channel = new PortierChannel({
       integrationId: INTEGRATION_ID,
-      baseUrl,
-      apiKey: this.getSetting("api_key")!,
-      signingSecret: this.getSetting("signing_secret")!,
-      // A wait longer than the reverse proxy's read timeout would be cut mid-air
-      // every time; shorter than a second would be a busy loop.
-      waitSeconds: Number.isFinite(waitSeconds) ? Math.min(Math.max(waitSeconds, 1), 55) : DEFAULT_WAIT_SECONDS,
+      url,
+      houseKey,
+      pingMinutes,
+      pluginVersion: readPluginVersion(this.pluginDir),
       deviceManager: this.deviceManager,
       eventBus: this.eventBus,
       logger: this.logger,
+      initialRequestCount: Number(this.getSetting(REQUEST_COUNT_KEY) ?? 0),
+      onRequestCount: (count) =>
+        this.settingsManager.set(`${SETTINGS_PREFIX}${REQUEST_COUNT_KEY}`, String(count)),
+      socketFactory: this.socketFactory,
     });
-    this.poller.start();
-    this.status = "connected";
-    this.logger.info({}, "Guest Access plugin started");
+    this.channel.start();
+    this.logger.info({ pingMinutes }, "Guest Access plugin started");
   }
 
   async stop(): Promise<void> {
-    if (this.poller) {
-      await this.poller.stop();
-      this.poller = null;
+    if (this.channel) {
+      await this.channel.stop();
+      this.channel = null;
     }
-    this.status = "disconnected";
     this.eventBus.emit({ type: "system.integration.disconnected", integrationId: this.id });
     this.logger.info({}, "Guest Access plugin stopped");
   }
 
   /**
-   * The two orders the recipe uses.
-   *
-   * `result` is an answer to a request, and it goes out over HTTP. `gate_state`
-   * is the contact the recipe read for us — it costs nothing and travels on the
-   * next poll. An unknown key throws, because a recipe sending one has a bug and
-   * a silent no-op would hide it.
+   * The two orders the recipe uses. `result` is the outcome of the command in flight and goes up
+   * as a `result` frame; `gate_state` is the contact the recipe read for us. An unknown key or
+   * value throws, because a recipe sending one has a bug and a silent no-op would hide it.
    */
   async executeOrder(
     device: Device,
     orderKeyOrDispatchConfig: string | Record<string, unknown>,
     value: unknown,
   ): Promise<void> {
-    if (!this.poller) throw new Error("Guest Access plugin is not started");
+    if (!this.channel) throw new Error("Guest Access plugin is not started");
     if (device && device.sourceDeviceId && device.sourceDeviceId !== DEVICE_ID) {
       throw new Error(`Unknown device: ${device.sourceDeviceId}`);
     }
@@ -230,10 +270,10 @@ class GuestAccessPlugin implements IntegrationPlugin {
     const text = typeof value === "string" ? value : String(value ?? "");
 
     if (key === "result") {
-      if (!OUTCOMES.includes(text as RequestOutcome)) {
+      if (!COMMAND_STATUSES.includes(text as CommandStatus)) {
         throw new Error(`Unknown outcome: ${text}`);
       }
-      await this.poller.report(text as RequestOutcome);
+      this.channel.report(text as CommandStatus);
       return;
     }
 
@@ -241,7 +281,7 @@ class GuestAccessPlugin implements IntegrationPlugin {
       if (!GATE_STATES.includes(text as GateState)) {
         throw new Error(`Unknown gate state: ${text}`);
       }
-      this.poller.setGateState(text as GateState);
+      this.channel.setGateState(text as GateState);
       return;
     }
 
@@ -254,6 +294,6 @@ class GuestAccessPlugin implements IntegrationPlugin {
   }
 }
 
-export function createPlugin(deps: PluginDeps): IntegrationPlugin {
-  return new GuestAccessPlugin(deps);
+export function createPlugin(deps: PluginDeps, options?: PluginOptions): IntegrationPlugin {
+  return new GuestAccessPlugin(deps, options);
 }

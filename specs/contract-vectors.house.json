@@ -1,0 +1,41 @@
+{
+  "source": "Portier specs/contract-vectors.json, frozen 2026-09-14 — the house channel entries, copied verbatim. K_house is the test key 0x40…0x5f, not a real one.",
+  "K_house": "QEFCQ0RFRkdISUpLTE1OT1BRUlNUVVZXWFlaW1xdXl8",
+  "house_auth": {
+    "challenge": {
+      "type": "challenge",
+      "nonce": "EBESExQVFhcYGRobHB0eHw",
+      "ts": 1789999200000
+    },
+    "canonical": "auth|EBESExQVFhcYGRobHB0eHw|1789999200000",
+    "sig": "18b44324403eb4345cb42afb104cb26c56b12d2107bbdfaf3921d25ee5f88b25"
+  },
+  "frame_p2h": {
+    "frame": {
+      "seq": 1,
+      "ts": 1789999200500,
+      "type": "pulse",
+      "payload": {
+        "commandId": "0d9e8f7a-6b5c-4d3e-9f2a-1b0c9d8e7f6a",
+        "accessLabel": "Gîte · 202609042",
+        "deadline": 1789999208000
+      }
+    },
+    "canonical": "EBESExQVFhcYGRobHB0eHw|p2h|1|1789999200500|pulse|{\"commandId\":\"0d9e8f7a-6b5c-4d3e-9f2a-1b0c9d8e7f6a\",\"accessLabel\":\"Gîte · 202609042\",\"deadline\":1789999208000}",
+    "sig": "57f41f9cfae36635c2c318151bf21003f4f6f23ce6cdec5057f1b001f325b632"
+  },
+  "frame_h2p": {
+    "frame": {
+      "seq": 1,
+      "ts": 1789999201200,
+      "type": "result",
+      "payload": {
+        "commandId": "0d9e8f7a-6b5c-4d3e-9f2a-1b0c9d8e7f6a",
+        "status": "opened",
+        "detail": ""
+      }
+    },
+    "canonical": "EBESExQVFhcYGRobHB0eHw|h2p|1|1789999201200|result|{\"commandId\":\"0d9e8f7a-6b5c-4d3e-9f2a-1b0c9d8e7f6a\",\"status\":\"opened\",\"detail\":\"\"}",
+    "sig": "279efc99f22e997ec6cde902679119a131f4f470f8b28bfa40ad482541be6478"
+  }
+}
