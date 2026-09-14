@@ -3,7 +3,7 @@
 | Field | Value |
 |---|---|
 | **Status** | Draft — **the HTML summary is what decides** (`specs/portier-channel.html`); owner's answers of 2026-09-14 recorded |
-| **Branch** | `spec/portier-channel` _(spec only — no code)_ |
+| **Branch** | `spec/portier-channel` _(spec)_ · `feature/portier-channel` _(implementation, v1.0.0 — see §10)_ |
 | **Created** | 2026-09-14 |
 | **Author** | Adrien |
 | **Replaces** | the long-poll towards guestFlow of v0.3.0 |
@@ -182,16 +182,17 @@ each.
 
 ## 7. Test plan
 
-- [ ] the challenge answer matches Portier's pinned vector; a wrong key yields `4401` and the 60 s back-off
-- [ ] a frame with a bad signature, a gap or a repeat closes with `4400`
-- [ ] a frame recorded on a previous connection is refused
-- [ ] back-off sequence 1, 2, 5, 10, 30, 60 s, reset after 60 s connected
-- [ ] a late `pong` closes and reconnects; a ping is sent every `ping_minutes`
-- [ ] an expired pulse answers `error expired` and leaves `requests` untouched
-- [ ] a pulse while one is in flight answers `error busy`
-- [ ] the 31st pulse in an hour answers `refused ceiling`
-- [ ] `ws://` to another machine is refused at start
-- [ ] `link` is false before `ready` and after a close
+- [x] the challenge answer matches Portier's pinned vector; a wrong key yields `4401` and the 60 s back-off
+  _(`frame-signature.test.ts` pins `house_auth`, `frame_p2h`, `frame_h2p`; `portier-channel.test.ts` « the challenge »)_
+- [x] a frame with a bad signature, a gap or a repeat closes with `4400`
+- [x] a frame recorded on a previous connection is refused
+- [x] back-off sequence 1, 2, 5, 10, 30, 60 s, reset after 60 s connected
+- [x] a late `pong` closes and reconnects; a ping is sent every `ping_minutes`
+- [x] an expired pulse answers `error expired` and leaves `requests` untouched
+- [x] a pulse while one is in flight answers `error busy`
+- [x] the 31st pulse in an hour answers `refused ceiling`
+- [x] `ws://` to another machine is refused at start _(`url-guard.test.ts`, `index.test.ts`)_
+- [x] `link` is false before `ready` and after a close
 
 ## 8. Out of scope
 
@@ -203,3 +204,64 @@ each.
 
 **Answered by Adrien on 2026-09-14:** no polling, a channel and push · the channel pings every
 10 minutes.
+
+---
+
+## 10. Implementation notes
+
+Implemented on branch `feature/portier-channel`. Portier's `specs/contract.md` prevails; its house
+vectors are copied into `specs/contract-vectors.house.json` (Portier's repository is private).
+
+**Found while implementing:**
+
+- **The device identity was broken in v0.3.** Sowel keys a discovered device by its `friendlyName`
+  (« Accès invités ») and finds it again by that string on every data update, status change and
+  order. v0.3 published under `guest-access`: its data matched no device, and every order was refused
+  as « Unknown device ». v1.0.0 uses « Accès invités » everywhere, which keeps the device row a v0.3
+  install created and the equipments bound to it.
+- **The counter survives a restart.** Restarted at 0, the first pulse after a Sowel restart would
+  publish a value below the one the recipe last saw; the recipe only fires on a counter going up and
+  would miss that guest. The last value is kept in a hidden setting,
+  `integration.guest-access.requests_count` (a plain write that restarts nothing).
+
+**Choices where the spec or the contract is silent:**
+
+- **A command in flight gives its place up once its own deadline has passed.** §3.3 says a pulse
+  while one is in flight answers `busy`; taken literally, a recipe that never answers would make every
+  later guest `busy` until a reconnect. Before its deadline the rule applies as written.
+- **The command in flight is forgotten when the channel closes.** An outcome reported afterwards is
+  ignored with a warning, even on a new connection (nothing is buffered).
+- **The latest gate contact is sent again after each `ready`.** It is a state, not a command, and the
+  recipe pushes only on a change; without it the owner's list would be blind after every reconnect.
+  Pulses and outcomes stay unbuffered.
+- **A 15 s handshake timeout.** A socket that opens but never completes the challenge (a proxy that
+  forwards nothing) would otherwise hold the channel down with no retry.
+- **Close codes the house picks:** `4400` (with a reason) for a bad signature, gap, repeat, malformed
+  or out-of-order message, and for a challenge refused on the clock; `1000` (with a reason) for a late
+  pong, the handshake timeout and a stop. The contract names no code for these.
+- **Frame timestamps from Portier** are checked within ±120 s of *Portier's clock as measured at the
+  challenge* (house clock + offset), not the raw house clock, so a skew accepted at the challenge
+  cannot trigger a reconnect loop. The house's own frames carry its own clock.
+- **An unknown frame type** from Portier is ignored with a warning (its sequence number still counts)
+  rather than closing: a newer Portier must not cut the channel.
+- **A pulse without `commandId`** is logged and ignored (nothing can be answered); a missing or
+  non-numeric `deadline` is treated as expired.
+- **The ceiling counts only pulses handed to the recipe**; `expired`, `busy` and `ceiling` answers do
+  not extend the refusal.
+- **`detail` is always `""`** on outcomes from the recipe: the `result` order carries the status only.
+  The plugin writes `expired`, `busy` and `ceiling` itself.
+- **Settings validation.** Sowel's settings form is generic and validates nothing, so the refusals of
+  the HTML mock happen at start instead: a `portier_url` that is not `wss://` (or `ws://` towards
+  `localhost`, `127.0.0.1`, `::1`), or that carries a fragment, and a `house_key` that is not 43
+  base64url characters, leave the plugin in `error` with a log line (the key is never logged). A
+  `ping_minutes` outside 1–30 or not a whole number falls back to 10 with a warning, matching Portier,
+  which takes an out-of-range `pingSeconds` as 600.
+- **Setting labels stay in English.** Sowel renders them verbatim and the manifest's `i18n` carries
+  only `name` and `description`; the mock's French labels cannot be expressed. The French name and
+  description are updated.
+- **`pluginVersion`** is read from `manifest.json` in the plugin directory (`unknown` if unreadable).
+- **Integration status:** `disconnected` while connecting or reconnecting, `connected` between `ready`
+  and the close, `error` after a `4401` or when start refused the settings.
+- **Verified beyond the unit tests:** the compiled channel was run once against Node's built-in
+  WebSocket client and a minimal local WebSocket server playing Portier (handshake, pulse, result,
+  gate state, a forged frame closed with `4400`, a `4401`). That script is not part of the repository.
