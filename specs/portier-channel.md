@@ -21,7 +21,7 @@ where any of them can be edited, suspended or revoked.
 | Component | Repository | Owns |
 |---|---|---|
 | **guestFlow** | `adn-dev-adrien/guestFlow` | the reservations; pushes each stay's access to Portier; the owner's list and settings pages, behind guestFlow's login; the SAS step with the code and its QR; the emails |
-| **Portier** | `portier` (new) | the accesses, their keys, the journal, the guest web app, the server end of the house channel |
+| **Portier** | `adn-dev-adrien/portier` (private) | the accesses, their keys, the journal, the guest web app, the server end of the house channel |
 | **Sowel plugin** | `adn-dev-adrien/sowel-plugin-guest-access` | opens and holds the channel from the house; hands each command to the recipe |
 | **Sowel recipe** | `adn-dev-adrien/sowel-recipe-guest-gate` | unchanged: pulses the gate, reports the outcome and the contact |
 | **Hosting** | `homelab` (private) | where Portier runs, its ports, firewall rules and reverse proxies |
@@ -35,15 +35,16 @@ where any of them can be edited, suspended or revoked.
 | anything → the house | **nobody** | the house network accepts no incoming connection for this feature |
 
 **No polling.** Nothing asks « anything new? » on a timer. Three things run on a clock and none of
-them fetches data: the channel's keep-alive ping every **10 minutes**, guestFlow's outbox retry
-*only while a push is failing*, and the daily purge.
+them fetches data: the channel's keep-alive ping every **10 minutes**, guestFlow's retries — its
+outbox and the emails waiting for Portier — *only while something is failing*, and the daily purge.
 
 **Decided by Adrien on 2026-09-14:** the name Portier · guestFlow configures an access automatically
 when a reservation exists, and afterwards only a date/time change in guestFlow or a manual change in
 the list alters it · a cancellation revokes the access · the list is reachable from anywhere, behind
 guestFlow's login · Portier runs on guestFlow's machine · the SAS keeps the code and shows a QR that
-carries it · one key per access · the channel pings every 10 minutes · PR guestFlow#547 is not merged
-as it stands: this work lands in it.
+carries it · one key per access · the channel pings every 10 minutes · the J-7 email waits for Portier
+and retries · PR guestFlow#547 is not merged as it stands: this work lands in it · Portier's repository
+is private.
 ---
 
 ## 1. Context

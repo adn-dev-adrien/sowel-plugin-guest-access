@@ -136,6 +136,9 @@ table.recap.reach td.mark{width:2rem;font-weight:700;text-align:center}
 table.recap.reach tr.yes td.mark{color:var(--vert)} table.recap.reach tr.no td.mark{color:var(--brique)}
 .kphone.can{border-left:3px solid var(--brique)} .kphone.cannot{border-left:3px solid var(--vert)}
 .kphone ul.clean{margin:.2rem 0;width:100%}
+.tag.wait{color:var(--deep);border-color:var(--ocre);background:var(--wash-ocre)} .tag.sent{color:var(--vert);border-color:var(--vert)} .tag.skip{color:var(--soft);border-color:var(--line)}
+table.recap.ab td:first-child{width:16%;font-style:normal;font-weight:700;color:var(--ink)} table.recap.ab td{width:42%}
+.ab th.rec{background:var(--wash-sapin);color:var(--sapin)}
 </style>
 </head>
 <body>
@@ -212,7 +215,7 @@ dans une liste où chacun se modifie, se suspend ou se révoque.</p>
   <tr><td>guestFlow</td><td><code>adn-dev-adrien/guestFlow</code></td><td>les réservations ; pousse
     l’accès de chaque séjour à Portier ; la liste et les réglages, derrière ta connexion ; le code et son QR dans
     le SAS ; les emails</td></tr>
-  <tr><td>Portier</td><td><code>portier</code> (nouveau)</td><td>les accès, leurs clés, le
+  <tr><td>Portier</td><td><code>adn-dev-adrien/portier</code> (privé)</td><td>les accès, leurs clés, le
     journal, l’application des clients, le bout serveur du canal de la maison</td></tr>
   <tr class="here"><td>Plugin Sowel</td><td><code>sowel-plugin-guest-access</code></td><td>ouvre et tient le
     canal depuis la maison ; passe chaque commande à la recette</td></tr>
@@ -228,7 +231,7 @@ dans une liste où chacun se modifie, se suspend ou se révoque.</p>
   choses tournent sur un minuteur, et aucune ne va chercher de données :</p>
   <ul class="clean">
     <li><strong>le ping du canal, toutes les 10 minutes</strong> — il vérifie que le canal est encore branché ;</li>
-    <li><strong>la reprise de l’outbox de guestFlow</strong>, seulement tant qu’un envoi échoue ;</li>
+    <li><strong>les reprises de guestFlow</strong> — son outbox et les emails qui attendent Portier — seulement tant que quelque chose échoue ;</li>
     <li><strong>la purge quotidienne</strong> des séjours terminés depuis 7 jours.</li>
   </ul>
 </div>
@@ -245,10 +248,11 @@ dans une liste où chacun se modifie, se suspend ou se révoque.</p>
     n’a aucun login à lui et écrit dans son journal le compte qui a agi. <strong>Conséquence :</strong> ton mot de
     passe guestFlow ouvre aussi le portail — un second facteur sur guestFlow devient souhaitable, dans sa propre
     spec.</td><td>guestFlow · Portier</td></tr>
-  <tr><td>« Portier sur la même VM que guestFlow, sauf si c’est trop risqué »</td><td><strong>Pas trop risqué :
-    la VM 104</strong>, sous un utilisateur séparé. Une VM à part protégerait la clé maître, pas le portail,
-    puisque guestFlow administre déjà Portier. Pas de VM « petits outils ». Une vérification reste à faire sur la
-    machine.</td><td>homelab</td></tr>
+  <tr><td>« Portier sur la même VM que guestFlow, sauf si c’est trop risqué »</td><td><strong>La VM 104, à une
+    condition.</strong> Une VM à part protégerait la clé maître, pas le portail, puisque guestFlow administre déjà
+    Portier. Mais ta commande <code>sudo -n true</code> a <strong>réussi</strong> : guestFlow tourne sous
+    <code>adrien</code>, qui devient root sans mot de passe pour la maintenance. Il faut d’abord faire tourner
+    guestFlow sous son propre utilisateur — ou mettre Portier sur un petit LXC. <strong>À trancher.</strong></td><td>homelab</td></tr>
   <tr><td>« On garde le code et le QR dans le SAS ; le QR encode le code pour paramétrer l’app d’un flash »</td>
     <td>Le QR porte <strong>la même adresse que l’email</strong>, le code dans son fragment <code>#i=</code> :
     flasher installe l’accès sans rien taper. Le code reste lisible à côté.</td><td>guestFlow · Portier</td></tr>
@@ -263,10 +267,17 @@ dans une liste où chacun se modifie, se suspend ou se révoque.</p>
     :</strong> une coupure silencieuse peut laisser le portail injoignable jusqu’à ~10 minutes ; un redémarrage
     propre, quelques secondes. Pour que ça tienne, la maison passe par un nom interne, sans NAT.</td><td>plugin ·
     homelab</td></tr>
+  <tr><td>« Oui on attend et on ré-essaye » — l’email J-7 quand Portier ne répond pas</td><td>L’email ne part
+    <strong>jamais sans son paragraphe portail</strong> : il passe « en attente de Portier » et réessaie après 1, 2,
+    5 et 15 minutes, puis toutes les 15 minutes. Au-delà d’une heure, une notification aux administrateurs.</td>
+    <td>guestFlow</td></tr>
+  <tr><td>« Dépôt sous adn-dev-adrien et en private » · « Ok pour la suppression de la branche »</td><td>Fait :
+    <code>adn-dev-adrien/portier</code> existe, privé ; la branche <code>spec/gate-access-portier</code> est
+    supprimée.</td><td>Portier · guestFlow</td></tr>
   </tbody>
 </table></div>
-<p class="after"><strong>Une question reste ouverte</strong>, côté guestFlow : l’email J-7 quand Portier ne
-répond pas à 08:00.</p>
+<p class="after"><strong>Une question nouvelle</strong>, côté hébergement : guestFlow sous son propre utilisateur
+puis Portier sur la VM 104 (ma recommandation), ou Portier sur un petit LXC ?</p>
 
 
 <h2 id="detail">2 · Le plugin en détail</h2>
