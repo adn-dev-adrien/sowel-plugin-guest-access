@@ -1,6 +1,6 @@
 {
   "name": "sowel-plugin-guest-access",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Brings the gate-opening requests of the gîte and lodge guests from GuestFlow into Sowel",
   "type": "module",
   "main": "dist/index.js",

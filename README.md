@@ -35,9 +35,31 @@ Un jeton d'API Sowel n'aurait pas permis ça : il hérite du rôle de son créat
 
 | Clé | Exemple | Note |
 | --- | --- | --- |
-| `base_url` | `http://192.168.0.24:4000` | L'adresse de guestFlow. En LAN de préférence : inutile de sortir sur Internet pour parler à la machine d'à côté. |
+| `base_url` | `https://guestflow.adn-dev.fr` | L'adresse de guestFlow, **en HTTPS obligatoirement** : le plugin refuse de démarrer sur du HTTP clair vers une autre machine (seul `localhost` est toléré, pour du développement). Voir ci-dessous. |
 | `api_key` | (secret) | `GATE_API_KEY`, auto-généré dans `server/.env.local` de guestFlow au démarrage. Distinct de `PUBLIC_API_KEY` : la clé du site ne doit pas pouvoir vider la file du portail. |
 | `wait_seconds` | `25` | Durée du long-poll. Plafonnée à 55 s : au-delà, un proxy inverse coupe la connexion en vol. |
+
+## Pourquoi le nom public, et pourquoi en HTTPS
+
+**Le nom public**, `guestflow.adn-dev.fr`, et non un nom interne : c'est la décision d'Adrien du
+2026-08-27, et le Caddyfile interne du parc la porte déjà noir sur blanc. guestFlow lie ses
+abonnements aux notifications push à l'ORIGINE — servir la même application sous un second nom les
+casserait. Le NAT retourné de la Freebox a été vérifié ce jour-là : la VM domotique joint edge par
+le nom public sans sortir réellement du réseau.
+
+Conséquence agréable : **aucune règle de pare-feu à ajouter.** Le trafic entre par edge
+(`192.168.0.22`), que `104.fw` autorise déjà ; la VM domotique n'a pas besoin de joindre guestFlow
+directement.
+
+**En HTTPS**, parce que la signature et le chiffrement ne font pas le même travail. La signature
+empêche de *forger* — le secret ne circule jamais, lire mille appels ne permet pas d'en fabriquer un
+de plus. Elle n'empêche pas de *lire* : sans TLS, le code du séjour, le logement et le prénom du
+client traverseraient le LAN en clair, sur un réseau qui porte aussi deux coordinateurs Zigbee, une
+imprimante 3D et ce qu'un client apporte. Le certificat validé ferme en plus la route de l'usurpation
+que la signature se contentait de neutraliser.
+
+Le plugin **refuse donc de démarrer** sur une adresse en HTTP clair vers une autre machine, et le dit
+dans son journal. Un réglage qui protège moins qu'annoncé est pire qu'un réglage absent.
 
 ## Deux garde-fous à connaître
 

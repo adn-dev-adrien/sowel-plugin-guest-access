@@ -68,6 +68,28 @@ const SETTINGS_PREFIX = `integration.${INTEGRATION_ID}.`;
 const DEFAULT_WAIT_SECONDS = 25;
 
 const OUTCOMES: RequestOutcome[] = ["opened", "already_open", "refused", "error"];
+
+/**
+ * Plain HTTP is refused towards anything but this machine.
+ *
+ * The signature makes a sniffed channel survivable — the secret never travels — but it encrypts
+ * nothing: the stay code, the lodging and the guest's name would cross the LAN in clear, on a
+ * network that also carries whatever a guest brings. GuestFlow is served over TLS under its public
+ * name, so there is no reason left to accept anything else.
+ *
+ * `localhost` stays allowed: that is a developer running both halves on one machine, where there is
+ * no wire to listen to.
+ */
+export function isAcceptableUrl(raw: string): boolean {
+  let url: URL;
+  try {
+    url = new URL(raw);
+  } catch {
+    return false;
+  }
+  if (url.protocol === "https:") return true;
+  return url.protocol === "http:" && ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname);
+}
 const GATE_STATES: GateState[] = ["open", "closed", "unknown"];
 
 /** `key` when the core passes a bare order key, `key`/`orderKey` when it passes a dispatch config. */
@@ -123,7 +145,7 @@ class GuestAccessPlugin implements IntegrationPlugin {
         label: "GuestFlow URL",
         type: "text",
         required: true,
-        placeholder: "http://192.168.0.24:4000",
+        placeholder: "https://guestflow.adn-dev.fr",
       },
       { key: "api_key", label: "GuestFlow gate API key", type: "password", required: true },
       {
@@ -147,10 +169,21 @@ class GuestAccessPlugin implements IntegrationPlugin {
       this.status = "not_configured";
       return;
     }
+    const baseUrl = this.getSetting("base_url")!;
+    if (!isAcceptableUrl(baseUrl)) {
+      this.status = "error";
+      this.logger.error(
+        { baseUrl },
+        "Refusing to start: GuestFlow must be reached over HTTPS (use its public name, "
+          + "https://guestflow.adn-dev.fr). Plain HTTP is only accepted towards localhost.",
+      );
+      return;
+    }
+
     const waitSeconds = Number(this.getSetting("wait_seconds") ?? DEFAULT_WAIT_SECONDS);
     this.poller = new GatePoller({
       integrationId: INTEGRATION_ID,
-      baseUrl: this.getSetting("base_url")!,
+      baseUrl,
       apiKey: this.getSetting("api_key")!,
       signingSecret: this.getSetting("signing_secret")!,
       // A wait longer than the reverse proxy's read timeout would be cut mid-air

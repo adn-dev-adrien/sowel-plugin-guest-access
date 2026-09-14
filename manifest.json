@@ -2,7 +2,7 @@
   "id": "guest-access",
   "type": "integration",
   "name": "Guest Access",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Brings the gate-opening requests of the gîte and lodge guests from GuestFlow into Sowel",
   "icon": "DoorOpen",
   "repo": "adn-dev-adrien/sowel-plugin-guest-access",
@@ -21,7 +21,7 @@
       "label": "GuestFlow URL",
       "type": "text",
       "required": true,
-      "placeholder": "http://192.168.0.24:4000"
+      "placeholder": "https://guestflow.adn-dev.fr"
     },
     {
       "key": "api_key",
