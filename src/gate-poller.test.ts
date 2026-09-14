@@ -1,6 +1,16 @@
 import { describe, expect, it, vi } from "vitest";
 import { GatePoller, describeDevice, DEVICE_ID, REQUESTS_KEY } from "./gate-poller.js";
 import type { GateRequest } from "./gate-poller.js";
+import { sign } from "./gate-signature.js";
+
+const SIGNING_SECRET = "a-secret-that-never-travels";
+
+/** Signs a request the way guestFlow does (§4.4). Anything unsigned must be refused. */
+function signed(request: GateRequest, over: { secret?: string; signedAt?: number } = {}): GateRequest {
+  const signedAt = over.signedAt ?? Date.now();
+  const payload = [String(request.id), String(signedAt), request.reservationId == null ? "" : String(request.reservationId)].join(".");
+  return { ...request, signedAt, signature: sign(payload, over.secret ?? SIGNING_SECRET) };
+}
 
 // The poller is the whole plugin: everything else is wiring. These tests pin the
 // three things that would be invisible in production until they hurt — the counter
@@ -33,6 +43,7 @@ function harness(responses: Array<(init?: RequestInit) => unknown>) {
     integrationId: "guest-access",
     baseUrl: "http://guestflow.test:4000/",
     apiKey: "the-house-key",
+    signingSecret: SIGNING_SECRET,
     waitSeconds: 25,
     deviceManager: {
       upsertFromDiscovery: (_i, _s, d) => discovered.push(d),
@@ -153,7 +164,7 @@ describe("polling", () => {
   });
 
   it("a request bumps the counter and names the stay", async () => {
-    const h = harness([ok({ request: REQUEST }), quiet]);
+    const h = harness([ok({ request: signed(REQUEST) }), quiet]);
     h.poller.start();
     await settle();
     await h.poller.stop();
@@ -165,7 +176,7 @@ describe("polling", () => {
   });
 
   it("never publishes the same counter value twice", async () => {
-    const h = harness([ok({ request: REQUEST }), ok({ request: { ...REQUEST, id: 43 } }), quiet]);
+    const h = harness([ok({ request: signed(REQUEST) }), ok({ request: signed({ ...REQUEST, id: 43 }) }), quiet]);
     h.poller.start();
     await settle();
     await h.poller.stop();
@@ -175,7 +186,7 @@ describe("polling", () => {
   });
 
   it("a request with no lodging still names something the log can print", async () => {
-    const bare = { ...REQUEST, propertyName: null, reservationNumber: null };
+    const bare = signed({ ...REQUEST, propertyName: null, reservationNumber: null });
     const h = harness([ok({ request: bare }), quiet]);
     h.poller.start();
     await settle();
@@ -257,9 +268,79 @@ describe("when GuestFlow is unreachable", () => {
   });
 });
 
+describe("the second factor (§4.4)", () => {
+  it("an UNSIGNED request is refused, and nothing is published", async () => {
+    // This is the hole the signature closes: the API key travels away from the house, so anyone
+    // able to answer as guestFlow on the LAN could hand back a forged request — and a published
+    // counter is what makes the recipe pulse the gate.
+    const h = harness([ok({ request: REQUEST }), quiet]);
+    h.poller.start();
+    await settle();
+    await h.poller.stop();
+
+    expect(h.data.filter((p) => REQUESTS_KEY in p)).toHaveLength(0);
+    expect(h.logs.some((l) => l.level === "error")).toBe(true);
+  });
+
+  it("a request signed with the wrong secret is refused", async () => {
+    const h = harness([ok({ request: signed(REQUEST, { secret: "the-attacker-guess" }) }), quiet]);
+    h.poller.start();
+    await settle();
+    await h.poller.stop();
+
+    expect(h.data.filter((p) => REQUESTS_KEY in p)).toHaveLength(0);
+  });
+
+  it("a captured request cannot be replayed the next day", async () => {
+    const stale = signed(REQUEST, { signedAt: Date.now() - 24 * 60 * 60 * 1000 });
+    const h = harness([ok({ request: stale }), quiet]);
+    h.poller.start();
+    await settle();
+    await h.poller.stop();
+
+    expect(h.data.filter((p) => REQUESTS_KEY in p)).toHaveLength(0);
+  });
+
+  it("the same request handed twice inside the window is honoured once", async () => {
+    const once = signed(REQUEST);
+    const h = harness([ok({ request: once }), ok({ request: once }), quiet]);
+    h.poller.start();
+    await settle();
+    await h.poller.stop();
+
+    expect(h.data.filter((p) => REQUESTS_KEY in p)).toHaveLength(1);
+    expect(h.logs.some((l) => l.level === "warn")).toBe(true);
+  });
+
+  it("a refused request is not held in flight — no outcome can be attributed to it", async () => {
+    const h = harness([ok({ request: REQUEST }), quiet]);
+    h.poller.start();
+    await settle();
+    await h.poller.report("opened");
+    await h.poller.stop();
+
+    expect(h.calls.some((c) => c.init?.method === "POST")).toBe(false);
+  });
+
+  it("the outcome carries its own signature and timestamp", async () => {
+    const h = harness([ok({ request: signed(REQUEST) }), quiet]);
+    h.poller.start();
+    await settle();
+    await h.poller.report("opened");
+    await h.poller.stop();
+
+    const post = h.calls.find((c) => c.init?.method === "POST")!;
+    const headers = post.init!.headers as Record<string, string>;
+    expect(headers["X-Gate-Timestamp"]).toMatch(/^\d+$/);
+    expect(headers["X-Gate-Signature"]).toBe(
+      sign(`42.opened.${headers["X-Gate-Timestamp"]}`, SIGNING_SECRET),
+    );
+  });
+});
+
 describe("reporting the outcome", () => {
   it("posts it against the request that was handed over", async () => {
-    const h = harness([ok({ request: REQUEST }), quiet]);
+    const h = harness([ok({ request: signed(REQUEST) }), quiet]);
     h.poller.start();
     await settle();
     await h.poller.report("opened");
@@ -271,7 +352,7 @@ describe("reporting the outcome", () => {
   });
 
   it("carries a detail when the recipe gives one", async () => {
-    const h = harness([ok({ request: REQUEST }), quiet]);
+    const h = harness([ok({ request: signed(REQUEST) }), quiet]);
     h.poller.start();
     await settle();
     await h.poller.report("refused", "accès invités désarmé");
@@ -297,7 +378,7 @@ describe("reporting the outcome", () => {
   });
 
   it("answers a request once: a second report has nothing to attribute", async () => {
-    const h = harness([ok({ request: REQUEST }), quiet]);
+    const h = harness([ok({ request: signed(REQUEST) }), quiet]);
     h.poller.start();
     await settle();
     await h.poller.report("opened");
@@ -312,7 +393,7 @@ describe("reporting the outcome", () => {
     const h = harness([
       () => {
         call += 1;
-        if (call === 1) return { ok: true, status: 200, json: async () => ({ request: REQUEST }) } as unknown as Response;
+        if (call === 1) return { ok: true, status: 200, json: async () => ({ request: signed(REQUEST) }) } as unknown as Response;
         return { ok: false, status: 404, json: async () => ({}) } as unknown as Response;
       },
     ]);

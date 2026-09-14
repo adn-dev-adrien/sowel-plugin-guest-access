@@ -23,6 +23,8 @@
 // and the guest is told.
 // ============================================================
 
+import { verifyRequest, signResult, SeenRequests } from "./gate-signature.js";
+
 export interface Logger {
   info(obj: unknown, msg?: string): void;
   debug(obj: unknown, msg?: string): void;
@@ -44,13 +46,15 @@ export interface EventBus {
   emit(event: Record<string, unknown>): void;
 }
 
-/** What GuestFlow hands over, one at a time (its spec §4.3). */
+/** What GuestFlow hands over, one at a time (its spec §4.3), signed (§4.4). */
 export interface GateRequest {
   id: number;
   reservationId: number | null;
   reservationNumber: string | null;
   propertyName: string | null;
   requestedAt: string | null;
+  signedAt?: unknown;
+  signature?: unknown;
 }
 
 export type GateState = "open" | "closed" | "unknown";
@@ -100,6 +104,8 @@ interface PollerOptions {
   integrationId: string;
   baseUrl: string;
   apiKey: string;
+  /** The second factor — never sent, only used to sign and verify (§4.4). */
+  signingSecret: string;
   waitSeconds: number;
   deviceManager: DeviceManager;
   eventBus: EventBus;
@@ -126,7 +132,9 @@ const RETRY_MAX_MS = 60_000;
 const MIN_POLL_INTERVAL_MS = 1_000;
 
 export class GatePoller {
-  private readonly opts: Required<Pick<PollerOptions, "integrationId" | "baseUrl" | "apiKey" | "waitSeconds">> &
+  private readonly opts: Required<
+    Pick<PollerOptions, "integrationId" | "baseUrl" | "apiKey" | "signingSecret" | "waitSeconds">
+  > &
     PollerOptions;
   private readonly fetchImpl: typeof fetch;
   private readonly sleep: (ms: number) => Promise<void>;
@@ -140,6 +148,8 @@ export class GatePoller {
   /** What the recipe last told us about the contact. */
   private gateState: GateState = "unknown";
   private requestCount = 0;
+  /** Ids already honoured: a replayed answer must not pulse the gate a second time. */
+  private readonly seen = new SeenRequests();
   private retryMs = RETRY_MIN_MS;
   /** `null` until the first assertion: a device must be declared available or not,
    *  and a poller that never manages to connect must still say so (spec 116). */
@@ -206,7 +216,13 @@ export class GatePoller {
       `${this.base()}/requests/${encodeURIComponent(String(request.id))}/result`,
       {
         method: "POST",
-        headers: { ...this.authHeaders(), "Content-Type": "application/json" },
+        headers: {
+          ...this.authHeaders(),
+          "Content-Type": "application/json",
+          // The second factor, the other way round: GuestFlow refuses an outcome it
+          // cannot attribute to this house (§4.4).
+          ...signResult(request.id, outcome, this.opts.signingSecret),
+        },
         body: JSON.stringify(detail ? { status: outcome, detail } : { status: outcome }),
       },
     );
@@ -277,6 +293,25 @@ export class GatePoller {
 
       const request = body && body.request ? body.request : null;
       if (!request) return true; // the quiet answer, and the common one
+
+      // Before ANYTHING is published — the counter is what makes the recipe pulse the
+      // gate, so an answer that cannot be attributed to GuestFlow must never reach it.
+      const check = verifyRequest(request, this.opts.signingSecret);
+      if (!check.ok) {
+        this.opts.logger.error(
+          { requestId: request.id, reason: check.reason },
+          "Refused a gate request that could not be verified — nothing was published",
+        );
+        return true;
+      }
+      if (this.seen.has(request.id)) {
+        this.opts.logger.warn(
+          { requestId: request.id },
+          "Refused a gate request already honoured — replay",
+        );
+        return true;
+      }
+      this.seen.remember(request.id);
 
       this.inFlight = request;
       this.requestCount += 1;

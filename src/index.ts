@@ -106,8 +106,14 @@ class GuestAccessPlugin implements IntegrationPlugin {
     return this.poller.isConnected() ? "connected" : "error";
   }
 
+  /**
+   * All three, or nothing. The signing secret is not optional hardening: without it the plugin
+   * cannot tell GuestFlow's answer from anyone else's on the LAN, and an answer is what makes the
+   * recipe pulse the gate (§4.4). An integration showing « not configured » is a problem someone
+   * fixes; one silently accepting forged requests is not.
+   */
   isConfigured(): boolean {
-    return !!this.getSetting("base_url") && !!this.getSetting("api_key");
+    return !!this.getSetting("base_url") && !!this.getSetting("api_key") && !!this.getSetting("signing_secret");
   }
 
   getSettingsSchema(): IntegrationSettingDef[] {
@@ -120,6 +126,12 @@ class GuestAccessPlugin implements IntegrationPlugin {
         placeholder: "http://192.168.0.24:4000",
       },
       { key: "api_key", label: "GuestFlow gate API key", type: "password", required: true },
+      {
+        key: "signing_secret",
+        label: "GuestFlow signing secret",
+        type: "password",
+        required: true,
+      },
       {
         key: "wait_seconds",
         label: "Long-poll duration (s)",
@@ -140,6 +152,7 @@ class GuestAccessPlugin implements IntegrationPlugin {
       integrationId: INTEGRATION_ID,
       baseUrl: this.getSetting("base_url")!,
       apiKey: this.getSetting("api_key")!,
+      signingSecret: this.getSetting("signing_secret")!,
       // A wait longer than the reverse proxy's read timeout would be cut mid-air
       // every time; shorter than a second would be a busy loop.
       waitSeconds: Number.isFinite(waitSeconds) ? Math.min(Math.max(waitSeconds, 1), 55) : DEFAULT_WAIT_SECONDS,
