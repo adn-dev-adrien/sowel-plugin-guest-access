@@ -1,0 +1,3033 @@
+From 2f025010da14e27f0373dd2002cf29bac876e3e7 Mon Sep 17 00:00:00 2001
+From: Adrien Jouve <adrien.jouve@adn-dev.fr>
+Date: Sun, 20 Sep 2026 16:45:50 +0000
+Subject: [PATCH] feat(plugins): a plugin may bring a page, a door and a drawer
+ (spec 180)
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+A plugin was handed a logger, an event bus, settings and devices — right for
+turning a protocol into devices, and the whole surface. Three things followed:
+it could show nothing beyond its settings form, could be reached by nobody but
+an admin, and had nowhere to keep state (`pluginDir` looks like the place and
+is a trap: an update removes it and unpacks the new release in its place).
+
+Three generic capabilities, no domain learned by the core:
+
+- `ui: { entry, label, icon }` in the manifest — the SPA imports that ES module
+  at /plugins/<id>/page and calls mount(container, ctx), with an api() already
+  bound to /api/v1/plugins/<id>/page/*. Plain DOM, not React: a plugin builds
+  against its own dependencies. Assets under /plugin-ui/<id>/*, confined to the
+  entry's directory, by extension allowlist.
+- `publicTree: true` — makes an anonymous tree at /p/<id>/* buildable and
+  nothing more: it answers the same 404 as an undeclared plugin until an admin
+  opens it from the plugin's sheet (core setting, audit-logged). Then 60/min per
+  IP, X-Robots-Tag noindex, 30 s then 504, and Set-Cookie from a plugin refused.
+- `deps.dataDir` = data/plugins/<id>/ — created before the factory runs, never
+  touched by install, update or uninstall, and now carried by the backup.
+
+Both surfaces hand the plugin an allowlist of headers rather than the request:
+the caller's bearer stays in the core, and `authorization` reaches the public
+surface only, where it is the plugin's own token.
+
+Tests: 23 route cases, 7 on the page listing, 3 on getDataDir, 2 on the backup,
+6 on the SPA page. Docs: plugin-development (EN/FR), api-reference (EN/FR),
+specs/180 and both indexes.
+---
+ docs/specs-index.fr.md                        |   1 +
+ docs/specs-index.md                           |   1 +
+ docs/technical/api-reference.fr.md            |  38 +-
+ docs/technical/api-reference.md               |  38 +-
+ docs/technical/plugin-development.fr.md       | 194 ++++++++-
+ docs/technical/plugin-development.md          | 194 ++++++++-
+ .../180-plugin-pages-and-public-tree/spec.md  | 162 +++++++
+ src/api/routes/plugin-surface.test.ts         | 378 ++++++++++++++++
+ src/api/routes/plugin-surface.ts              | 402 ++++++++++++++++++
+ src/api/server.ts                             |  10 +
+ src/backup/backup-manager.test.ts             |  36 ++
+ src/backup/backup-manager.ts                  |  41 ++
+ src/integrations/integration-registry.ts      |  20 +
+ src/packages/package-manager.test.ts          |  48 +++
+ src/packages/package-manager.ts               |  36 ++
+ src/plugins/plugin-loader.test.ts             |   2 +-
+ src/plugins/plugin-loader.ts                  |  46 +-
+ src/plugins/plugin-pages.test.ts              | 111 +++++
+ src/plugins/scoped-deps.integration.test.ts   |   2 +
+ src/plugins/scoped-deps.test.ts               |  19 +
+ src/plugins/scoped-deps.ts                    |  30 +-
+ src/shared/constants.ts                       |  14 +
+ src/shared/plugin-api.ts                      |  11 +
+ src/shared/types.ts                           |  65 +++
+ ui/src/App.tsx                                |   3 +
+ ui/src/api/integrations.ts                    |  21 +
+ ui/src/components/layout/Sidebar.tsx          |  18 +
+ ui/src/components/layout/usePluginPages.ts    |  39 ++
+ .../components/plugins/PluginDetailSheet.tsx  |  46 +-
+ ui/src/i18n/locales/en.json                   |  10 +-
+ ui/src/i18n/locales/fr.json                   |  10 +-
+ ui/src/pages/PluginPage.test.tsx              | 114 +++++
+ ui/src/pages/PluginPage.tsx                   | 145 +++++++
+ ui/src/pages/PluginsPage.tsx                  |  23 +
+ ui/src/pages/pluginModuleLoader.ts            |  11 +
+ ui/src/types.ts                               |  15 +
+ 36 files changed, 2281 insertions(+), 73 deletions(-)
+ create mode 100644 specs/180-plugin-pages-and-public-tree/spec.md
+ create mode 100644 src/api/routes/plugin-surface.test.ts
+ create mode 100644 src/api/routes/plugin-surface.ts
+ create mode 100644 src/plugins/plugin-pages.test.ts
+ create mode 100644 ui/src/components/layout/usePluginPages.ts
+ create mode 100644 ui/src/pages/PluginPage.test.tsx
+ create mode 100644 ui/src/pages/PluginPage.tsx
+ create mode 100644 ui/src/pages/pluginModuleLoader.ts
+
+diff --git a/docs/specs-index.fr.md b/docs/specs-index.fr.md
+index 9bc3109..247a86f 100644
+--- a/docs/specs-index.fr.md
++++ b/docs/specs-index.fr.md
+@@ -308,6 +308,7 @@ Les specs sont regroupées par thème et annotées d'un statut :
+ | 177 | Ce qu'est un thermostat ; les extras rendus comme des extras          | ✅     | Avant, un thermostat Sowel était ce que les devices Panasonic et MCZ exposaient : leurs clés (`nanoe`, `airSwingUD`, `profile`, `resetAlarm`) formaient la liste d'auto-liaison dans l'UI produit, un device devait porter la clé brute `targetTemperature` pour être proposé comme thermostat, et la carte avait une branche par fabricant — la cause derrière la spec 176, dont les propres mots étaient « un alias n'est pas un vocabulaire ». Le cœur est désormais déclaré une fois dans `src/shared/thermostat-contract.ts` (`temperature`, `setpoint`, `state`, `power`, `operationMode`, `outsideTemperature` optionnel), un device est un thermostat dès qu'il porte une catégorie `setpoint` / `set_setpoint`, la température de la pièce et le mode se résolvent par catégorie comme le reste du cœur (`operation_mode` / `set_operation_mode` rejoignent la taxonomie, valeurs auto/heat/cool/dry/fan/off), et un thermostat lie tous les ordres de son device — le cœur canonisé, le reste en extras sous sa propre clé. La carte mène avec le cœur et rend les extras génériquement d'après le type de l'ordre ; les branches `resetAlarm`, `stoveState`, `profile`, `fanSpeed` et `ecoMode` ont disparu. Aucun changement de donnée, de plugin, de liaison ni de migration : un thermostat existant garde toutes ses liaisons et tous ses contrôles. Partie 1 de l'issue #919 ; la partie 2 (#922) fait publier le contrat par les plugins. Voir `specs/177-thermostat-contract/`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+ | 178 | Appuyer encore demande plus longtemps, puis abandonne                 | ✅     | La spec 174 n'avait donné qu'un geste au moteur : un second appui prolonge le créneau de la même durée, indéfiniment. Cela répond « pas encore » mais jamais « combien de temps encore » — sur l'installation de référence, obtenir une heure sur un portail réglé à un quart d'heure demande quatre appuis identiques, et le contrôle ne peut pas dire ce que fera le suivant puisque tous font la même chose. Un équipement déclare désormais des PALIERS de durées (`durationStepsMs`, de deux à six, croissants) et un appui les gravit : le premier agit et arme le plus court, chaque suivant repousse l'échéance à `maintenant + palier suivant` sans rien envoyer, et un appui au-delà du dernier **abandonne l'échéance sans revenir en arrière** — le portail reste ouvert et plus rien ne le refermera. Ce dernier appui n'est volontairement pas le bouton d'annulation, qui envoie le retour : « arrêter le décompte » et « fermer maintenant » sont deux intentions, et chacune garde son contrôle. Le palier est persisté (`timed_actions.step_index`), pour qu'un redémarrage ne relance pas la montée en silence et ne transforme pas un appui d'abandon en une heure de plus. Des paliers modifiés sous un créneau en cours le replacent par sa durée et non par son indice, un indice stocké voulant dire autre chose dès que les paliers bougent. `durationMs` est aligné sur le premier palier à l'écriture : deux endroits prétendant dire ce que fait le premier appui, c'est ainsi qu'ils finissent par se contredire. Tout ce qui n'a pas de paliers garde exactement la règle 3 de la spec 174. Voir `specs/178-timed-action-duration-steps/`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+ | 179 | Un compteur alimenté par un autre réseau                              | ✅     | La spec 173 déclarait une topologie que l'arithmétique de réconciliation ne voyait pas — un compteur à l'intérieur d'un autre. Voici l'autre : une pince sur un circuit alimenté par un **second compteur du fournisseur** (le cas qui l'a soulevée : une prise de recharge VE sur un autre abonnement). L'enrôlement étant une liste noire (#523), la pince entre dans toutes les réconciliations contre le compteur principal, et trois chiffres se faussent d'un coup : la répartition affiche une part de 3 kW que le total principal n'a jamais portée, le résidu « Autre » est écrasé à 0, et la spec 123 facture au tarif principal les kilowattheures d'un autre réseau. Même principe de conception que la 173 — déclarer ce qui est vrai du tableau électrique, pas une case « masquer » : `Equipment.separateSupply` dit que le compteur pend d'un autre réseau, et les deux surfaces (répartition par usage et donut en direct spec 117) l'affichent **à part** — son propre groupe, séries brutes, en kWh seulement, jamais en € — tandis que sa carte, son historique et ses graphiques ne bougent pas. Refusé sur le compteur principal et les types de production (la référence ne peut pas être hors d'elle-même), et un compteur sur alimentation séparée ne peut pas être parent spec 173 — rien de ce que la répartition affiche ne peut être « dans » un compteur d'un autre réseau ; une déclaration d'imbrication qui pointe dessus est conservée mais simplement inutilisée, si bien que retirer le drapeau restaure la soustraction telle quelle. L'agrégation de zone (spec 170) reste volontairement brute : le garage tire réellement ces watts, quel que soit le compteur qui les facture. Voir `specs/179-separate-supply-meter/`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
++| 180 | Un plugin peut apporter une page, une porte et un tiroir              | ✅     | Un plugin recevait un logger, un bus d'événements, les réglages et les devices — exactement ce qu'il faut pour transformer un protocole en équipements, et c'était toute la surface. Trois conséquences : un plugin ne pouvait rien afficher au-delà de son formulaire de réglages, ne pouvait être joint que par un administrateur (toute route `/api/` est authentifiée par défaut, spec 105 S6, et il n'existait pas d'autre arbre), et n'avait nulle part où conserver son état — `pluginDir` en a l'air et c'est un piège, puisqu'une mise à jour supprime ce répertoire pour y déposer la nouvelle version. Chacune a été contournée en déplaçant la fonctionnalité vers un second service sur une autre machine : le moteur tenait l'équipement, et une autre machine tenait la raison de son existence. Trois capacités génériques, sans que le cœur apprenne un métier : un manifeste peut déclarer `ui: { entry, label, icon }` et la SPA importe ce module ES sur `/plugins/<id>/page` en appelant `mount(container, ctx)` avec un `api()` déjà pointé sur `/api/v1/plugins/<id>/page/*` (du DOM, pas du React — un plugin se construit avec ses propres dépendances, et deux React dans une page est une classe de bogues que personne ne devrait déboguer) ; un manifeste peut déclarer `publicTree`, ce qui rend un arbre anonyme **constructible** sous `/p/<id>/*` et rien de plus, puisqu'il répond le même 404 qu'un plugin qui ne l'a pas déclaré tant qu'un administrateur ne l'a pas ouvert, et se retrouve ensuite limité au cinquième du débit global, marqué `noindex`, et interdit de poser un cookie sur l'origine de Sowel ; et `deps.dataDir` vaut `data/plugins/<id>/`, auquel l'installation, la mise à jour et la désinstallation ne touchent jamais et que la sauvegarde emporte. Les deux surfaces remettent au plugin une liste blanche d'en-têtes et non la requête — le jeton de l'appelant reste dans le cœur — et une liste blanche décide de ce qu'il peut répondre. Voir `specs/180-plugin-pages-and-public-tree/`.                                                                                                                                                                                                     |
+ 
+ ---
+ 
+diff --git a/docs/specs-index.md b/docs/specs-index.md
+index acd55d8..6fcb9ee 100644
+--- a/docs/specs-index.md
++++ b/docs/specs-index.md
+@@ -329,6 +329,7 @@ Specs are grouped by theme and annotated with status:
+ | 177 | What a thermostat is; extras rendered as extras                         | ✅     | Before, a Sowel thermostat was whatever the Panasonic and MCZ devices exposed: their keys (`nanoe`, `airSwingUD`, `profile`, `resetAlarm`) were the auto-binding list in the product UI, a device needed the raw key `targetTemperature` to be offered as a thermostat at all, and the card had a branch per vendor — the cause behind spec 176, whose own words were "an alias is not a vocabulary". The core is now declared once in `src/shared/thermostat-contract.ts` (`temperature`, `setpoint`, `state`, `power`, `operationMode`, optional `outsideTemperature`), a device is a thermostat when it carries a `setpoint` / `set_setpoint` category, the room temperature and the operating mode resolve from categories like the rest of the core (`operation_mode` / `set_operation_mode` join the taxonomy, values auto/heat/cool/dry/fan/off), and a thermostat binds every order its device exposes — the core canonicalised, the rest as extras under their own keys. The card leads with the core and renders the extras generically from the order's type; the `resetAlarm`, `stoveState`, `profile`, `fanSpeed` and `ecoMode` branches are gone. No data, plugin, binding or migration change: an existing thermostat keeps every binding and control it had. Part 1 of issue #919; part 2 (#922) makes the plugins publish the contract. See `specs/177-thermostat-contract/`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+ | 178 | Pressing again asks for longer, then gives up                           | ✅     | Spec 174 gave the engine one gesture: a second press extends the window by the same length, for ever. That answers "not yet" but never "how much longer" — on the reference installation, getting an hour out of a gate configured at a quarter of one takes four identical presses, and the control cannot say what the next press will do because every press does the same thing. An equipment now declares a LADDER of window lengths (`durationStepsMs`, two to six, increasing) and a press walks up it: the first acts and arms the shortest, each further one moves the deadline to `now + next rung` and dispatches nothing, and a press past the top **gives the deadline up without reverting** — the gate stays open and nothing will close it. That last press is deliberately not the cancel button, which sends the revert: "stop counting" and "close it now" are two intents, and both keep a control. The rung is persisted (`timed_actions.step_index`), so a restart cannot silently restart the climb and turn a give-up press into another hour. A ladder edited under a running window re-places it by length rather than by index, because a stored index means something else once the rungs move. `durationMs` is forced to the first rung at write time — two places claiming what the first press does is how they come to disagree. Everything without a ladder keeps spec 174 rule 3 exactly. See `specs/178-timed-action-duration-steps/`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+ | 179 | A meter fed by a separate supply                                        | ✅     | Spec 173 declared one topology the reconciliation arithmetic could not see — a meter inside another one. This is the other: a clamp on a circuit fed by a **second utility supply** (the case that raised it: an EV charging socket on another subscription). Enrolment being a blocklist (#523), the clamp lands in every reconciliation against the main meter, and three numbers go wrong at once: the partition shows a 3 kW slice the main total never carried, the "Other" residual is eaten to its clamp at 0, and spec 123 prices another supply's kilowatt-hours at the main tariff. Same design principle as 173 — declare what is true of the switchboard, not a "hide this" tick box: `Equipment.separateSupply` says the meter hangs off a different supply, and both surfaces (by-usage and the spec 117 live donut) render it **apart** — its own group, raw series, kWh only, never in € — while its card, history and charts stay untouched. Refused on the main meter and production types (the reference cannot be outside itself), and a separate-supply meter cannot be a spec 173 parent — nothing the partition renders can be "inside" a meter on another supply; a containment declaration pointing at one is stored and simply unused, so clearing the flag restores the subtraction untouched. Zone aggregation (spec 170) deliberately stays raw: the garage genuinely draws those watts, whichever meter bills them. See `specs/179-separate-supply-meter/`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
++| 180 | A plugin may bring a page, a door and a drawer                          | ✅     | A plugin was handed a logger, an event bus, settings and devices — exactly right for turning a protocol into devices, and the whole surface. Three things followed: a plugin could show nothing beyond its settings form, could be reached by nobody but an admin (every `/api/` route is authenticated by default, spec 105 S6, and there was no other tree), and had nowhere to keep state — `pluginDir` looks like the place and is a trap, since an update removes that directory and unpacks the new release in it. Each was worked around by moving the feature to a second service on another host, so the engine held the equipment and another machine held the reason it existed. Three generic capabilities, no domain learned by the core: a manifest may declare `ui: { entry, label, icon }` and the SPA imports that ES module at `/plugins/<id>/page`, calling `mount(container, ctx)` with an `api()` already bound to `/api/v1/plugins/<id>/page/*` (plain DOM, not React — a plugin builds against its own dependencies, and two Reacts in one page is a class of bug nobody should debug); a manifest may declare `publicTree`, which makes an anonymous tree at `/p/<id>/*` **buildable** and nothing more, since it answers the same 404 as an undeclared plugin until an admin opens it, and is then rate-limited to a fifth of the global budget, marked `noindex`, and forbidden from setting a cookie on Sowel's origin; and `deps.dataDir` is `data/plugins/<id>/`, which install, update and uninstall never touch and the backup carries. Both surfaces hand the plugin an allowlist of headers rather than the request — the caller's bearer stays in the core — and an allowlist decides what it may answer. See `specs/180-plugin-pages-and-public-tree/`.                                                                                                                                                                                                                                                                                                                                                                              |
+ 
+ ---
+ 
+diff --git a/docs/technical/api-reference.fr.md b/docs/technical/api-reference.fr.md
+index 9b73be3..8f24730 100644
+--- a/docs/technical/api-reference.fr.md
++++ b/docs/technical/api-reference.fr.md
+@@ -387,19 +387,21 @@ Routes admin uniquement pour gérer les plugins d'intégration de devices.
+ 
+ Routes admin uniquement pour la gestion des plugins tiers.
+ 
+-| Method | Path                             | Description                                                                               |
+-| ------ | -------------------------------- | ----------------------------------------------------------------------------------------- |
+-| `GET`  | `/api/v1/plugins`                | Liste les plugins installés.                                                              |
+-| `GET`  | `/api/v1/plugins/store`          | Liste les plugins disponibles (registre + sources personnelles, chacun avec un `tier`).   |
+-| `POST` | `/api/v1/plugins/store/refresh`  | Force le rafraîchissement du registre et des caches de releases des sources perso.        |
+-| `GET`  | `/api/v1/plugins/sources`        | Liste les sources personnelles de plugins (spec 136).                                     |
+-| `POST` | `/api/v1/plugins/sources`        | Ajoute une source personnelle. Body : `{ repo }` (`owner/repo` GitHub public).            |
+-| `POST` | `/api/v1/plugins/sources/remove` | Retire une source personnelle. Body : `{ repo }`. Les plugins installés sont conservés.   |
+-| `POST` | `/api/v1/plugins/install`        | Installe depuis GitHub. Body : `{ repo, confirmed?, expectedSha256? }`.                   |
+-| `POST` | `/api/v1/plugins/:id/update`     | Met à jour un plugin. Body : `{ confirmed?, expectedSha256? }` (paquets perso seulement). |
+-| `POST` | `/api/v1/plugins/:id/uninstall`  | Désinstalle un plugin.                                                                    |
+-| `POST` | `/api/v1/plugins/:id/enable`     | Active un plugin (le charge et le démarre).                                               |
+-| `POST` | `/api/v1/plugins/:id/disable`    | Désactive un plugin (le stoppe et le décharge).                                           |
++| Method | Path                             | Description                                                                                       |
++| ------ | -------------------------------- | ------------------------------------------------------------------------------------------------- |
++| `GET`  | `/api/v1/plugins`                | Liste les plugins installés.                                                                      |
++| `GET`  | `/api/v1/plugins/store`          | Liste les plugins disponibles (registre + sources personnelles, chacun avec un `tier`).           |
++| `POST` | `/api/v1/plugins/store/refresh`  | Force le rafraîchissement du registre et des caches de releases des sources perso.                |
++| `GET`  | `/api/v1/plugins/sources`        | Liste les sources personnelles de plugins (spec 136).                                             |
++| `POST` | `/api/v1/plugins/sources`        | Ajoute une source personnelle. Body : `{ repo }` (`owner/repo` GitHub public).                    |
++| `POST` | `/api/v1/plugins/sources/remove` | Retire une source personnelle. Body : `{ repo }`. Les plugins installés sont conservés.           |
++| `POST` | `/api/v1/plugins/install`        | Installe depuis GitHub. Body : `{ repo, confirmed?, expectedSha256? }`.                           |
++| `POST` | `/api/v1/plugins/:id/update`     | Met à jour un plugin. Body : `{ confirmed?, expectedSha256? }` (paquets perso seulement).         |
++| `POST` | `/api/v1/plugins/:id/uninstall`  | Désinstalle un plugin.                                                                            |
++| `POST` | `/api/v1/plugins/:id/enable`     | Active un plugin (le charge et le démarre).                                                       |
++| `POST` | `/api/v1/plugins/:id/disable`    | Désactive un plugin (le stoppe et le décharge).                                                   |
++| `GET`  | `/api/v1/plugins/pages`          | Spec 180 — les pages proposées par les plugins installés : `{ pluginId, label, icon, entryUrl }`. |
++| `PUT`  | `/api/v1/plugins/:id/public`     | Spec 180 — ouvre ou ferme l'arbre anonyme du plugin. Corps : `{ enabled }`. Journalisé à l'audit. |
+ 
+ Les bodies des routes plugins sont validés par schéma (issue #597). `repo` doit porter la forme `owner/repo` pour **ajouter une source personnelle** comme pour **installer** : la valeur est interpolée dans une URL `api.github.com/repos/<repo>` et jointe au répertoire des plugins, donc sa forme est une frontière de sécurité. La suppression n'a besoin que d'une clé non vide, puisqu'il s'agit d'une recherche dans ce qui est déjà stocké. Sur les deux routes `sources`, `repo` est trimé avant vérification, donc un copier-coller avec un retour à la ligne final fonctionne toujours, et un `repo` non textuel y répond désormais 400 là où il faisait planter le handler en 500 (l'installation répondait déjà 400).
+ 
+@@ -413,6 +415,16 @@ Toutes les écritures ici sont réservées aux admins, et la vérification s'app
+     - `CommunityPluginConfirmationRequired` (spec 089) : plugin du registre publié par un owner non officiel. Réessayer avec `confirmed: true`.
+     - `PersonalPluginConfirmationRequired` (spec 136) : plugin issu d'une source personnelle. La réponse contient `{ repo, owner, version, sha256 }` calculés depuis le tarball réel. Réessayer avec `confirmed: true` et `expectedSha256` égal au hash approuvé ; le tarball retéléchargé doit correspondre, et le hash est ensuite épinglé pour les vérifications d'intégrité futures.
+ 
++### Surfaces de plugin (spec 180)
++
++Trois arbres que le cœur sert pour le compte d'un plugin, en dehors des routes d'administration habituelles de `/api/v1/plugins/:id/…` :
++
++| Arbre                        | Authentification | Notes                                                                                                                                                                                                                                                                    |
++| ---------------------------- | ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
++| `/api/v1/plugins/:id/page/*` | Admin            | Relayé vers le `handlePageRequest` du plugin. `GET POST PUT PATCH DELETE`. 15 s, puis 504. Le jeton de l'appelant n'est **pas** transmis ; le plugin reçoit `{ id, username, role }` à la place.                                                                         |
++| `/plugin-ui/:id/*`           | Aucune           | Les fichiers statiques de la page, depuis le répertoire de l'entrée, par liste blanche d'extensions, `Cache-Control: no-store`.                                                                                                                                          |
++| `/p/:id/*`                   | Aucune           | L'arbre anonyme du plugin. 404 tant que le manifeste ne déclare pas `publicTree` **et** qu'un administrateur n'a pas positionné `plugins.<id>.public_enabled`. 60 req/min/IP, `X-Robots-Tag: noindex, nofollow`, 30 s puis 504, et un `Set-Cookie` du plugin est refusé. |
++
+ ---
+ 
+ ## Settings (Admin)
+diff --git a/docs/technical/api-reference.md b/docs/technical/api-reference.md
+index 6de25de..7c939e0 100644
+--- a/docs/technical/api-reference.md
++++ b/docs/technical/api-reference.md
+@@ -460,19 +460,21 @@ Admin-only routes for managing device integration plugins.
+ 
+ Admin-only routes for third-party plugin management.
+ 
+-| Method | Path                             | Description                                                                        |
+-| ------ | -------------------------------- | ---------------------------------------------------------------------------------- |
+-| `GET`  | `/api/v1/plugins`                | List installed plugins.                                                            |
+-| `GET`  | `/api/v1/plugins/store`          | List available plugins (registry entries + personal sources, each with a `tier`).  |
+-| `POST` | `/api/v1/plugins/store/refresh`  | Force-refresh the registry and the personal source release caches.                 |
+-| `GET`  | `/api/v1/plugins/sources`        | List personal plugin sources (spec 136).                                           |
+-| `POST` | `/api/v1/plugins/sources`        | Add a personal source. Body: `{ repo }` (public GitHub `owner/repo`).              |
+-| `POST` | `/api/v1/plugins/sources/remove` | Remove a personal source. Body: `{ repo }`. Installed plugins are kept.            |
+-| `POST` | `/api/v1/plugins/install`        | Install from GitHub. Body: `{ repo, confirmed?, expectedSha256? }`.                |
+-| `POST` | `/api/v1/plugins/:id/update`     | Update a plugin. Body: `{ confirmed?, expectedSha256? }` (personal packages only). |
+-| `POST` | `/api/v1/plugins/:id/uninstall`  | Uninstall a plugin.                                                                |
+-| `POST` | `/api/v1/plugins/:id/enable`     | Enable a plugin (loads and starts it).                                             |
+-| `POST` | `/api/v1/plugins/:id/disable`    | Disable a plugin (stops and unloads it).                                           |
++| Method | Path                             | Description                                                                             |
++| ------ | -------------------------------- | --------------------------------------------------------------------------------------- |
++| `GET`  | `/api/v1/plugins`                | List installed plugins.                                                                 |
++| `GET`  | `/api/v1/plugins/store`          | List available plugins (registry entries + personal sources, each with a `tier`).       |
++| `POST` | `/api/v1/plugins/store/refresh`  | Force-refresh the registry and the personal source release caches.                      |
++| `GET`  | `/api/v1/plugins/sources`        | List personal plugin sources (spec 136).                                                |
++| `POST` | `/api/v1/plugins/sources`        | Add a personal source. Body: `{ repo }` (public GitHub `owner/repo`).                   |
++| `POST` | `/api/v1/plugins/sources/remove` | Remove a personal source. Body: `{ repo }`. Installed plugins are kept.                 |
++| `POST` | `/api/v1/plugins/install`        | Install from GitHub. Body: `{ repo, confirmed?, expectedSha256? }`.                     |
++| `POST` | `/api/v1/plugins/:id/update`     | Update a plugin. Body: `{ confirmed?, expectedSha256? }` (personal packages only).      |
++| `POST` | `/api/v1/plugins/:id/uninstall`  | Uninstall a plugin.                                                                     |
++| `POST` | `/api/v1/plugins/:id/enable`     | Enable a plugin (loads and starts it).                                                  |
++| `POST` | `/api/v1/plugins/:id/disable`    | Disable a plugin (stops and unloads it).                                                |
++| `GET`  | `/api/v1/plugins/pages`          | Spec 180 — the pages installed plugins offer: `{ pluginId, label, icon, entryUrl }`.    |
++| `PUT`  | `/api/v1/plugins/:id/public`     | Spec 180 — open or shut the plugin's anonymous tree. Body: `{ enabled }`. Audit-logged. |
+ 
+ The plugin bodies are schema-validated (issue #597). `repo` must carry the `owner/repo` shape when **adding a personal source** and when **installing**: it is interpolated into a `api.github.com/repos/<repo>` URL and joined onto the plugin directory, so its shape is a security boundary. Removal only needs a non-empty key, since it is a lookup against what is already stored. On the two `sources` routes `repo` is trimmed before it is checked, so a paste with a trailing newline still works, and a non-string `repo` there now answers 400 where it used to crash the handler with a 500 (install already answered 400).
+ 
+@@ -486,6 +488,16 @@ Every write here is admin-only, enforced before validation so a non-admin sendin
+     - `CommunityPluginConfirmationRequired` (spec 089): registry plugin from a non-official owner. Retry with `confirmed: true`.
+     - `PersonalPluginConfirmationRequired` (spec 136): plugin from a personal source. The response carries `{ repo, owner, version, sha256 }` computed from the actual tarball. Retry with `confirmed: true` and `expectedSha256` set to the approved hash — the re-downloaded tarball must match it, and the hash is then pinned for future integrity checks.
+ 
++### Plugin surfaces (spec 180)
++
++Three trees the core serves on a plugin's behalf, all outside `/api/v1/plugins/:id/…`'s ordinary admin routes:
++
++| Tree                         | Auth  | Notes                                                                                                                                                                                                                                            |
++| ---------------------------- | ----- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
++| `/api/v1/plugins/:id/page/*` | Admin | Proxied to the plugin's `handlePageRequest`. `GET POST PUT PATCH DELETE`. 15 s, then 504. The caller's bearer is **not** forwarded; the plugin is told `{ id, username, role }` instead.                                                         |
++| `/plugin-ui/:id/*`           | None  | The page's own static assets, from the entry's directory, by extension allowlist, `Cache-Control: no-store`.                                                                                                                                     |
++| `/p/:id/*`                   | None  | The plugin's anonymous tree. 404 unless the manifest declares `publicTree` **and** an admin has set `plugins.<id>.public_enabled`. 60 req/min/IP, `X-Robots-Tag: noindex, nofollow`, 30 s then 504, and `Set-Cookie` from the plugin is refused. |
++
+ ---
+ 
+ ## Settings (Admin)
+diff --git a/docs/technical/plugin-development.fr.md b/docs/technical/plugin-development.fr.md
+index 389f2ed..36d5b50 100644
+--- a/docs/technical/plugin-development.fr.md
++++ b/docs/technical/plugin-development.fr.md
+@@ -12,14 +12,15 @@ Le plugin `sowel-plugin-weather-forecast` est utilisé comme exemple de référe
+ 2. [Structure d'un plugin](#structure-dun-plugin)
+ 3. [Schéma du manifest](#schema-du-manifest)
+ 4. [Référence de l'API PluginDeps](#reference-de-lapi-plugindeps)
+-5. [Interface IntegrationPlugin](#interface-integrationplugin)
+-6. [Créer un plugin pas à pas](#creer-un-plugin-pas-a-pas)
+-7. [Découverte de devices](#decouverte-de-devices)
+-8. [Mises à jour de données device](#mises-a-jour-de-donnees-device)
+-9. [Exécution d'ordres](#execution-dordres)
+-10. [Réglages](#reglages)
+-11. [Publication et versioning](#publication-et-versioning)
+-12. [Dépannage](#depannage)
++5. [Apporter une page, une porte et un tiroir](#apporter-une-page-une-porte-et-un-tiroir-spec-180)
++6. [Interface IntegrationPlugin](#interface-integrationplugin)
++7. [Créer un plugin pas à pas](#creer-un-plugin-pas-a-pas)
++8. [Découverte de devices](#decouverte-de-devices)
++9. [Mises à jour de données device](#mises-a-jour-de-donnees-device)
++10. [Exécution d'ordres](#execution-dordres)
++11. [Réglages](#reglages)
++12. [Publication et versioning](#publication-et-versioning)
++13. [Dépannage](#depannage)
+ 
+ ---
+ 
+@@ -95,16 +96,18 @@ Le fichier `manifest.json` décrit le plugin à Sowel. Il vit à la racine du r
+ 
+ ### Référence des champs
+ 
+-| Champ          | Type                    | Requis | Description                                                                                                                                |
+-| -------------- | ----------------------- | ------ | ------------------------------------------------------------------------------------------------------------------------------------------ |
+-| `id`           | string                  | Oui    | Identifiant unique du plugin. Minuscules avec tirets (par ex. `weather-forecast`). Doit correspondre au nom du répertoire sous `plugins/`. |
+-| `name`         | string                  | Oui    | Nom d'affichage lisible présenté dans l'UI.                                                                                                |
+-| `version`      | string                  | Oui    | Version SemVer (par ex. `0.2.0`). **Doit être mise à jour à chaque release.** Voir [Versioning](#versioning).                              |
+-| `description`  | string                  | Oui    | Courte description (une phrase) affichée dans le store de plugins et la page intégrations.                                                 |
+-| `icon`         | string                  | Oui    | Nom d'icône Lucide (par ex. `CloudSun`, `Camera`). Utilisé dans l'UI pour la carte d'intégration.                                          |
+-| `author`       | string                  | Non    | Nom de l'auteur ou organisation.                                                                                                           |
+-| `sowelVersion` | string                  | Non    | Plage SemVer des versions Sowel compatibles (par ex. `>=0.10.0`).                                                                          |
+-| `settings`     | IntegrationSettingDef[] | Non    | Tableau de définitions de réglages pour le formulaire de configuration UI. Voir [Réglages](#reglages).                                     |
++| Champ          | Type                    | Requis | Description                                                                                                                                                                                     |
++| -------------- | ----------------------- | ------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
++| `id`           | string                  | Oui    | Identifiant unique du plugin. Minuscules avec tirets (par ex. `weather-forecast`). Doit correspondre au nom du répertoire sous `plugins/`.                                                      |
++| `name`         | string                  | Oui    | Nom d'affichage lisible présenté dans l'UI.                                                                                                                                                     |
++| `version`      | string                  | Oui    | Version SemVer (par ex. `0.2.0`). **Doit être mise à jour à chaque release.** Voir [Versioning](#versioning).                                                                                   |
++| `description`  | string                  | Oui    | Courte description (une phrase) affichée dans le store de plugins et la page intégrations.                                                                                                      |
++| `icon`         | string                  | Oui    | Nom d'icône Lucide (par ex. `CloudSun`, `Camera`). Utilisé dans l'UI pour la carte d'intégration.                                                                                               |
++| `author`       | string                  | Non    | Nom de l'auteur ou organisation.                                                                                                                                                                |
++| `sowelVersion` | string                  | Non    | Plage SemVer des versions Sowel compatibles (par ex. `>=0.10.0`).                                                                                                                               |
++| `settings`     | IntegrationSettingDef[] | Non    | Tableau de définitions de réglages pour le formulaire de configuration UI. Voir [Réglages](#reglages).                                                                                          |
++| `ui`           | PluginUiDef             | Non    | Spec 180 — `{ entry, label, icon? }` : le plugin apporte sa propre page dans l'interface. Voir [Apporter une page, une porte et un tiroir](#apporter-une-page-une-porte-et-un-tiroir-spec-180). |
++| `publicTree`   | boolean                 | Non    | Spec 180 — le plugin peut servir des appelants anonymes sous `/p/<id>/*`, une fois la porte ouverte par un administrateur.                                                                      |
+ 
+ **Champs qui n'existent PAS dans le manifest :** `entry`, `integrationId`, `license`, `repository`. Ne les incluez pas.
+ 
+@@ -121,6 +124,7 @@ interface PluginDeps {
+   settingsManager: SettingsManager;
+   deviceManager: DeviceManager;
+   pluginDir: string;
++  dataDir: string; // spec 180 — survit aux mises à jour, voir plus bas
+ }
+ ```
+ 
+@@ -302,6 +306,160 @@ Ces protections nécessiteraient une hard isolation via worker threads (une futu
+ 
+ ---
+ 
++## Apporter une page, une porte et un tiroir (spec 180)
++
++Trois capacités optionnelles. Un plugin qui n'en veut aucune ne change rien.
++
++### `dataDir` — où va l'état
++
++`deps.dataDir` vaut `data/plugins/<votre-id>/`, créé avant l'appel de votre
++factory.
++
++```typescript
++import { resolve } from "node:path";
++const store = resolve(deps.dataDir, "accesses.json");
++```
++
++**N'écrivez jamais votre état dans `pluginDir`.** Une mise à jour supprime ce
++répertoire et y dépose la nouvelle version : ce que vous aviez écrit à côté de
++votre code disparaît au prochain numéro, en silence. `dataDir` n'est touché ni
++par l'installation, ni par la mise à jour, ni par la désinstallation, et il part
++dans la sauvegarde (même liste d'extensions que le reste de `data/` : tenez-vous
++à `.json`, `.txt`, `.png`, `.svg`…).
++
++### Une page dans Sowel
++
++Déclarez-la dans le manifeste :
++
++```json
++{
++  "ui": { "entry": "ui/panel.js", "label": "Accès invités", "icon": "DoorOpen" }
++}
++```
++
++`entry` est un **module ES** de votre paquet. La SPA l'importe sur
++`/plugins/<id>/page` (une entrée apparaît dans le menu Administration, réservée
++aux administrateurs) et appelle :
++
++```javascript
++export function mount(container, ctx) {
++  container.replaceChildren(render(ctx));
++}
++export function unmount(container) {
++  /* arrêter les minuteries, retirer les écouteurs */
++}
++```
++
++`ctx` porte :
++
++| Champ              | Usage                                                                                                                                   |
++| ------------------ | --------------------------------------------------------------------------------------------------------------------------------------- |
++| `api(path, init?)` | Appelle `/api/v1/plugins/<id>/page<path>` via le client authentifié de la SPA. `path` commence par `/`. JSON à l'aller comme au retour. |
++| `pluginId`         | Votre identifiant.                                                                                                                      |
++| `locale`           | `"fr"`, `"en"`… — la langue courante de l'interface.                                                                                    |
++| `theme`            | `"light"` ou `"dark"`.                                                                                                                  |
++| `navigate(to)`     | Naviguer dans Sowel, par exemple `navigate("/equipments/abc")`.                                                                         |
++
++Du DOM, volontairement : votre plugin se construit dans son propre dépôt, avec
++ses propres dépendances, et un second React dans la page est une classe de
++bogues que personne ne devrait avoir à déboguer.
++
++**Style.** Votre page s'affiche dans l'application : les tokens du design system
++sont donc disponibles en variables CSS — `var(--color-surface)`,
++`var(--color-text)`, `var(--color-primary)`, `var(--radius-md)`,
++`var(--font-sans)`. Utilisez-les et la page suit les thèmes clair et sombre sans
++rien faire. Les classes Tailwind ne fonctionneront **pas** : Tailwind analyse
++`ui/src` et n'a jamais vu votre fichier.
++
++Les fichiers statiques vivent à côté de l'entrée et sont servis depuis
++`/plugin-ui/<id>/…` (`.js .mjs .css .html .svg .png .jpg .ico .json .map .woff2
++.webmanifest`). Tout ce qui sort du répertoire de l'entrée répond 404.
++
++Servez l'API de la page en implémentant `handlePageRequest` :
++
++```typescript
++async handlePageRequest(request: PluginHttpRequest): Promise<PluginHttpResponse> {
++  if (request.method === "GET" && request.path === "/accesses") {
++    return { body: this.store.list() };
++  }
++  if (request.method === "POST" && request.path === "/accesses") {
++    const created = this.store.create(request.body, request.user?.username ?? "?");
++    return { status: 201, body: created };
++  }
++  return { status: 404, body: { error: "unknown_route" } };
++}
++```
++
++Le cœur a déjà authentifié l'appelant et refusé quiconque n'est pas
++administrateur. `request.user` vaut `{ id, username, role }` — de quoi journaliser
++qui a agi, sans jamais voir de jeton. Vous avez **15 s** pour répondre.
++
++### Une porte anonyme
++
++Certains plugins servent quelqu'un qui n'est pas un utilisateur de Sowel.
++Déclarez-le :
++
++```json
++{ "publicTree": true }
++```
++
++Cela rend la porte **constructible**, pas ouverte. Tant qu'un administrateur ne
++l'a pas ouverte depuis la fiche du plugin, `/p/<id>/*` répond le même 404 qu'un
++plugin qui ne l'a jamais déclarée — le réglage n'est donc pas sondable de
++l'extérieur. Vous pouvez lire si la vôtre est ouverte (et seulement la vôtre),
++de sorte que votre page puisse le dire plutôt que de laisser le propriétaire se
++demander pourquoi une porte qu'il a déclarée répond 404 :
++
++```typescript
++const ouverte = deps.settingsManager.get(`plugins.${INTEGRATION_ID}.public_enabled`) === "true";
++```
++
++L'écrire est refusé : c'est une clé du cœur, ce qui est précisément la raison
++pour laquelle elle ne vit pas dans votre propre espace de noms. Une fois
++ouverte :
++
++```typescript
++async handlePublicRequest(request: PluginHttpRequest): Promise<PluginHttpResponse> {
++  if (request.path === "/") {
++    return { body: GUEST_PAGE_HTML, contentType: "text/html; charset=utf-8" };
++  }
++  if (request.method === "POST" && request.path === "/open") {
++    return this.openGate(request); // `request.ip` est l'appelant
++  }
++  return { status: 404, body: { error: "not_found" } };
++}
++```
++
++Ce que le cœur fait autour de vous :
++
++- 60 requêtes par minute et par IP (la limite globale est de 300) ;
++- `X-Robots-Tag: noindex, nofollow` sur chaque réponse ;
++- `authorization` passe — c'est **votre** jeton, rien d'autre n'a pu le poser —
++  ainsi que `accept`, `accept-language`, `content-type` et `user-agent`. Rien
++  d'autre ne vous parvient ;
++- **`set-cookie` est refusé.** Un cookie posé ici vivrait sur l'origine de Sowel
++  et serait envoyé à toutes les routes du cœur. Distribuez un jeton et relisez-le
++  dans `authorization` ;
++- 30 s pour répondre (plus que l'API de la page : un appel public peut
++  légitimement attendre un équipement).
++
++Tout le reste est à vous, et c'est le principe : le cœur ne sait rien de qui
++sont vos appelants. Limitez vos propres essais, refusez vos propres entrées
++invalides, et journalisez ce que vous refusez.
++
++### Ce que vous pouvez répondre
++
++`{ status, body, contentType, headers }`. Une chaîne ou un Buffer part tel quel ;
++le reste part en JSON. Les en-têtes de réponse sont une liste blanche
++(`cache-control`, `content-type`, `content-security-policy`, `etag`, `location`,
++`retry-after`, `x-robots-tag`, `content-disposition`, `content-language`,
++`last-modified`) ; le reste est écarté avec un log d'avertissement qui le nomme.
++
++Lever une exception est sans danger — la spec 111 la confine — et répond 500
++sans rien laisser filtrer de votre erreur. Préférez répondre vous-même un statut.
++
++---
++
+ ## Interface IntegrationPlugin
+ 
+ La fonction usine `createPlugin` doit retourner un objet qui implémente l'interface `IntegrationPlugin` :
+diff --git a/docs/technical/plugin-development.md b/docs/technical/plugin-development.md
+index db1ca67..31a9ecf 100644
+--- a/docs/technical/plugin-development.md
++++ b/docs/technical/plugin-development.md
+@@ -12,14 +12,15 @@ The `sowel-plugin-weather-forecast` plugin is used as the reference example thro
+ 2. [Plugin Structure](#plugin-structure)
+ 3. [Manifest Schema](#manifest-schema)
+ 4. [PluginDeps API Reference](#plugindeps-api-reference)
+-5. [IntegrationPlugin Interface](#integrationplugin-interface)
+-6. [Creating a Plugin Step by Step](#creating-a-plugin-step-by-step)
+-7. [Device Discovery](#device-discovery)
+-8. [Device Data Updates](#device-data-updates)
+-9. [Order Execution](#order-execution)
+-10. [Settings](#settings)
+-11. [Publishing and Versioning](#publishing-and-versioning)
+-12. [Troubleshooting](#troubleshooting)
++5. [Bringing a page, a door and a drawer](#bringing-a-page-a-door-and-a-drawer-spec-180)
++6. [IntegrationPlugin Interface](#integrationplugin-interface)
++7. [Creating a Plugin Step by Step](#creating-a-plugin-step-by-step)
++8. [Device Discovery](#device-discovery)
++9. [Device Data Updates](#device-data-updates)
++10. [Order Execution](#order-execution)
++11. [Settings](#settings)
++12. [Publishing and Versioning](#publishing-and-versioning)
++13. [Troubleshooting](#troubleshooting)
+ 
+ ---
+ 
+@@ -95,19 +96,21 @@ The `manifest.json` file describes the plugin to Sowel. It lives at the root of
+ 
+ ### Field Reference
+ 
+-| Field          | Type                    | Required | Description                                                                                                                 |
+-| -------------- | ----------------------- | -------- | --------------------------------------------------------------------------------------------------------------------------- |
+-| `id`           | string                  | Yes      | Unique plugin identifier. Lowercase with hyphens (e.g. `weather-forecast`). Must match the directory name under `plugins/`. |
+-| `name`         | string                  | Yes      | Human-readable display name shown in the UI.                                                                                |
+-| `version`      | string                  | Yes      | SemVer version (e.g. `0.2.0`). **Must be updated with each release.** See [Versioning](#versioning).                        |
+-| `description`  | string                  | Yes      | Short description (one sentence) shown in the plugin store and integrations page.                                           |
+-| `icon`         | string                  | Yes      | Lucide icon name (e.g. `CloudSun`, `Camera`). Used in the UI for the integration card.                                      |
+-| `repo`         | string                  | Yes      | GitHub `owner/repo`. Install throws `Package manifest missing 'repo'` without it, and a backup restore reinstalls from it.  |
+-| `author`       | string                  | No       | Author name or organization.                                                                                                |
+-| `type`         | string                  | No       | `integration` (default) or `recipe`.                                                                                        |
+-| `category`     | string                  | No       | Store category (spec 137). Recipes without one land in "Other" at the bottom of the store, with no error to explain it.     |
+-| `sowelVersion` | string                  | No       | SemVer range of compatible Sowel versions (e.g. `>=0.10.0`). Outside the range, the store button is disabled.               |
+-| `settings`     | IntegrationSettingDef[] | No       | Array of setting definitions for the UI configuration form. See [Settings](#settings).                                      |
++| Field          | Type                    | Required | Description                                                                                                                                                                  |
++| -------------- | ----------------------- | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
++| `id`           | string                  | Yes      | Unique plugin identifier. Lowercase with hyphens (e.g. `weather-forecast`). Must match the directory name under `plugins/`.                                                  |
++| `name`         | string                  | Yes      | Human-readable display name shown in the UI.                                                                                                                                 |
++| `version`      | string                  | Yes      | SemVer version (e.g. `0.2.0`). **Must be updated with each release.** See [Versioning](#versioning).                                                                         |
++| `description`  | string                  | Yes      | Short description (one sentence) shown in the plugin store and integrations page.                                                                                            |
++| `icon`         | string                  | Yes      | Lucide icon name (e.g. `CloudSun`, `Camera`). Used in the UI for the integration card.                                                                                       |
++| `repo`         | string                  | Yes      | GitHub `owner/repo`. Install throws `Package manifest missing 'repo'` without it, and a backup restore reinstalls from it.                                                   |
++| `author`       | string                  | No       | Author name or organization.                                                                                                                                                 |
++| `type`         | string                  | No       | `integration` (default) or `recipe`.                                                                                                                                         |
++| `category`     | string                  | No       | Store category (spec 137). Recipes without one land in "Other" at the bottom of the store, with no error to explain it.                                                      |
++| `sowelVersion` | string                  | No       | SemVer range of compatible Sowel versions (e.g. `>=0.10.0`). Outside the range, the store button is disabled.                                                                |
++| `settings`     | IntegrationSettingDef[] | No       | Array of setting definitions for the UI configuration form. See [Settings](#settings).                                                                                       |
++| `ui`           | PluginUiDef             | No       | Spec 180 — `{ entry, label, icon? }`: the plugin brings its own page into the UI. See [Bringing a page, a door and a drawer](#bringing-a-page-a-door-and-a-drawer-spec-180). |
++| `publicTree`   | boolean                 | No       | Spec 180 — the plugin can serve anonymous callers under `/p/<id>/*`, once an admin opens it.                                                                                 |
+ 
+ **Fields that do NOT exist in the manifest:** `entry`, `integrationId`, `license`, `repository`. Do not include these. Note `repo` above is required and is a different field from `repository`.
+ 
+@@ -124,6 +127,7 @@ interface PluginDeps {
+   settingsManager: SettingsManager;
+   deviceManager: DeviceManager;
+   pluginDir: string;
++  dataDir: string; // spec 180 — survives updates; see below
+ }
+ ```
+ 
+@@ -353,6 +357,154 @@ These would require hard isolation via worker threads (a future Sowel spec). For
+ 
+ ---
+ 
++## Bringing a page, a door and a drawer (spec 180)
++
++Three optional capabilities. A plugin that wants none of them changes nothing.
++
++### `dataDir` — where state goes
++
++`deps.dataDir` is `data/plugins/<your-id>/`, created before your factory runs.
++
++```typescript
++import { resolve } from "node:path";
++const store = resolve(deps.dataDir, "accesses.json");
++```
++
++**Never write state into `pluginDir`.** An update removes that directory and
++unpacks the new release in its place, so what you wrote beside your code
++disappears at the next version, silently. `dataDir` is untouched by install,
++update and uninstall, and it is inside the backup (same extension whitelist as
++the rest of `data/`, so keep to `.json`, `.txt`, `.png`, `.svg`…).
++
++### A page inside Sowel
++
++Declare it in the manifest:
++
++```json
++{
++  "ui": { "entry": "ui/panel.js", "label": "Guest access", "icon": "DoorOpen" }
++}
++```
++
++`entry` is an **ES module** inside your package. The SPA imports it at
++`/plugins/<id>/page` (an entry appears in the Administration menu, admin-only)
++and calls:
++
++```javascript
++export function mount(container, ctx) {
++  container.replaceChildren(render(ctx));
++}
++export function unmount(container) {
++  /* stop timers, drop listeners */
++}
++```
++
++`ctx` carries:
++
++| Field              | Use                                                                                                                                    |
++| ------------------ | -------------------------------------------------------------------------------------------------------------------------------------- |
++| `api(path, init?)` | Calls `/api/v1/plugins/<id>/page<path>` through the SPA's own authenticated client. `path` starts with `/`. Body is JSON in, JSON out. |
++| `pluginId`         | Your id.                                                                                                                               |
++| `locale`           | `"fr"`, `"en"`… — the UI's current language.                                                                                           |
++| `theme`            | `"light"` or `"dark"`.                                                                                                                 |
++| `navigate(to)`     | Navigate inside Sowel, e.g. `navigate("/equipments/abc")`.                                                                             |
++
++Plain DOM on purpose: your plugin is built in its own repository, against its
++own dependencies, and a second React in the page is a class of bug nobody
++should have to debug.
++
++**Styling.** Your page renders inside the app, so Sowel's design tokens are
++available as CSS variables — `var(--color-surface)`, `var(--color-text)`,
++`var(--color-primary)`, `var(--radius-md)`, `var(--font-sans)`. Use them and
++the page follows light and dark without any work. Tailwind classes will **not**
++work: Tailwind scans `ui/src` and has never seen your file.
++
++Assets sit next to the entry and are served from `/plugin-ui/<id>/…`
++(`.js .mjs .css .html .svg .png .jpg .ico .json .map .woff2 .webmanifest`).
++Anything outside the entry's own directory is a 404.
++
++Serve the page's API by implementing `handlePageRequest`:
++
++```typescript
++async handlePageRequest(request: PluginHttpRequest): Promise<PluginHttpResponse> {
++  if (request.method === "GET" && request.path === "/accesses") {
++    return { body: this.store.list() };
++  }
++  if (request.method === "POST" && request.path === "/accesses") {
++    const created = this.store.create(request.body, request.user?.username ?? "?");
++    return { status: 201, body: created };
++  }
++  return { status: 404, body: { error: "unknown_route" } };
++}
++```
++
++The core has already authenticated the caller and refused anyone who is not an
++admin. `request.user` is `{ id, username, role }` — enough to journal who acted,
++and you never see a token. You have **15 s** to answer.
++
++### An anonymous door
++
++Some plugins serve someone who is not a Sowel user at all. Declare it:
++
++```json
++{ "publicTree": true }
++```
++
++That makes the door **buildable**, not open. Until an admin turns it on from the
++plugin's detail sheet, `/p/<id>/*` answers the same 404 as a plugin that never
++declared it — so the setting cannot be probed from outside. You can read whether
++yours is open (and only yours), so your page can say so rather than leave the
++owner wondering why a door they declared answers 404:
++
++```typescript
++const open = deps.settingsManager.get(`plugins.${INTEGRATION_ID}.public_enabled`) === "true";
++```
++
++Writing it is refused: it is a core-owned key, which is the whole reason it does
++not live in your own namespace. Once open:
++
++```typescript
++async handlePublicRequest(request: PluginHttpRequest): Promise<PluginHttpResponse> {
++  if (request.path === "/") {
++    return { body: GUEST_PAGE_HTML, contentType: "text/html; charset=utf-8" };
++  }
++  if (request.method === "POST" && request.path === "/open") {
++    return this.openGate(request); // `request.ip` is the caller
++  }
++  return { status: 404, body: { error: "not_found" } };
++}
++```
++
++What the core does around you:
++
++- 60 requests per minute per IP (the global limit is 300);
++- `X-Robots-Tag: noindex, nofollow` on every answer;
++- `authorization` is passed through — it is **your** token, nothing else could
++  have set it — and so are `accept`, `accept-language`, `content-type` and
++  `user-agent`. Nothing else reaches you;
++- **`set-cookie` is refused.** A cookie set here would live on Sowel's origin
++  and be sent to every core route. Hand out a token and read it back from
++  `authorization` instead;
++- 30 s to answer (longer than the page API: a public call may legitimately be
++  waiting on an equipment).
++
++Everything else is yours, and that is the point: the core knows nothing about
++who your callers are. Throttle your own credentials, refuse your own bad input,
++and log what you refuse.
++
++### What you may answer
++
++`{ status, body, contentType, headers }`. A string or a Buffer is sent as-is;
++anything else is JSON. Response headers are an allowlist (`cache-control`,
++`content-type`, `content-security-policy`, `etag`, `location`, `retry-after`,
++`x-robots-tag`, `content-disposition`, `content-language`, `last-modified`);
++anything else is dropped with a warn log naming it.
++
++Throwing is safe — spec 111 confines it — and answers 500 with nothing of your
++error in it. Prefer answering a status yourself.
++
++---
++
+ ## IntegrationPlugin Interface
+ 
+ The `createPlugin` factory must return an object implementing the `IntegrationPlugin` interface:
+diff --git a/specs/180-plugin-pages-and-public-tree/spec.md b/specs/180-plugin-pages-and-public-tree/spec.md
+new file mode 100644
+index 0000000..e44c49a
+--- /dev/null
++++ b/specs/180-plugin-pages-and-public-tree/spec.md
+@@ -0,0 +1,162 @@
++# Spec 180 — Plugin pages, an anonymous tree, and somewhere to keep state
++
++## Context
++
++Since spec 053 everything is a plugin, and a plugin is handed four things:
++`logger`, `eventBus`, `settingsManager`, `deviceManager`. That is exactly right
++for what plugins were built for — turning a protocol into devices — and it is
++the whole surface. Three consequences show up the moment a plugin owns
++something the device model does not describe:
++
++1. **A plugin cannot show anything.** Its entire UI is the settings form the
++   manifest declares (`text`, `password`, `number`, `boolean`) plus whatever its
++   devices happen to look like on an equipment page. A plugin holding a list of
++   records the owner edits — grants, schedules, licences, guests — has nowhere
++   to put them, and the owner ends up administering them in another application
++   on another machine.
++2. **A plugin cannot be reached by anyone but an admin.** Every route under
++   `/api/` is authenticated by default (spec 105 S6), which is right, and there
++   is no other tree. A plugin whose job involves someone who is not a Sowel user
++   — a visitor, a delivery, a guest at a gate — has no way to serve them.
++3. **A plugin has nowhere to keep state.** `pluginDir` looks like the place, and
++   it is a trap: `PackageManager.updateFiles` removes that directory and unpacks
++   the new release in its place, so anything written beside the code disappears
++   at the next version, silently, on the day the plugin is improved.
++
++Each of the three has been worked around in the field by moving the feature out
++of Sowel — to a second service on another host, with its own database, its own
++reverse proxy entry and its own backup. The engine then holds the equipment and
++another machine holds the reason it exists.
++
++## Goals
++
++1. A plugin may bring **one page** into the Sowel UI, rendered inside the app,
++   under the Administration menu, admin-only, with its own API behind it.
++2. A plugin may serve **anonymous callers** under `/p/<id>/*` — opt-in in the
++   manifest, off until an admin turns it on, rate-limited, and never able to set
++   a cookie on Sowel's origin.
++3. A plugin has a **data directory** that survives updates and is inside the
++   backup.
++4. Nothing above is specific to any plugin. The core learns no domain.
++
++## Non-goals
++
++- Rendering plugin UI from React components. A plugin is built in its own
++  repository against its own dependencies; two Reacts in one page is a class of
++  bug nobody should debug. The contract is a DOM node and a context object.
++- More than one page per plugin. One entry in a menu is what a plugin earns;
++  a plugin that wants tabs draws them inside its own page.
++- Letting a plugin add routes under `/api/`. Everything it serves is under its
++  own prefix, so no plugin can shadow or precede a core route.
++- Hard isolation. A plugin already runs in-process (spec 111 says so plainly);
++  these surfaces do not widen that, and the manifest opt-in plus the admin
++  switch exist so that nothing new is reachable by accident.
++
++## Functional rules
++
++### R1 — The page
++
++1. A manifest may declare `ui: { entry, label, icon? }`. `entry` is a path
++   inside the package, relative, to an **ES module**.
++2. The core lists the declared pages at `GET /api/v1/plugins/pages`, admin-only,
++   reading the **manifest** and not the loaded plugin: a plugin whose
++   integration failed to start still has its page, and a sidebar entry that
++   disappears when a broker is down would be worse than useless.
++3. The module's URL carries the installed **version** (`?v=1.2.0`). ESM caches a
++   module by URL for the life of the document, so without it an admin who
++   updates a plugin and returns to its page runs the previous release's panel
++   against the new API.
++4. The SPA imports the module at `/plugins/<id>/page` and calls
++   `mount(container, ctx)`, then `unmount(container)` when leaving. `ctx` gives
++   the plugin `api()` — the SPA's own authenticated client, pointed at that
++   plugin's tree — plus `locale`, `theme` and `navigate`.
++5. **The plugin never sees a token.** `api()` is the only way out, and the core
++   strips `authorization` from what it hands the plugin (R4).
++6. Assets under `/plugin-ui/<id>/*` are served from the entry's own directory,
++   by extension allowlist, unauthenticated: they are the plugin's own published
++   JavaScript, and what they display sits behind the admin API. A path that
++   leaves that directory is a 404, and so is every request for a plugin that is
++   disabled or declares no page.
++
++### R2 — The anonymous tree
++
++7. A manifest may declare `publicTree: true`. Declaring it makes the door
++   buildable and nothing else: until an admin flips
++   `plugins.<id>.public_enabled`, every call under `/p/<id>/*` answers 404 —
++   the same 404 an undeclared plugin gets, so the setting cannot be probed.
++8. The switch is a core setting, outside `integration.<id>.*`, because that
++   namespace belongs to the plugin and a door a plugin can open for itself is
++   not a door anyone guards. Flipping it is audit-logged
++   (`plugin.public.enable` / `.disable`) and warn-logged.
++8.bis The plugin may **read** its own flag through the scoped settings proxy —
++   and only its own — so its page can say the door is shut instead of leaving
++   the owner to work out why one they declared answers 404. Writing it is
++   refused like any other foreign key.
++9. `/p/<id>/*` is rate-limited to 60 requests per minute per IP (the global
++   limit is 300) and answers `X-Robots-Tag: noindex, nofollow` whatever the
++   plugin says.
++10. A public response may not set a cookie (R5). A plugin that must recognise a
++    returning caller hands out a token and reads it back from `authorization`,
++    which is the one header the public surface passes through.
++
++### R3 — The data directory
++
++11. `deps.dataDir` is `data/plugins/<id>/`, created before the factory runs.
++12. Install, update and uninstall never touch it. An uninstall leaves it: a
++    plugin removed by mistake and reinstalled the same afternoon must not have
++    dropped what it held.
++13. It rides inside the backup, under the same extension whitelist as the rest
++    of `data/`, and the restore puts it back where it was.
++
++### R4 — What a plugin is handed
++
++14. Request headers are an allowlist, not a pass-through: `accept`,
++    `accept-language`, `content-type`, `user-agent`, plus `authorization` on the
++    **public** surface only. On the page API the bearer belongs to the core.
++15. The page API names the caller (`user: { id, username, role }`) so a plugin
++    can journal who acted. The public surface names nobody.
++16. A plugin gets 15 s to answer a page call and 30 s to answer a public one
++    (a public call may legitimately wait on an equipment); past that the core
++    answers 504. A plugin that throws is degraded to `undefined` by spec 111 and
++    the core answers 500 without echoing anything back.
++
++### R5 — What a plugin may answer
++
++17. `{ status, body, contentType, headers }`. `body` is sent as JSON unless it
++    is a string or a Buffer. Response headers are an allowlist
++    (`PLUGIN_RESPONSE_HEADERS`); anything else is dropped with a warn log naming
++    the header, `set-cookie` deliberately included.
++
++## Acceptance criteria
++
++- [x] A plugin declaring `ui` appears in the Administration menu with its icon
++      and label, and its page renders inside the app in both themes.
++- [x] `GET /api/v1/plugins/pages` and `/api/v1/plugins/<id>/page/*` answer 403
++      to a `standard` user, before the plugin is reached.
++- [x] The asset tree refuses `..`, refuses an extension outside the allowlist,
++      and refuses a disabled plugin.
++- [x] `/p/<id>/*` answers 404 when undeclared, 404 when declared and not
++      enabled, and serves once both are true.
++- [x] The caller's bearer token never reaches the plugin; the public surface's
++      `authorization` does.
++- [x] A plugin that never returns yields 504; one that throws yields 500.
++- [x] `set-cookie` from a plugin is dropped.
++- [x] `getDataDir` refuses a traversing id and is never the package directory.
++- [x] `data/plugins/<id>/…` is archived and restored, `.sh` excluded.
++
++## Tests
++
++| File                                    | Covers                                             |
++| --------------------------------------- | -------------------------------------------------- |
++| `src/api/routes/plugin-surface.test.ts` | R1.2, R1.6, R2.7–R2.10, R4, R5 (23 cases)          |
++| `src/plugins/plugin-pages.test.ts`      | R1.1–R1.3 (7 cases)                                |
++| `src/packages/package-manager.test.ts`  | R3.11 (3 cases in `getDataDir`)                    |
++| `src/backup/backup-manager.test.ts`     | R3.13 (2 cases)                                    |
++| `ui/src/pages/PluginPage.test.tsx`      | R1.4, R1.5 and the three failure screens (6 cases) |
++
++## Migration and compatibility
++
++None. Every field is optional, every route is new, `PluginDeps` only grows.
++A plugin built before this spec loads and runs unchanged; a plugin built against
++this spec on an older Sowel simply never has its page requested, which is what
++`sowelVersion` in its manifest is for.
+diff --git a/src/api/routes/plugin-surface.test.ts b/src/api/routes/plugin-surface.test.ts
+new file mode 100644
+index 0000000..ef2646d
+--- /dev/null
++++ b/src/api/routes/plugin-surface.test.ts
+@@ -0,0 +1,378 @@
++/**
++ * Spec 180 — the three surfaces the core lends a plugin.
++ *
++ * What is worth pinning here is not that a call reaches the plugin, but every
++ * place the core stands between the caller and it: the admin gate, the two
++ * opt-ins on the anonymous tree, the header allowlists in both directions, the
++ * timeout, and the path confinement on the asset tree.
++ */
++
++import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
++import { tmpdir } from "node:os";
++import { resolve } from "node:path";
++import Fastify, { type FastifyInstance } from "fastify";
++import { describe, it, expect, afterEach, vi } from "vitest";
++import { createLogger } from "../../core/logger.js";
++import { registerPluginSurfaceRoutes } from "./plugin-surface.js";
++import { publicTreeSettingKey } from "../../shared/constants.js";
++import type { PluginHttpRequest, PluginHttpResponse, UserRole } from "../../shared/types.js";
++
++const logger = createLogger("silent").logger;
++
++interface BuildOpts {
++  role?: UserRole | null;
++  /** What the plugin does with the call it is handed. */
++  handlePage?: (req: PluginHttpRequest) => Promise<PluginHttpResponse>;
++  handlePublic?: (req: PluginHttpRequest) => Promise<PluginHttpResponse>;
++  /** Manifest bits the routes read. */
++  ui?: { entry: string; label: string; icon?: string };
++  publicTree?: boolean;
++  enabled?: boolean;
++  installed?: boolean;
++  publicEnabled?: boolean;
++  pkgDir?: string;
++}
++
++let seen: PluginHttpRequest[] = [];
++let settings: Record<string, string> = {};
++let audit: Array<Record<string, unknown>> = [];
++const tempDirs: string[] = [];
++
++function makePluginDir(): string {
++  const dir = mkdtempSync(resolve(tmpdir(), "sowel-plugin-surface-"));
++  tempDirs.push(dir);
++  mkdirSync(resolve(dir, "ui"), { recursive: true });
++  writeFileSync(resolve(dir, "ui", "panel.js"), "export function mount() {}\n");
++  writeFileSync(resolve(dir, "ui", "panel.sh"), "#!/bin/sh\n");
++  writeFileSync(resolve(dir, "manifest.json"), "{}\n");
++  return dir;
++}
++
++async function buildApp(opts: BuildOpts = {}): Promise<FastifyInstance> {
++  seen = [];
++  audit = [];
++  settings = opts.publicEnabled ? { [publicTreeSettingKey("demo")]: "true" } : {};
++
++  const app = Fastify({ logger: false });
++  const role = opts.role === undefined ? "admin" : opts.role;
++  if (role !== null) {
++    app.addHook("onRequest", async (request) => {
++      request.auth = { userId: "u1", role };
++    });
++  }
++
++  const manifest = {
++    id: "demo",
++    name: "Demo",
++    version: "1.0.0",
++    description: "",
++    icon: "Cpu",
++    repo: "o/r",
++    ...(opts.ui ? { ui: opts.ui } : {}),
++    ...(opts.publicTree ? { publicTree: true } : {}),
++  };
++  const pkg = { manifest, enabled: opts.enabled ?? true, installedAt: "", source: "registry" };
++
++  const plugin = {
++    id: "demo",
++    ...(opts.handlePage
++      ? {
++          handlePageRequest: async (req: PluginHttpRequest) => {
++            seen.push(req);
++            return opts.handlePage!(req);
++          },
++        }
++      : {}),
++    ...(opts.handlePublic
++      ? {
++          handlePublicRequest: async (req: PluginHttpRequest) => {
++            seen.push(req);
++            return opts.handlePublic!(req);
++          },
++        }
++      : {}),
++  };
++
++  registerPluginSurfaceRoutes(app, {
++    pluginLoader: {
++      getPages: () => [
++        { pluginId: "demo", label: "Demo", icon: "Cpu", entryUrl: "/plugin-ui/demo/ui/panel.js" },
++      ],
++    } as never,
++    packageManager: {
++      getById: (id: string) => (id === "demo" && (opts.installed ?? true) ? pkg : undefined),
++      getPackageDir: (id: string) => {
++        if (id !== "demo") throw new Error("Invalid package id");
++        return opts.pkgDir ?? "/nonexistent";
++      },
++    } as never,
++    integrationRegistry: {
++      getById: (id: string) => (id === "demo" ? plugin : undefined),
++    } as never,
++    settingsManager: {
++      get: (key: string) => settings[key],
++      set: (key: string, value: string) => {
++        settings[key] = value;
++      },
++    } as never,
++    auditLogger: { log: (entry: Record<string, unknown>) => audit.push(entry) } as never,
++    userManager: { getById: () => ({ username: "adrien" }) } as never,
++    logger,
++  });
++
++  await app.ready();
++  return app;
++}
++
++afterEach(() => {
++  vi.useRealTimers();
++  for (const dir of tempDirs.splice(0)) rmSync(dir, { recursive: true, force: true });
++});
++
++describe("plugin pages listing", () => {
++  it("is admin-only", async () => {
++    const app = await buildApp({ role: "standard" });
++    const res = await app.inject({ method: "GET", url: "/api/v1/plugins/pages" });
++    expect(res.statusCode).toBe(403);
++  });
++
++  it("returns the declared pages", async () => {
++    const app = await buildApp();
++    const res = await app.inject({ method: "GET", url: "/api/v1/plugins/pages" });
++    expect(res.statusCode).toBe(200);
++    expect(res.json()).toEqual([
++      { pluginId: "demo", label: "Demo", icon: "Cpu", entryUrl: "/plugin-ui/demo/ui/panel.js" },
++    ]);
++  });
++});
++
++describe("the page API", () => {
++  it("refuses a standard user before the plugin is reached", async () => {
++    const app = await buildApp({ role: "standard", handlePage: async () => ({ body: {} }) });
++    const res = await app.inject({ method: "GET", url: "/api/v1/plugins/demo/page/accesses" });
++    expect(res.statusCode).toBe(403);
++    expect(seen).toHaveLength(0);
++  });
++
++  it("404s when the plugin serves no page", async () => {
++    const app = await buildApp();
++    const res = await app.inject({ method: "GET", url: "/api/v1/plugins/demo/page/accesses" });
++    expect(res.statusCode).toBe(404);
++  });
++
++  it("hands over the path, the query, the body and the acting user", async () => {
++    const app = await buildApp({ handlePage: async () => ({ body: { ok: true } }) });
++    const res = await app.inject({
++      method: "POST",
++      url: "/api/v1/plugins/demo/page/accesses?view=active",
++      payload: { label: "Voisin" },
++      headers: { authorization: "Bearer secret-token" },
++    });
++    expect(res.statusCode).toBe(200);
++    expect(res.json()).toEqual({ ok: true });
++    expect(seen[0].path).toBe("/accesses");
++    expect(seen[0].query).toEqual({ view: "active" });
++    expect(seen[0].body).toEqual({ label: "Voisin" });
++    expect(seen[0].user).toEqual({ id: "u1", username: "adrien", role: "admin" });
++  });
++
++  it("never hands the caller's bearer token to the plugin", async () => {
++    const app = await buildApp({ handlePage: async () => ({ body: {} }) });
++    await app.inject({
++      method: "GET",
++      url: "/api/v1/plugins/demo/page/x",
++      headers: { authorization: "Bearer secret-token", "user-agent": "vitest" },
++    });
++    expect(seen[0].headers.authorization).toBeUndefined();
++    expect(seen[0].headers["user-agent"]).toBe("vitest");
++  });
++
++  it("answers 500 when the plugin threw (spec 111 degraded it to undefined)", async () => {
++    const app = await buildApp({
++      handlePage: async () => undefined as unknown as PluginHttpResponse,
++    });
++    const res = await app.inject({ method: "GET", url: "/api/v1/plugins/demo/page/x" });
++    expect(res.statusCode).toBe(500);
++  });
++
++  it("drops a response header outside the allowlist", async () => {
++    const app = await buildApp({
++      handlePage: async () => ({
++        body: {},
++        headers: { "set-cookie": "sid=1", "cache-control": "no-store" },
++      }),
++    });
++    const res = await app.inject({ method: "GET", url: "/api/v1/plugins/demo/page/x" });
++    expect(res.headers["set-cookie"]).toBeUndefined();
++    expect(res.headers["cache-control"]).toBe("no-store");
++  });
++
++  it("answers 504 when the plugin never comes back", async () => {
++    const app = await buildApp({ handlePage: () => new Promise(() => {}) });
++    vi.useFakeTimers();
++    const pending = app.inject({ method: "GET", url: "/api/v1/plugins/demo/page/x" });
++    await vi.advanceTimersByTimeAsync(15_001);
++    const res = await pending;
++    expect(res.statusCode).toBe(504);
++  });
++});
++
++describe("the page's static assets", () => {
++  it("serves a file from the entry's directory", async () => {
++    const app = await buildApp({
++      pkgDir: makePluginDir(),
++      ui: { entry: "ui/panel.js", label: "Demo" },
++    });
++    const res = await app.inject({ method: "GET", url: "/plugin-ui/demo/panel.js" });
++    expect(res.statusCode).toBe(200);
++    expect(res.headers["content-type"]).toContain("text/javascript");
++    expect(res.headers["cache-control"]).toBe("no-store");
++    expect(res.body).toContain("mount");
++  });
++
++  it("refuses an extension outside the allowlist", async () => {
++    const app = await buildApp({
++      pkgDir: makePluginDir(),
++      ui: { entry: "ui/panel.js", label: "Demo" },
++    });
++    const res = await app.inject({ method: "GET", url: "/plugin-ui/demo/panel.sh" });
++    expect(res.statusCode).toBe(404);
++  });
++
++  it("refuses to climb out of the ui directory", async () => {
++    const app = await buildApp({
++      pkgDir: makePluginDir(),
++      ui: { entry: "ui/panel.js", label: "Demo" },
++    });
++    const res = await app.inject({ method: "GET", url: "/plugin-ui/demo/..%2fmanifest.json" });
++    expect(res.statusCode).toBe(404);
++  });
++
++  it("serves nothing for a plugin that declares no page", async () => {
++    const app = await buildApp({ pkgDir: makePluginDir() });
++    const res = await app.inject({ method: "GET", url: "/plugin-ui/demo/panel.js" });
++    expect(res.statusCode).toBe(404);
++  });
++
++  it("serves nothing for a disabled plugin", async () => {
++    const app = await buildApp({
++      pkgDir: makePluginDir(),
++      ui: { entry: "ui/panel.js", label: "Demo" },
++      enabled: false,
++    });
++    const res = await app.inject({ method: "GET", url: "/plugin-ui/demo/panel.js" });
++    expect(res.statusCode).toBe(404);
++  });
++});
++
++describe("the anonymous tree", () => {
++  it("is 404 when the manifest does not declare it", async () => {
++    const app = await buildApp({ handlePublic: async () => ({ body: "hello" }) });
++    const res = await app.inject({ method: "GET", url: "/p/demo/" });
++    expect(res.statusCode).toBe(404);
++    expect(seen).toHaveLength(0);
++  });
++
++  it("is 404 while no admin has opened it", async () => {
++    const app = await buildApp({
++      publicTree: true,
++      handlePublic: async () => ({ body: "hello" }),
++    });
++    const res = await app.inject({ method: "GET", url: "/p/demo/" });
++    expect(res.statusCode).toBe(404);
++    expect(seen).toHaveLength(0);
++  });
++
++  it("serves once declared and opened, with no caller named", async () => {
++    const app = await buildApp({
++      publicTree: true,
++      publicEnabled: true,
++      handlePublic: async () => ({
++        body: "<!doctype html><p>portail</p>",
++        contentType: "text/html; charset=utf-8",
++      }),
++    });
++    const res = await app.inject({
++      method: "GET",
++      url: "/p/demo/?i=4K7M9QT2",
++      headers: { authorization: "Bearer device-token" },
++    });
++    expect(res.statusCode).toBe(200);
++    expect(res.headers["content-type"]).toContain("text/html");
++    expect(res.headers["x-robots-tag"]).toBe("noindex, nofollow");
++    expect(seen[0].path).toBe("/");
++    expect(seen[0].query).toEqual({ i: "4K7M9QT2" });
++    expect(seen[0].user).toBeUndefined();
++    // The only surface where `authorization` is the plugin's own token.
++    expect(seen[0].headers.authorization).toBe("Bearer device-token");
++  });
++
++  it("serves the bare root as well as a sub-path", async () => {
++    const app = await buildApp({
++      publicTree: true,
++      publicEnabled: true,
++      handlePublic: async (req) => ({ body: { path: req.path } }),
++    });
++    const bare = await app.inject({ method: "GET", url: "/p/demo" });
++    expect(bare.json()).toEqual({ path: "/" });
++    const sub = await app.inject({ method: "POST", url: "/p/demo/open", payload: { id: "a" } });
++    expect(sub.json()).toEqual({ path: "/open" });
++  });
++
++  it("is 404 for a plugin that is not installed", async () => {
++    const app = await buildApp({
++      publicTree: true,
++      publicEnabled: true,
++      installed: false,
++      handlePublic: async () => ({ body: "hello" }),
++    });
++    const res = await app.inject({ method: "GET", url: "/p/demo/" });
++    expect(res.statusCode).toBe(404);
++  });
++});
++
++describe("opening the anonymous tree", () => {
++  it("refuses a plugin that declares none", async () => {
++    const app = await buildApp();
++    const res = await app.inject({
++      method: "PUT",
++      url: "/api/v1/plugins/demo/public",
++      payload: { enabled: true },
++    });
++    expect(res.statusCode).toBe(400);
++    expect(settings[publicTreeSettingKey("demo")]).toBeUndefined();
++  });
++
++  it("writes the setting and audits the act", async () => {
++    const app = await buildApp({ publicTree: true });
++    const res = await app.inject({
++      method: "PUT",
++      url: "/api/v1/plugins/demo/public",
++      payload: { enabled: true },
++    });
++    expect(res.statusCode).toBe(200);
++    expect(settings[publicTreeSettingKey("demo")]).toBe("true");
++    expect(audit[0]).toMatchObject({ action: "plugin.public.enable", targetId: "demo" });
++  });
++
++  it("shuts it again", async () => {
++    const app = await buildApp({ publicTree: true, publicEnabled: true });
++    await app.inject({
++      method: "PUT",
++      url: "/api/v1/plugins/demo/public",
++      payload: { enabled: false },
++    });
++    expect(settings[publicTreeSettingKey("demo")]).toBe("false");
++    expect(audit[0]).toMatchObject({ action: "plugin.public.disable" });
++  });
++
++  it("is admin-only", async () => {
++    const app = await buildApp({ publicTree: true, role: "standard" });
++    const res = await app.inject({
++      method: "PUT",
++      url: "/api/v1/plugins/demo/public",
++      payload: { enabled: true },
++    });
++    expect(res.statusCode).toBe(403);
++  });
++});
+diff --git a/src/api/routes/plugin-surface.ts b/src/api/routes/plugin-surface.ts
+new file mode 100644
+index 0000000..d7693f4
+--- /dev/null
++++ b/src/api/routes/plugin-surface.ts
+@@ -0,0 +1,402 @@
++import { createReadStream, existsSync, statSync } from "node:fs";
++import { dirname, extname, resolve, sep } from "node:path";
++import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
++import type { Logger } from "../../core/logger.js";
++import type { SettingsManager } from "../../core/settings-manager.js";
++import type { AuditLogger } from "../../core/audit-logger.js";
++import type { UserManager } from "../../auth/user-manager.js";
++import type { PackageManager } from "../../packages/package-manager.js";
++import type { PluginLoader } from "../../plugins/plugin-loader.js";
++import type { IntegrationRegistry } from "../../integrations/integration-registry.js";
++import type { PluginHttpRequest, PluginHttpResponse } from "../../shared/types.js";
++import { publicTreeSettingKey } from "../../shared/constants.js";
++import { buildActor } from "../audit-context.js";
++
++// ============================================================
++// Spec 180 — the two surfaces a plugin may serve
++//
++//   /api/v1/plugins/:id/page/*   admin-authenticated, for the plugin's own page
++//   /plugin-ui/:id/*             the page's static assets
++//   /p/:id/*                     anonymous, opt-in twice, rate-limited
++//
++// Everything here is plumbing on purpose. The core decides WHO may call and
++// HOW MUCH they may say; what the call means is the plugin's business, and the
++// core never parses it.
++// ============================================================
++
++interface PluginSurfaceDeps {
++  pluginLoader: PluginLoader;
++  packageManager: PackageManager;
++  integrationRegistry: IntegrationRegistry;
++  settingsManager: SettingsManager;
++  auditLogger: AuditLogger;
++  userManager: UserManager;
++  logger: Logger;
++}
++
++/**
++ * Response headers a plugin may set.
++ *
++ * `set-cookie` is deliberately absent. A cookie set here would live on Sowel's
++ * own origin, be sent to every core route by the browser, and outlive the
++ * plugin that set it. A plugin that needs to recognise a returning caller
++ * hands out a token and reads it back from `authorization` — which costs it one
++ * header and costs the core nothing to reason about.
++ */
++export const PLUGIN_RESPONSE_HEADERS: ReadonlySet<string> = new Set([
++  "cache-control",
++  "content-disposition",
++  "content-language",
++  "content-security-policy",
++  "content-type",
++  "etag",
++  "last-modified",
++  "location",
++  "retry-after",
++  "x-robots-tag",
++]);
++
++/**
++ * Request headers a plugin is handed.
++ *
++ * An allowlist rather than a pass-through: the admin surface carries the
++ * caller's bearer token, and a plugin has no business reading a credential the
++ * core already verified. `authorization` reaches the PUBLIC surface only, where
++ * it is the plugin's own token and nothing else exists to carry it.
++ */
++const PAGE_REQUEST_HEADERS = ["accept", "accept-language", "content-type", "user-agent"];
++const PUBLIC_REQUEST_HEADERS = [...PAGE_REQUEST_HEADERS, "authorization"];
++
++/** How long a plugin may take. The public one is longer because a call there
++ *  may legitimately wait on the house (an order dispatched to an equipment and
++ *  its answer), which the admin page never does. */
++const PAGE_TIMEOUT_MS = 15_000;
++const PUBLIC_TIMEOUT_MS = 30_000;
++
++/** Static file types the plugin-ui tree serves. Anything else is a 404: a
++ *  plugin's page needs these and a list that grows on demand is a list someone
++ *  reviews. */
++const ASSET_CONTENT_TYPES: Record<string, string> = {
++  ".css": "text/css; charset=utf-8",
++  ".html": "text/html; charset=utf-8",
++  ".ico": "image/x-icon",
++  ".jpg": "image/jpeg",
++  ".js": "text/javascript; charset=utf-8",
++  ".json": "application/json; charset=utf-8",
++  ".map": "application/json; charset=utf-8",
++  ".mjs": "text/javascript; charset=utf-8",
++  ".png": "image/png",
++  ".svg": "image/svg+xml",
++  ".webmanifest": "application/manifest+json",
++  ".woff2": "font/woff2",
++};
++
++class PluginCallTimeout extends Error {}
++
++async function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
++  let timer: NodeJS.Timeout | undefined;
++  try {
++    return await Promise.race([
++      promise,
++      new Promise<never>((_, reject) => {
++        timer = setTimeout(() => reject(new PluginCallTimeout()), ms);
++      }),
++    ]);
++  } finally {
++    if (timer) clearTimeout(timer);
++  }
++}
++
++function pickHeaders(request: FastifyRequest, allowed: string[]): Record<string, string> {
++  const out: Record<string, string> = {};
++  for (const name of allowed) {
++    const value = request.headers[name];
++    if (typeof value === "string") out[name] = value;
++  }
++  return out;
++}
++
++/** The path under the plugin's own root, always starting with a slash. */
++function subPath(params: Record<string, unknown>): string {
++  const raw = typeof params["*"] === "string" ? params["*"] : "";
++  return `/${raw.replace(/^\/+/, "")}`;
++}
++
++function queryOf(request: FastifyRequest): Record<string, string> {
++  const out: Record<string, string> = {};
++  const query = (request.query ?? {}) as Record<string, unknown>;
++  for (const [key, value] of Object.entries(query)) {
++    if (typeof value === "string") out[key] = value;
++    else if (Array.isArray(value) && typeof value[0] === "string") out[key] = value[0];
++  }
++  return out;
++}
++
++/**
++ * Turn what the plugin answered into an HTTP response.
++ *
++ * `undefined` means the plugin threw: `wrapPluginMethods` (spec 111) already
++ * logged it with the plugin's id and degraded the call, so what is left to do
++ * here is answer 500 without echoing anything of it back to the caller.
++ */
++function sendPluginResponse(
++  reply: FastifyReply,
++  answer: PluginHttpResponse | undefined,
++  logger: Logger,
++  context: { pluginId: string; path: string },
++): FastifyReply {
++  if (!answer) {
++    return reply.code(500).send({ error: "Plugin failed to answer" });
++  }
++
++  const status =
++    typeof answer.status === "number" && answer.status >= 100 && answer.status <= 599
++      ? Math.trunc(answer.status)
++      : 200;
++
++  for (const [name, value] of Object.entries(answer.headers ?? {})) {
++    const lower = name.toLowerCase();
++    if (!PLUGIN_RESPONSE_HEADERS.has(lower)) {
++      logger.warn({ ...context, header: lower }, "Plugin response header refused");
++      continue;
++    }
++    if (typeof value === "string") reply.header(lower, value);
++  }
++
++  if (answer.contentType) reply.header("content-type", answer.contentType);
++
++  const body = answer.body;
++  if (body === undefined || body === null) return reply.code(status).send();
++
++  if (typeof body === "string" || Buffer.isBuffer(body)) {
++    if (!answer.contentType && !reply.getHeader("content-type")) {
++      reply.header("content-type", "text/plain; charset=utf-8");
++    }
++    return reply.code(status).send(body);
++  }
++
++  return reply.code(status).send(body);
++}
++
++export function registerPluginSurfaceRoutes(app: FastifyInstance, deps: PluginSurfaceDeps): void {
++  const {
++    pluginLoader,
++    packageManager,
++    integrationRegistry,
++    settingsManager,
++    auditLogger,
++    userManager,
++    logger: parentLogger,
++  } = deps;
++  const logger = parentLogger.child({ module: "plugin-surface" });
++
++  const adminOnly = async (request: FastifyRequest, reply: FastifyReply): Promise<void> => {
++    if (!request.auth || request.auth.role !== "admin") {
++      await reply.code(403).send({ error: "Admin access required" });
++    }
++  };
++
++  // ── The plugin's own page ────────────────────────────────────────────
++
++  // GET /api/v1/plugins/pages — what the sidebar offers
++  app.get("/api/v1/plugins/pages", { preValidation: adminOnly }, async () =>
++    pluginLoader.getPages(),
++  );
++
++  // ALL /api/v1/plugins/:pluginId/page/* — the page's API, admin only
++  app.route<{ Params: { pluginId: string; "*": string } }>({
++    method: ["GET", "POST", "PUT", "PATCH", "DELETE"],
++    url: "/api/v1/plugins/:pluginId/page/*",
++    preValidation: adminOnly,
++    handler: async (request, reply) => {
++      const { pluginId } = request.params;
++      const plugin = integrationRegistry.getById(pluginId);
++      if (!plugin?.handlePageRequest) {
++        return reply.code(404).send({ error: "Plugin serves no page" });
++      }
++
++      const user = request.auth
++        ? {
++            id: request.auth.userId,
++            username: userManager.getById(request.auth.userId)?.username ?? request.auth.userId,
++            role: request.auth.role,
++          }
++        : undefined;
++
++      const call: PluginHttpRequest = {
++        method: request.method,
++        path: subPath(request.params as unknown as Record<string, unknown>),
++        query: queryOf(request),
++        headers: pickHeaders(request, PAGE_REQUEST_HEADERS),
++        body: request.body ?? null,
++        ip: request.ip,
++        user,
++      };
++
++      try {
++        const answer = await withTimeout(plugin.handlePageRequest(call), PAGE_TIMEOUT_MS);
++        return sendPluginResponse(reply, answer, logger, { pluginId, path: call.path });
++      } catch (err) {
++        if (err instanceof PluginCallTimeout) {
++          logger.error({ pluginId, path: call.path }, "Plugin page call timed out");
++          return reply.code(504).send({ error: "Plugin did not answer in time" });
++        }
++        logger.error({ err, pluginId, path: call.path }, "Plugin page call failed");
++        return reply.code(500).send({ error: "Plugin failed to answer" });
++      }
++    },
++  });
++
++  // GET /plugin-ui/:pluginId/* — the page's static assets.
++  //
++  // Unauthenticated, and that is the right call: these are the plugin's own
++  // JavaScript and stylesheets, the same bytes anyone can read in its public
++  // repository. What they display is behind the admin API above.
++  app.get<{ Params: { pluginId: string; "*": string } }>(
++    "/plugin-ui/:pluginId/*",
++    async (request, reply) => {
++      const { pluginId } = request.params;
++
++      let pkgDir: string;
++      try {
++        pkgDir = packageManager.getPackageDir(pluginId);
++      } catch {
++        return reply.code(404).send({ error: "Not found" });
++      }
++
++      const pkg = packageManager.getById(pluginId);
++      const entry = pkg?.manifest.ui?.entry;
++      if (!pkg?.enabled || !entry) return reply.code(404).send({ error: "Not found" });
++
++      // Only the directory the entry lives in is served. The rest of the
++      // package — its manifest, its `dist/`, whatever a release happens to
++      // ship — is not part of the page.
++      const uiRoot = resolve(pkgDir, dirname(entry.replace(/^\/+/, "")));
++      if (uiRoot !== pkgDir && !uiRoot.startsWith(pkgDir + sep)) {
++        return reply.code(404).send({ error: "Not found" });
++      }
++
++      const rel = (typeof request.params["*"] === "string" ? request.params["*"] : "").replace(
++        /^\/+/,
++        "",
++      );
++      const file = resolve(uiRoot, rel);
++      if (!file.startsWith(uiRoot + sep)) return reply.code(404).send({ error: "Not found" });
++
++      const contentType = ASSET_CONTENT_TYPES[extname(file).toLowerCase()];
++      if (!contentType) return reply.code(404).send({ error: "Not found" });
++      if (!existsSync(file) || !statSync(file).isFile()) {
++        return reply.code(404).send({ error: "Not found" });
++      }
++
++      // No caching: a plugin update rewrites these files in place under the
++      // same URL, and a cached panel from the previous version would call an
++      // API that has moved on.
++      reply.header("cache-control", "no-store");
++      reply.header("content-type", contentType);
++      return reply.send(createReadStream(file));
++    },
++  );
++
++  // ── The anonymous door ───────────────────────────────────────────────
++
++  // PUT /api/v1/plugins/:pluginId/public — open or shut it
++  app.put<{ Params: { pluginId: string }; Body: { enabled: boolean } }>(
++    "/api/v1/plugins/:pluginId/public",
++    {
++      preValidation: adminOnly,
++      schema: {
++        body: {
++          type: "object",
++          required: ["enabled"],
++          properties: { enabled: { type: "boolean" } },
++        },
++      },
++    },
++    async (request, reply) => {
++      const { pluginId } = request.params;
++      const pkg = packageManager.getById(pluginId);
++      if (!pkg) return reply.code(404).send({ error: "Plugin not installed" });
++      if (!pkg.manifest.publicTree) {
++        return reply.code(400).send({ error: "This plugin declares no public tree" });
++      }
++
++      const enabled = request.body.enabled === true;
++      settingsManager.set(publicTreeSettingKey(pluginId), enabled ? "true" : "false");
++      logger.warn(
++        { pluginId, enabled },
++        enabled ? "Plugin public tree opened" : "Plugin public tree closed",
++      );
++      auditLogger.log({
++        ...buildActor(request, userManager),
++        action: enabled ? "plugin.public.enable" : "plugin.public.disable",
++        targetType: "plugin",
++        targetId: pluginId,
++        ip: request.ip,
++      });
++      return { pluginId, enabled };
++    },
++  );
++
++  // ALL /p/:pluginId(/*) — anonymous callers
++  const publicHandler = async (
++    request: FastifyRequest<{ Params: { pluginId: string; "*"?: string } }>,
++    reply: FastifyReply,
++  ): Promise<FastifyReply> => {
++    const { pluginId } = request.params;
++
++    const pkg = packageManager.getById(pluginId);
++    if (!pkg?.enabled || !pkg.manifest.publicTree) {
++      return reply.code(404).send({ error: "Not found" });
++    }
++    if (settingsManager.get(publicTreeSettingKey(pluginId)) !== "true") {
++      return reply.code(404).send({ error: "Not found" });
++    }
++
++    const plugin = integrationRegistry.getById(pluginId);
++    if (!plugin?.handlePublicRequest) return reply.code(404).send({ error: "Not found" });
++
++    const call: PluginHttpRequest = {
++      method: request.method,
++      path: subPath(request.params as unknown as Record<string, unknown>),
++      query: queryOf(request),
++      headers: pickHeaders(request, PUBLIC_REQUEST_HEADERS),
++      body: request.body ?? null,
++      ip: request.ip,
++    };
++
++    // An anonymous page of a home automation server has no business in a
++    // search index, whatever the plugin forgets to say.
++    reply.header("x-robots-tag", "noindex, nofollow");
++
++    try {
++      const answer = await withTimeout(plugin.handlePublicRequest(call), PUBLIC_TIMEOUT_MS);
++      return sendPluginResponse(reply, answer, logger, { pluginId, path: call.path });
++    } catch (err) {
++      if (err instanceof PluginCallTimeout) {
++        logger.error({ pluginId, path: call.path }, "Plugin public call timed out");
++        return reply.code(504).send({ error: "Timeout" });
++      }
++      logger.error({ err, pluginId, path: call.path }, "Plugin public call failed");
++      return reply.code(500).send({ error: "Error" });
++    }
++  };
++
++  // 60 per minute per IP rather than the global 300: this is the one tree an
++  // unauthenticated caller can reach, and the plugin behind it may be doing
++  // real work on every call.
++  const publicRouteOptions = { config: { rateLimit: { max: 60, timeWindow: "1 minute" } } };
++
++  app.route<{ Params: { pluginId: string; "*": string } }>({
++    method: ["GET", "POST", "PUT", "PATCH", "DELETE"],
++    url: "/p/:pluginId/*",
++    ...publicRouteOptions,
++    handler: publicHandler,
++  });
++  app.route<{ Params: { pluginId: string; "*"?: string } }>({
++    method: ["GET", "POST", "PUT", "PATCH", "DELETE"],
++    url: "/p/:pluginId",
++    ...publicRouteOptions,
++    handler: publicHandler,
++  });
++}
+diff --git a/src/api/server.ts b/src/api/server.ts
+index 9f33c47..30c474a 100644
+--- a/src/api/server.ts
++++ b/src/api/server.ts
+@@ -67,6 +67,7 @@ import { registerNotificationPublisherRoutes } from "./routes/notification-publi
+ import { registerPushRoutes } from "./routes/push.js";
+ import { registerDashboardRoutes } from "./routes/dashboard.js";
+ import { registerPluginRoutes } from "./routes/plugins.js";
++import { registerPluginSurfaceRoutes } from "./routes/plugin-surface.js";
+ import { registerSystemRoutes } from "./routes/system.js";
+ import { registerAuditRoutes } from "./routes/audit.js";
+ import type { AuditLogger } from "../core/audit-logger.js";
+@@ -384,6 +385,15 @@ export async function createServer(deps: ServerDeps) {
+     userManager,
+     logger,
+   });
++  registerPluginSurfaceRoutes(app, {
++    pluginLoader,
++    packageManager,
++    integrationRegistry,
++    settingsManager,
++    auditLogger,
++    userManager,
++    logger,
++  });
+   registerAuditRoutes(app, { auditLogger, logger });
+   registerSystemRoutes(app, {
+     versionChecker,
+diff --git a/src/backup/backup-manager.test.ts b/src/backup/backup-manager.test.ts
+index 5637248..0a4b449 100644
+--- a/src/backup/backup-manager.test.ts
++++ b/src/backup/backup-manager.test.ts
+@@ -558,6 +558,42 @@ describe("BackupManager", () => {
+     });
+   });
+ 
++  // ── Spec 180 — what a plugin keeps must come back with the rest ──
++  describe("exportToFile — plugin data (spec 180)", () => {
++    it("archives data/plugins/<id>/ and restores it where it was", async () => {
++      mkdirSync(resolve(tmpDir, "plugins", "guest-access", "journal"), { recursive: true });
++      writeFileSync(resolve(tmpDir, "plugins", "guest-access", "accesses.json"), '[{"id":"a1"}]');
++      writeFileSync(
++        resolve(tmpDir, "plugins", "guest-access", "journal", "2026.json"),
++        '["opened"]',
++      );
++
++      const result = await manager.exportToFile("plugin-data.zip");
++      const archive = new AdmZip(result.path);
++      const names = archive.getEntries().map((e) => e.entryName);
++      expect(names).toContain("data/plugins/guest-access/accesses.json");
++      expect(names).toContain("data/plugins/guest-access/journal/2026.json");
++
++      rmSync(resolve(tmpDir, "plugins"), { recursive: true, force: true });
++      await manager.restoreFromBuffer(archive.toBuffer());
++
++      expect(
++        readFileSync(resolve(tmpDir, "plugins", "guest-access", "accesses.json"), "utf-8"),
++      ).toBe('[{"id":"a1"}]');
++    });
++
++    it("leaves out what the restore would refuse, plugin tree included", async () => {
++      mkdirSync(resolve(tmpDir, "plugins", "guest-access"), { recursive: true });
++      writeFileSync(resolve(tmpDir, "plugins", "guest-access", "accesses.json"), "[]");
++      writeFileSync(resolve(tmpDir, "plugins", "guest-access", "postinstall.sh"), "rm -rf /");
++
++      const result = await manager.exportToFile("plugin-data-filtered.zip");
++      const names = new AdmZip(result.path).getEntries().map((e) => e.entryName);
++      expect(names).toContain("data/plugins/guest-access/accesses.json");
++      expect(names).not.toContain("data/plugins/guest-access/postinstall.sh");
++    });
++  });
++
+   // ── #790 — the restore must not hand this deployment a foreign identity ──
+   //
+   // The #401 guardrail compares the instance id carried in the settings table
+diff --git a/src/backup/backup-manager.ts b/src/backup/backup-manager.ts
+index d6ed25a..987dd8f 100644
+--- a/src/backup/backup-manager.ts
++++ b/src/backup/backup-manager.ts
+@@ -733,6 +733,43 @@ export class BackupManager {
+ // Helpers (module-private)
+ // ============================================================
+ 
++/**
++ * Spec 180 — the plugin data tree, `data/plugins/<id>/…`.
++ *
++ * Walked rather than listed, because a plugin owns the shape of its own
++ * directory. Bounded on both axes: files only (a symlink is not a file, so it
++ * never reaches the archive), the same extension whitelist as everything else
++ * in `data/`, and a depth that stops a plugin's cache of a cache from turning
++ * a backup into a crawl.
++ */
++const PLUGIN_DATA_SUBDIR = "plugins";
++const PLUGIN_DATA_MAX_DEPTH = 4;
++
++function scanPluginDataFiles(dataDir: string, found: { files: string[]; skipped: string[] }): void {
++  const root = resolve(dataDir, PLUGIN_DATA_SUBDIR);
++  if (!existsSync(root)) return;
++
++  const walk = (dir: string, prefix: string, depth: number): void => {
++    if (depth > PLUGIN_DATA_MAX_DEPTH) return;
++    for (const entry of readdirSync(dir, { withFileTypes: true })) {
++      const relative = `${prefix}${entry.name}`;
++      if (entry.isDirectory()) {
++        walk(resolve(dir, entry.name), `${relative}/`, depth + 1);
++        continue;
++      }
++      if (!entry.isFile()) continue;
++      const ext = dataFileExtension(entry.name);
++      if (!ALLOWED_RESTORE_EXTENSIONS.has(ext.toLowerCase())) {
++        found.skipped.push(relative);
++        continue;
++      }
++      found.files.push(relative);
++    }
++  };
++
++  walk(root, `${PLUGIN_DATA_SUBDIR}/`, 1);
++}
++
+ /** Scan data/ directory for files to include in backup (tokens, secrets, etc.) */
+ function scanDataFiles(dataDir: string): { files: string[]; skipped: string[] } {
+   if (!existsSync(dataDir)) return { files: [], skipped: [] };
+@@ -755,6 +792,10 @@ function scanDataFiles(dataDir: string): { files: string[]; skipped: string[] }
+     }
+     files.push(entry.name);
+   }
++  // Spec 180 — a plugin's state lives under `data/plugins/<id>/`, and the
++  // scan above reads the top level only. Without this, a restored instance
++  // came back with every table and none of what the plugins held.
++  scanPluginDataFiles(dataDir, { files, skipped });
+   return { files, skipped };
+ }
+ 
+diff --git a/src/integrations/integration-registry.ts b/src/integrations/integration-registry.ts
+index b8c7f9a..d8d6cc8 100644
+--- a/src/integrations/integration-registry.ts
++++ b/src/integrations/integration-registry.ts
+@@ -5,6 +5,8 @@ import type {
+   IntegrationStatus,
+   IntegrationSettingDef,
+   Device,
++  PluginHttpRequest,
++  PluginHttpResponse,
+ } from "../shared/types.js";
+ 
+ // ============================================================
+@@ -65,6 +67,24 @@ export interface IntegrationPlugin {
+    * Optional — only for OAuth-based integrations.
+    */
+   handleOAuthCallback?(code: string): Promise<void>;
++
++  /**
++   * Spec 180 — serve the plugin's own page (`/api/v1/plugins/<id>/page/*`).
++   *
++   * The core has already authenticated the caller and refused anyone who is
++   * not an admin; `request.user` names them, so a plugin can journal who acted
++   * without ever seeing a token.
++   */
++  handlePageRequest?(request: PluginHttpRequest): Promise<PluginHttpResponse>;
++
++  /**
++   * Spec 180 — serve an anonymous caller (`/p/<id>/*`).
++   *
++   * Nothing authenticated this request. The plugin is the only thing standing
++   * between the internet and whatever it does here: it declares `publicTree`
++   * in its manifest, an admin turns the door on, and the core rate-limits it.
++   */
++  handlePublicRequest?(request: PluginHttpRequest): Promise<PluginHttpResponse>;
+ }
+ 
+ // ============================================================
+diff --git a/src/packages/package-manager.test.ts b/src/packages/package-manager.test.ts
+index 38dd2df..101b922 100644
+--- a/src/packages/package-manager.test.ts
++++ b/src/packages/package-manager.test.ts
+@@ -1247,6 +1247,54 @@ describe("getPackageDir — the package-id boundary", () => {
+   });
+ });
+ 
++/**
++ * Spec 180 — a plugin's own directory is not a place to keep anything: an
++ * update removes it. `getDataDir` is the one that survives, and it is built
++ * from the same untrusted id.
++ */
++describe("getDataDir — where a plugin may keep its state", () => {
++  let dir: string;
++  let cwd: string;
++  let db: ReturnType<typeof createTestDb>;
++  let manager: PackageManager;
++
++  beforeEach(() => {
++    cwd = process.cwd();
++    dir = mkdtempSync(resolve(tmpdir(), "sowel-datadir-"));
++    mkdirSync(resolve(dir, "plugins"), { recursive: true });
++    process.chdir(dir);
++    db = createTestDb();
++    manager = new PackageManager(db, logger);
++  });
++
++  afterEach(() => {
++    db.close();
++    process.chdir(cwd);
++    rmSync(dir, { recursive: true, force: true });
++  });
++
++  it("sits under data/plugins, never under the package's own directory", () => {
++    expect(manager.getDataDir("guest-access")).toBe(
++      resolve(process.cwd(), "data", "plugins", "guest-access"),
++    );
++    expect(manager.getDataDir("guest-access")).not.toBe(manager.getPackageDir("guest-access"));
++  });
++
++  it("refuses the same ids getPackageDir refuses", () => {
++    for (const id of ["..", "../../etc", "/etc/passwd", "a/b", "", "Upper"]) {
++      expect(() => manager.getDataDir(id)).toThrow(/Invalid package id/);
++    }
++  });
++
++  it("creates the directory on demand, and is idempotent", () => {
++    const created = manager.ensureDataDir("guest-access");
++    expect(existsSync(created)).toBe(true);
++    writeFileSync(resolve(created, "accesses.json"), "[]");
++    expect(manager.ensureDataDir("guest-access")).toBe(created);
++    expect(readFileSync(resolve(created, "accesses.json"), "utf-8")).toBe("[]");
++  });
++});
++
+ /**
+  * `repo` reaches the path of an authenticated outbound request to GitHub, so
+  * its shape decides where that request goes.
+diff --git a/src/packages/package-manager.ts b/src/packages/package-manager.ts
+index 67957b6..8f327d0 100644
+--- a/src/packages/package-manager.ts
++++ b/src/packages/package-manager.ts
+@@ -119,6 +119,8 @@ export class PackageManager {
+   private db: Database.Database;
+   private logger: Logger;
+   private pluginsDir: string;
++  /** Root of the writable data tree — `data/` beside `plugins/` (spec 180). */
++  private dataDir: string;
+   private stmts: ReturnType<typeof this.prepareStatements>;
+   private registryCache: RegistryEntry[] | null = null;
+   private registryCacheTime = 0;
+@@ -130,6 +132,7 @@ export class PackageManager {
+     this.db = db;
+     this.logger = logger.child({ module: "package-manager" });
+     this.pluginsDir = resolve(process.cwd(), "plugins");
++    this.dataDir = resolve(process.cwd(), "data");
+     this.stmts = this.prepareStatements();
+     this.sources = new PersonalSourceManager(db, logger);
+   }
+@@ -205,6 +208,39 @@ export class PackageManager {
+     return dir;
+   }
+ 
++  /**
++   * Spec 180 — the directory a package may keep state in, `data/plugins/<id>/`.
++   *
++   * Deliberately NOT under `plugins/<id>/`: `updateFiles` removes that
++   * directory and unpacks the new release in its place, so anything a plugin
++   * wrote beside its own code disappeared at the next version. This one is
++   * created on demand, never removed by install, update or uninstall, and it
++   * rides along with the rest of `data/` in a backup.
++   *
++   * The id is validated exactly as `getPackageDir` validates it, and for the
++   * same reason: it reaches here from a manifest inside a downloaded tarball.
++   */
++  getDataDir(packageId: string): string {
++    if (!PACKAGE_ID_FORMAT.test(packageId)) {
++      throw new Error(`Invalid package id "${packageId}"`);
++    }
++    const root = resolve(this.dataDir, "plugins");
++    const dir = resolve(root, packageId);
++    if (!dir.startsWith(root + sep)) {
++      throw new Error(`Invalid package id "${packageId}"`);
++    }
++    return dir;
++  }
++
++  /** Create the package's data directory if it does not exist yet. */
++  ensureDataDir(packageId: string): string {
++    const dir = this.getDataDir(packageId);
++    if (!existsSync(dir)) {
++      mkdirSync(dir, { recursive: true });
++    }
++    return dir;
++  }
++
+   /** Get all installed packages (raw DB data, no runtime enrichment) */
+   getInstalled(): InstalledPackage[] {
+     const rows = this.stmts.getAll.all() as PackageRow[];
+diff --git a/src/plugins/plugin-loader.test.ts b/src/plugins/plugin-loader.test.ts
+index 6830dd8..0e6e853 100644
+--- a/src/plugins/plugin-loader.test.ts
++++ b/src/plugins/plugin-loader.test.ts
+@@ -68,7 +68,7 @@ function makeIntegrationRegistry(): IntegrationRegistry & { unregisterCalls: str
+   return reg as unknown as IntegrationRegistry & { unregisterCalls: string[] };
+ }
+ 
+-function makeCoreDeps(): Omit<PluginDeps, "pluginDir"> {
++function makeCoreDeps(): Omit<PluginDeps, "pluginDir" | "dataDir"> {
+   return {
+     logger,
+     eventBus: { on: () => () => {}, emit: () => {} } as unknown as PluginDeps["eventBus"],
+diff --git a/src/plugins/plugin-loader.ts b/src/plugins/plugin-loader.ts
+index 4ba2359..cb6cbde 100644
+--- a/src/plugins/plugin-loader.ts
++++ b/src/plugins/plugin-loader.ts
+@@ -6,9 +6,10 @@ import type {
+   IntegrationRegistry,
+   IntegrationPlugin,
+ } from "../integrations/integration-registry.js";
+-import type { PluginManifest, PluginInfo } from "../shared/types.js";
++import type { PluginManifest, PluginInfo, PluginPageInfo } from "../shared/types.js";
+ import type { PluginDeps, PluginFactory } from "../shared/plugin-api.js";
+ import type { PackageManager, InstallOptions } from "../packages/package-manager.js";
++import { publicTreeSettingKey } from "../shared/constants.js";
+ import {
+   makeDeviceManagerProxy,
+   makeEventBusProxy,
+@@ -24,7 +25,7 @@ import {
+ export class PluginLoader {
+   private packageManager: PackageManager;
+   private integrationRegistry: IntegrationRegistry;
+-  private coreDeps: Omit<PluginDeps, "pluginDir">;
++  private coreDeps: Omit<PluginDeps, "pluginDir" | "dataDir">;
+   private logger: Logger;
+   private loadedPlugins: Map<string, IntegrationPlugin> = new Map();
+   private booted = false;
+@@ -36,7 +37,7 @@ export class PluginLoader {
+   constructor(
+     packageManager: PackageManager,
+     integrationRegistry: IntegrationRegistry,
+-    deps: Omit<PluginDeps, "pluginDir">,
++    deps: Omit<PluginDeps, "pluginDir" | "dataDir">,
+     logger: Logger,
+     shadowMode = false,
+   ) {
+@@ -242,10 +243,46 @@ export class PluginLoader {
+         offlineDeviceCount: offlineDevices.length,
+         source: pkg.source,
+         ...(update ? { latestVersion: update } : {}),
++        ...(pkg.manifest.publicTree
++          ? {
++              publicEnabled:
++                this.coreDeps.settingsManager.get(publicTreeSettingKey(pkg.manifest.id)) === "true",
++            }
++          : {}),
+       };
+     });
+   }
+ 
++  /**
++   * Spec 180 — the pages the UI may offer, one per enabled plugin whose
++   * manifest declares `ui`.
++   *
++   * Read from the manifest rather than from the loaded plugin: a plugin that
++   * failed to start still has a page, and a page that vanished because the
++   * integration is misconfigured would send the user back to a sidebar entry
++   * that is no longer there.
++   */
++  getPages(): PluginPageInfo[] {
++    const pages: PluginPageInfo[] = [];
++    for (const pkg of this.packageManager.getInstalledByType("integration")) {
++      const ui = pkg.manifest.ui;
++      if (!pkg.enabled || !ui || typeof ui.entry !== "string" || !ui.entry) continue;
++      const entry = ui.entry.replace(/^\/+/, "");
++      // The version is in the URL because ESM caches a module by URL for the
++      // life of the page: without it, an admin who updates a plugin and comes
++      // back to its page keeps running the previous release's panel against
++      // the new API until they reload the whole SPA.
++      const version = encodeURIComponent(pkg.manifest.version ?? "0");
++      pages.push({
++        pluginId: pkg.manifest.id,
++        label: ui.label || pkg.manifest.name,
++        icon: ui.icon || pkg.manifest.icon,
++        entryUrl: `/plugin-ui/${pkg.manifest.id}/${entry}?v=${version}`,
++      });
++    }
++    return pages;
++  }
++
+   // ============================================================
+   // Internal
+   // ============================================================
+@@ -287,6 +324,9 @@ export class PluginLoader {
+       ),
+       deviceManager: makeDeviceManagerProxy(pluginId, this.coreDeps.deviceManager, pluginLogger),
+       pluginDir: pkgDir,
++      // Spec 180 — created before the factory runs, so a plugin can write to it
++      // in its constructor without checking whether it exists.
++      dataDir: this.packageManager.ensureDataDir(pluginId),
+     };
+ 
+     // Dynamic import of the plugin entry point.
+diff --git a/src/plugins/plugin-pages.test.ts b/src/plugins/plugin-pages.test.ts
+new file mode 100644
+index 0000000..584facb
+--- /dev/null
++++ b/src/plugins/plugin-pages.test.ts
+@@ -0,0 +1,111 @@
++/**
++ * Spec 180 — which plugins offer a page, read from their manifests.
++ *
++ * The list drives a sidebar entry, so what matters is that it never promises
++ * a page that is not there and never hides one that is: a plugin whose
++ * integration failed to start still has its page.
++ */
++
++import { describe, it, expect, vi } from "vitest";
++import { PluginLoader } from "./plugin-loader.js";
++import { createLogger } from "../core/logger.js";
++import type { IntegrationRegistry } from "../integrations/integration-registry.js";
++import type { PackageManager } from "../packages/package-manager.js";
++import type { PluginDeps } from "../shared/plugin-api.js";
++import type { PluginManifest } from "../shared/types.js";
++
++const logger = createLogger("silent").logger;
++
++function makeLoader(
++  packages: Array<{ manifest: Partial<PluginManifest>; enabled: boolean }>,
++): PluginLoader {
++  const packageManager = {
++    ensureDir: vi.fn(),
++    getInstalledByType: vi.fn(() => packages),
++    getById: vi.fn(),
++  } as unknown as PackageManager;
++  const registry = { register: vi.fn(), unregister: vi.fn(), getById: vi.fn() };
++  const coreDeps = {
++    logger,
++    eventBus: { on: () => () => {}, emit: () => {} },
++    settingsManager: { get: () => undefined, set: () => {} },
++    deviceManager: { getAll: () => [] },
++  } as unknown as Omit<PluginDeps, "pluginDir" | "dataDir">;
++  return new PluginLoader(
++    packageManager,
++    registry as unknown as IntegrationRegistry,
++    coreDeps,
++    logger,
++  );
++}
++
++const base = { id: "guest-access", name: "Guest Access", icon: "Cpu", version: "1.0.0" };
++
++describe("PluginLoader.getPages", () => {
++  it("names the page from the manifest, and its URL from the entry", () => {
++    const loader = makeLoader([
++      {
++        manifest: {
++          ...base,
++          ui: { entry: "ui/panel.js", label: "Accès invités", icon: "DoorOpen" },
++        },
++        enabled: true,
++      },
++    ]);
++    expect(loader.getPages()).toEqual([
++      {
++        pluginId: "guest-access",
++        label: "Accès invités",
++        icon: "DoorOpen",
++        entryUrl: "/plugin-ui/guest-access/ui/panel.js?v=1.0.0",
++      },
++    ]);
++  });
++
++  it("falls back to the plugin's own name and icon", () => {
++    const loader = makeLoader([
++      { manifest: { ...base, ui: { entry: "ui/panel.js", label: "" } }, enabled: true },
++    ]);
++    expect(loader.getPages()[0]).toMatchObject({ label: "Guest Access", icon: "Cpu" });
++  });
++
++  it("ignores a plugin that declares no page", () => {
++    const loader = makeLoader([{ manifest: base, enabled: true }]);
++    expect(loader.getPages()).toEqual([]);
++  });
++
++  it("ignores a disabled plugin — the page would 404 on its own assets", () => {
++    const loader = makeLoader([
++      { manifest: { ...base, ui: { entry: "ui/panel.js", label: "X" } }, enabled: false },
++    ]);
++    expect(loader.getPages()).toEqual([]);
++  });
++
++  it("ignores a manifest whose entry is empty or not a string", () => {
++    const loader = makeLoader([
++      { manifest: { ...base, ui: { entry: "", label: "X" } }, enabled: true },
++      {
++        manifest: { ...base, id: "other", ui: { entry: 42 as unknown as string, label: "X" } },
++        enabled: true,
++      },
++    ]);
++    expect(loader.getPages()).toEqual([]);
++  });
++
++  it("normalises a leading slash rather than building a double one", () => {
++    const loader = makeLoader([
++      { manifest: { ...base, ui: { entry: "/ui/panel.js", label: "X" } }, enabled: true },
++    ]);
++    expect(loader.getPages()[0].entryUrl).toBe("/plugin-ui/guest-access/ui/panel.js?v=1.0.0");
++  });
++
++  it("carries the installed version, so an update is not served from the ESM cache", () => {
++    const loader = makeLoader([
++      {
++        manifest: { ...base, version: "1.1.0", ui: { entry: "ui/panel.js", label: "X" } },
++        enabled: true,
++      },
++    ]);
++    expect(loader.getPages()[0].entryUrl).toContain("?v=1.1.0");
++  });
++});
+diff --git a/src/plugins/scoped-deps.integration.test.ts b/src/plugins/scoped-deps.integration.test.ts
+index d822d14..0c3e8dd 100644
+--- a/src/plugins/scoped-deps.integration.test.ts
++++ b/src/plugins/scoped-deps.integration.test.ts
+@@ -70,6 +70,7 @@ describe("scoped-deps integration with canary plugin", () => {
+       settingsManager: makeSettingsManagerProxy(CANARY_ID, settingsManager, logger),
+       deviceManager: makeDeviceManagerProxy(CANARY_ID, deviceManager, logger),
+       pluginDir: "/tmp/canary",
++      dataDir: "/tmp/canary-data",
+     };
+ 
+     const canary = createCanaryPlugin(deps, attempts);
+@@ -117,6 +118,7 @@ describe("scoped-deps integration with canary plugin", () => {
+       settingsManager: makeSettingsManagerProxy(CANARY_ID, settingsManager, logger),
+       deviceManager: makeDeviceManagerProxy(CANARY_ID, deviceManager, logger),
+       pluginDir: "/tmp/canary",
++      dataDir: "/tmp/canary-data",
+     };
+     const canary = createCanaryPlugin(deps, attempts);
+     const wrapped = wrapPluginMethods(canary, CANARY_ID, logger);
+diff --git a/src/plugins/scoped-deps.test.ts b/src/plugins/scoped-deps.test.ts
+index 451c655..a5f8ad2 100644
+--- a/src/plugins/scoped-deps.test.ts
++++ b/src/plugins/scoped-deps.test.ts
+@@ -51,6 +51,25 @@ describe("SettingsManagerProxy", () => {
+     expect(inner.get).toHaveBeenCalledWith(globalKey);
+   });
+ 
++  it("allows a plugin to read whether its own public tree is open (spec 180)", () => {
++    const inner = makeMockSettings({ "plugins.guest-access.public_enabled": "true" });
++    const proxy = makeSettingsManagerProxy("guest-access", inner, logger);
++    expect(proxy.get("plugins.guest-access.public_enabled")).toBe("true");
++  });
++
++  it("does not let it read another plugin's public flag", () => {
++    const inner = makeMockSettings({ "plugins.netatmo.public_enabled": "true" });
++    const proxy = makeSettingsManagerProxy("guest-access", inner, logger);
++    expect(proxy.get("plugins.netatmo.public_enabled")).toBeUndefined();
++  });
++
++  it("does not let it open its own door", () => {
++    const inner = makeMockSettings();
++    const proxy = makeSettingsManagerProxy("guest-access", inner, logger);
++    expect(() => proxy.set("plugins.guest-access.public_enabled", "true")).toThrow(/cannot write/);
++    expect(inner.set).not.toHaveBeenCalled();
++  });
++
+   it("allows write on own prefix", () => {
+     const inner = makeMockSettings();
+     const proxy = makeSettingsManagerProxy("netatmo", inner, logger);
+diff --git a/src/plugins/scoped-deps.ts b/src/plugins/scoped-deps.ts
+index 75ab1c4..0f60cac 100644
+--- a/src/plugins/scoped-deps.ts
++++ b/src/plugins/scoped-deps.ts
+@@ -4,6 +4,7 @@ import type { SettingsManager } from "../core/settings-manager.js";
+ import type { DeviceManager } from "../devices/device-manager.js";
+ import type { IntegrationPlugin } from "../integrations/integration-registry.js";
+ import type { EngineEvent } from "../shared/types.js";
++import { publicTreeSettingKey } from "../shared/constants.js";
+ 
+ // Spec 111 — Plugin soft isolation via scoped Proxy.
+ //
+@@ -53,13 +54,23 @@ export function makeSettingsManagerProxy(
+   const ownPrefix = `integration.${pluginId}.`;
+   const isOwn = (k: string): boolean => k.startsWith(ownPrefix);
+   const isGlobalReadable = (k: string): boolean => GLOBAL_READABLE_KEYS.has(k);
++  /**
++   * Spec 180 — the one core-owned key a plugin may READ about itself: whether
++   * an admin has opened its anonymous tree. A plugin that cannot tell cannot
++   * say so on its own page, and the owner is left to work out why a door they
++   * declared answers 404. Writing it stays refused by the rule above, which is
++   * the whole reason the key does not live in the plugin's own namespace.
++   */
++  const ownPublicFlag = publicTreeSettingKey(pluginId);
+ 
+   return new Proxy(inner, {
+     get(target, prop, receiver) {
+       switch (prop) {
+         case "get":
+           return (key: string): string | undefined => {
+-            if (isOwn(key) || isGlobalReadable(key)) return target.get(key);
++            if (isOwn(key) || isGlobalReadable(key) || key === ownPublicFlag) {
++              return target.get(key);
++            }
+             logger.warn({ pluginId, key }, "Plugin denied read on foreign setting");
+             return undefined;
+           };
+@@ -331,5 +342,22 @@ export function wrapPluginMethods(
+           plugin.handleOAuthCallback.bind(plugin),
+         ) as IntegrationPlugin["handleOAuthCallback"])
+       : undefined,
++    // Spec 180 — the two HTTP surfaces. They degrade rather than rethrow: the
++    // caller is an HTTP route, which turns the missing answer into a 500 with
++    // nothing of the plugin's stack in it. A thrown error reaching the route
++    // would be logged twice and, on the public tree, risk telling an anonymous
++    // caller how the plugin failed.
++    handlePageRequest: plugin.handlePageRequest
++      ? (wrapAsync(
++          "handlePageRequest",
++          plugin.handlePageRequest.bind(plugin),
++        ) as IntegrationPlugin["handlePageRequest"])
++      : undefined,
++    handlePublicRequest: plugin.handlePublicRequest
++      ? (wrapAsync(
++          "handlePublicRequest",
++          plugin.handlePublicRequest.bind(plugin),
++        ) as IntegrationPlugin["handlePublicRequest"])
++      : undefined,
+   };
+ }
+diff --git a/src/shared/constants.ts b/src/shared/constants.ts
+index 4ac8f2e..7865c72 100644
+--- a/src/shared/constants.ts
++++ b/src/shared/constants.ts
+@@ -480,3 +480,17 @@ export function defaultEnergyTimingsFor(type: EquipmentType): { minOnS: number;
+       return { minOnS: 900, minOffS: 300 };
+   }
+ }
++
++// ============================================================
++// Plugin surfaces (spec 180)
++// ============================================================
++
++/**
++ * The setting an admin flips to open a plugin's anonymous tree (`/p/<id>/*`).
++ *
++ * Core-owned, outside `integration.<id>.*`: that namespace belongs to the
++ * plugin, and a door a plugin can open for itself is not a door anyone guards.
++ */
++export function publicTreeSettingKey(pluginId: string): string {
++  return `plugins.${pluginId}.public_enabled`;
++}
+diff --git a/src/shared/plugin-api.ts b/src/shared/plugin-api.ts
+index 4d87ba9..c71c95d 100644
+--- a/src/shared/plugin-api.ts
++++ b/src/shared/plugin-api.ts
+@@ -10,6 +10,17 @@ export interface PluginDeps {
+   settingsManager: SettingsManager;
+   deviceManager: DeviceManager;
+   pluginDir: string; // absolute path to this plugin's directory
++  /**
++   * Spec 180 — absolute path to `data/plugins/<id>/`, created before the
++   * factory runs.
++   *
++   * It exists because `pluginDir` is not a place to keep anything: an update
++   * removes that directory wholesale (`PackageManager.updateFiles`) and writes
++   * the new release in its place. A plugin that stored its state next to its
++   * code lost it at the next version, silently. This directory is never touched
++   * by install, update or uninstall, and it is inside the backup.
++   */
++  dataDir: string;
+ }
+ 
+ export type PluginFactory = (deps: PluginDeps) => IntegrationPlugin;
+diff --git a/src/shared/types.ts b/src/shared/types.ts
+index 19ee6c0..6618042 100644
+--- a/src/shared/types.ts
++++ b/src/shared/types.ts
+@@ -1762,6 +1762,69 @@ export interface PluginManifest {
+   author?: string;
+   sowelVersion?: string;
+   settings?: IntegrationSettingDef[];
++  /** Spec 180 — the plugin brings its own page into the Sowel UI. */
++  ui?: PluginUiDef;
++  /**
++   * Spec 180 — the plugin serves anonymous callers under `/p/<id>/*`.
++   *
++   * Declaring it only makes the door buildable: it stays shut until an admin
++   * turns it on for that plugin, because an anonymous surface appearing because
++   * something was installed is exactly the kind of thing nobody notices.
++   */
++  publicTree?: boolean;
++}
++
++/** Spec 180 — where a plugin's page comes from and how it is named. */
++export interface PluginUiDef {
++  /**
++   * ES module, relative to the plugin directory (e.g. `ui/panel.js`). It
++   * exports `mount(container, ctx)` and, optionally, `unmount()`.
++   */
++  entry: string;
++  /** Sidebar label, in English. `i18n.<lang>.ui` overrides it when present. */
++  label: string;
++  /** Lucide icon name for the sidebar; the plugin's own icon when absent. */
++  icon?: string;
++}
++
++/** Spec 180 — a page the UI can offer, derived from an installed manifest. */
++export interface PluginPageInfo {
++  pluginId: string;
++  label: string;
++  icon: string;
++  /** Absolute URL path the SPA imports the module from. */
++  entryUrl: string;
++}
++
++/**
++ * Spec 180 — one HTTP call handed to a plugin.
++ *
++ * The same shape serves both surfaces: the admin page API, where `user` names
++ * the authenticated caller, and the public tree, where there is no caller to
++ * name. Headers are allowlisted rather than passed through, so a plugin cannot
++ * read a bearer token it was not given.
++ */
++export interface PluginHttpRequest {
++  method: string;
++  /** Path under the plugin's own root, always starting with `/`. */
++  path: string;
++  query: Record<string, string>;
++  headers: Record<string, string>;
++  /** Parsed JSON body, or `null` when the request carried none. */
++  body: unknown;
++  /** Caller's IP, as Fastify resolved it. */
++  ip: string;
++  /** Admin page API only. */
++  user?: { id: string; username: string; role: UserRole };
++}
++
++/** What a plugin answers. `body` is sent as JSON unless `contentType` says otherwise. */
++export interface PluginHttpResponse {
++  status?: number;
++  body?: unknown;
++  contentType?: string;
++  /** Allowlisted by the core — see `PLUGIN_RESPONSE_HEADERS`. */
++  headers?: Record<string, string>;
+ }
+ 
+ /** Raw package data from DB — no runtime info */
+@@ -1783,6 +1846,8 @@ export interface PluginInfo {
+   offlineDeviceCount: number;
+   latestVersion?: string; // set when a newer version is available in registry
+   source: PackageSource; // spec 136 — which path installed it
++  /** Spec 180 — the plugin declares a public tree and an admin has opened it. */
++  publicEnabled?: boolean;
+ }
+ 
+ // ============================================================
+diff --git a/ui/src/App.tsx b/ui/src/App.tsx
+index a7af0f4..fe9af8c 100644
+--- a/ui/src/App.tsx
++++ b/ui/src/App.tsx
+@@ -15,6 +15,7 @@ import { HomePage } from "./pages/HomePage";
+ import { SettingsPage } from "./pages/SettingsPage";
+ import { IntegrationsPage } from "./pages/IntegrationsPage";
+ import { PluginsPage } from "./pages/PluginsPage";
++import { PluginPage } from "./pages/PluginPage";
+ import { ModesPage } from "./pages/ModesPage";
+ import { ModeDetailPage } from "./pages/ModeDetailPage";
+ import { CalendarPage } from "./pages/CalendarPage";
+@@ -75,6 +76,8 @@ export default function App() {
+           <Route path="/settings" element={<SettingsPage />} />
+           <Route path="/integrations" element={<AdminRoute><IntegrationsPage /></AdminRoute>} />
+           <Route path="/plugins" element={<AdminRoute><PluginsPage /></AdminRoute>} />
++          {/* Spec 180 — a page an installed plugin brings with it. */}
++          <Route path="/plugins/:pluginId/page" element={<AdminRoute><PluginPage /></AdminRoute>} />
+           <Route path="/mqtt-publishers" element={<AdminRoute><MqttPublishersPage /></AdminRoute>} />
+           <Route path="/notification-publishers" element={<AdminRoute><NotificationPublishersPage /></AdminRoute>} />
+           <Route path="/logs" element={<AdminRoute><LogsPage /></AdminRoute>} />
+diff --git a/ui/src/api/integrations.ts b/ui/src/api/integrations.ts
+index 007b50a..8d8ab4f 100644
+--- a/ui/src/api/integrations.ts
++++ b/ui/src/api/integrations.ts
+@@ -2,6 +2,7 @@ import type {
+   IntegrationInfo,
+   PluginInfo,
+   PluginManifest,
++  PluginPageInfo,
+   PluginSource,
+ } from "../types";
+ import { fetchJSON, API_BASE, getAccessToken } from "./client";
+@@ -211,3 +212,23 @@ export async function removePluginSource(repo: string): Promise<{ success: boole
+     body: JSON.stringify({ repo }),
+   });
+ }
++
++// ============================================================
++// Plugin pages and public tree (spec 180, admin)
++// ============================================================
++
++/** The pages installed plugins bring into the UI. */
++export async function getPluginPages(): Promise<PluginPageInfo[]> {
++  return fetchJSON<PluginPageInfo[]>(`${API_BASE}/plugins/pages`);
++}
++
++/** Open or shut a plugin's anonymous tree (`/p/<id>/*`). */
++export async function setPluginPublicTree(
++  id: string,
++  enabled: boolean,
++): Promise<{ pluginId: string; enabled: boolean }> {
++  return fetchJSON(`${API_BASE}/plugins/${id}/public`, {
++    method: "PUT",
++    body: JSON.stringify({ enabled }),
++  });
++}
+diff --git a/ui/src/components/layout/Sidebar.tsx b/ui/src/components/layout/Sidebar.tsx
+index 1220603..479ce95 100644
+--- a/ui/src/components/layout/Sidebar.tsx
++++ b/ui/src/components/layout/Sidebar.tsx
+@@ -26,6 +26,8 @@ import { useAuth } from "../../store/useAuth";
+ import { useUpdateAvailable } from "../../hooks/useUpdateAvailable";
+ import { useEnergy } from "../../store/useEnergy";
+ import { usePluginUpdates } from "./usePluginUpdates";
++import { usePluginPages } from "./usePluginPages";
++import * as LucideIcons from "lucide-react";
+ import { ADMIN_NAV_ITEMS } from "./admin-nav-items";
+ 
+ type SidebarSection = "maison" | "modes" | "analyse" | "energy" | "admin";
+@@ -54,6 +56,8 @@ export function Sidebar() {
+   const hasProduction = useEnergy((s) => s.hasProduction);
+   const checkEnergyAvailability = useEnergy((s) => s.checkAvailability);
+   const pluginUpdateCount = usePluginUpdates(isAdmin ?? false);
++  // Spec 180 — pages the installed plugins bring with them.
++  const pluginPages = usePluginPages(isAdmin ?? false);
+ 
+   // Auto-collapse: only one section expanded at a time
+   const [expandedSection, setExpandedSection] = useState<SidebarSection | null>(
+@@ -279,6 +283,20 @@ export function Sidebar() {
+                       />
+                     );
+                   })}
++                  {pluginPages.map((page) => {
++                    const PageIcon =
++                      (LucideIcons as unknown as Record<string, LucideIcons.LucideIcon>)[
++                        page.icon
++                      ] ?? LucideIcons.Puzzle;
++                    return (
++                      <SidebarItem
++                        key={page.pluginId}
++                        to={`/plugins/${page.pluginId}/page`}
++                        label={page.label}
++                        icon={<PageIcon size={ICON_SIZE} strokeWidth={1.5} />}
++                      />
++                    );
++                  })}
+                 </nav>
+               )}
+             </>
+diff --git a/ui/src/components/layout/usePluginPages.ts b/ui/src/components/layout/usePluginPages.ts
+new file mode 100644
+index 0000000..c82dace
+--- /dev/null
++++ b/ui/src/components/layout/usePluginPages.ts
+@@ -0,0 +1,39 @@
++import { useEffect } from "react";
++import { create } from "zustand";
++import { getPluginPages } from "../../api";
++import type { PluginPageInfo } from "../../types";
++
++interface PluginPagesState {
++  pages: PluginPageInfo[];
++  refresh: () => void;
++}
++
++const usePluginPagesStore = create<PluginPagesState>((set) => ({
++  pages: [],
++  refresh: () => {
++    getPluginPages()
++      .then((pages) => set({ pages }))
++      .catch(() => {
++        // A sidebar that cannot list plugin pages shows none, which is the
++        // same thing it showed before any plugin brought one.
++        set({ pages: [] });
++      });
++  },
++}));
++
++/** Spec 180 — the pages installed plugins add to the Administration menu. */
++export function usePluginPages(isAdmin: boolean): PluginPageInfo[] {
++  const pages = usePluginPagesStore((s) => s.pages);
++  const refresh = usePluginPagesStore((s) => s.refresh);
++
++  useEffect(() => {
++    if (isAdmin) refresh();
++  }, [isAdmin, refresh]);
++
++  return pages;
++}
++
++/** Call after an install, update, uninstall, enable or disable. */
++export function refreshPluginPages(): void {
++  usePluginPagesStore.getState().refresh();
++}
+diff --git a/ui/src/components/plugins/PluginDetailSheet.tsx b/ui/src/components/plugins/PluginDetailSheet.tsx
+index 7d798a7..c7e07cd 100644
+--- a/ui/src/components/plugins/PluginDetailSheet.tsx
++++ b/ui/src/components/plugins/PluginDetailSheet.tsx
+@@ -1,6 +1,6 @@
+ import { useEffect, useRef, type ReactNode } from "react";
+ import { createPortal } from "react-dom";
+-import { X, Loader2, ArrowUpCircle, Power, Trash2 } from "lucide-react";
++import { X, Loader2, ArrowUpCircle, Globe, Power, Trash2 } from "lucide-react";
+ import { useTranslation } from "react-i18next";
+ import { BottomSheet } from "../dashboard/BottomSheet";
+ import { useIsMobile } from "../../hooks/useIsMobile";
+@@ -40,8 +40,14 @@ export interface PluginDetailSheetProps {
+    *  without this the refusal would have nowhere to show while the sheet is open. */
+   actionError: string | null;
+   confirmUninstall: boolean;
++  /** Spec 180 — the manifest declares an anonymous tree under /p/<id>/. */
++  publicTree?: boolean;
++  /** Spec 180 — whether an admin has opened it. */
++  publicEnabled?: boolean;
++  pluginId?: string;
+   onUpdate: () => void;
+   onToggle: () => void;
++  onTogglePublic?: () => void;
+   onUninstall: () => void;
+ }
+ 
+@@ -176,8 +182,12 @@ function DetailBody({
+   actionLoading,
+   actionError,
+   confirmUninstall,
++  publicTree,
++  publicEnabled,
++  pluginId,
+   onUpdate,
+   onToggle,
++  onTogglePublic,
+   onUninstall,
+ }: PluginDetailSheetProps) {
+   const { t } = useTranslation();
+@@ -233,6 +243,40 @@ function DetailBody({
+         </p>
+       )}
+ 
++      {/* Spec 180 — the anonymous door. Its own block, above the ordinary
++          actions: opening it is not the same kind of act as enabling a plugin,
++          and the sentence under it is the whole point of showing it here. */}
++      {publicTree && (
++        <div className="border border-border-light rounded-[8px] p-3 space-y-2">
++          <div className="flex items-center justify-between gap-3">
++            <span className="inline-flex items-center gap-2 text-[13px] text-text">
++              <Globe size={15} strokeWidth={1.5} />
++              {t("plugins.publicTree")}
++            </span>
++            <button
++              onClick={onTogglePublic}
++              disabled={busy}
++              className={`min-h-[32px] px-3 text-[12px] font-medium rounded-[6px] border transition-colors cursor-pointer disabled:opacity-50 ${
++                publicEnabled
++                  ? "text-white bg-primary border-primary"
++                  : "text-text-secondary border-border hover:bg-border-light"
++              }`}
++            >
++              {actionLoading === "public" ? (
++                <Loader2 size={13} className="animate-spin" />
++              ) : publicEnabled ? (
++                t("plugins.publicTreeOn")
++              ) : (
++                t("plugins.publicTreeOff")
++              )}
++            </button>
++          </div>
++          <p className="text-[12px] text-text-tertiary">
++            {t("plugins.publicTreeHelp", { pluginId: pluginId ?? "" })}
++          </p>
++        </div>
++      )}
++
+       <div className="flex flex-col gap-2">
+         {latestVersion && (
+           <button
+diff --git a/ui/src/i18n/locales/en.json b/ui/src/i18n/locales/en.json
+index 90c0d73..13e58df 100644
+--- a/ui/src/i18n/locales/en.json
++++ b/ui/src/i18n/locales/en.json
+@@ -1598,5 +1598,13 @@
+   "dashboard.timed.pick_one": "timed · {{count}} min",
+   "dashboard.timed.pick_other": "timed · {{count}} min",
+   "dashboard.timed.unavailable": "No timed command",
+-  "equipments.timed.configTitle": "Timed command settings"
++  "equipments.timed.configTitle": "Timed command settings",
++  "pluginPage.loading": "Loading the plugin's page…",
++  "pluginPage.unknown": "No installed plugin named \"{{pluginId}}\" offers a page.",
++  "pluginPage.failed": "{{label}} could not display its page.",
++  "plugins.publicTree": "Public access",
++  "plugins.publicTreeHelp": "This plugin serves pages to anonymous visitors under /p/{{pluginId}}/. Turn it on only if you mean to.",
++  "plugins.publicTreeOn": "Open",
++  "plugins.publicTreeOff": "Closed",
++  "plugins.openPage": "Open its page"
+ }
+diff --git a/ui/src/i18n/locales/fr.json b/ui/src/i18n/locales/fr.json
+index a7a2ff7..615b9c4 100644
+--- a/ui/src/i18n/locales/fr.json
++++ b/ui/src/i18n/locales/fr.json
+@@ -1598,5 +1598,13 @@
+   "dashboard.timed.pick_one": "temporisé · {{count}} min",
+   "dashboard.timed.pick_other": "temporisé · {{count}} min",
+   "dashboard.timed.unavailable": "Commande non configurée",
+-  "equipments.timed.configTitle": "Commande temporisée : configuration"
++  "equipments.timed.configTitle": "Commande temporisée : configuration",
++  "pluginPage.loading": "Chargement de la page du plugin…",
++  "pluginPage.unknown": "Aucun plugin installé nommé « {{pluginId}} » ne propose de page.",
++  "pluginPage.failed": "{{label}} n'a pas pu afficher sa page.",
++  "plugins.publicTree": "Accès public",
++  "plugins.publicTreeHelp": "Ce plugin sert des pages à des visiteurs non authentifiés sous /p/{{pluginId}}/. Ne l'ouvrez que si c'est voulu.",
++  "plugins.publicTreeOn": "Ouvert",
++  "plugins.publicTreeOff": "Fermé",
++  "plugins.openPage": "Ouvrir sa page"
+ }
+diff --git a/ui/src/pages/PluginPage.test.tsx b/ui/src/pages/PluginPage.test.tsx
+new file mode 100644
+index 0000000..c6fbeba
+--- /dev/null
++++ b/ui/src/pages/PluginPage.test.tsx
+@@ -0,0 +1,114 @@
++import { describe, it, expect, vi, beforeEach } from "vitest";
++import { MemoryRouter, Route, Routes } from "react-router-dom";
++import { render, screen, waitFor } from "../test-utils";
++import { PluginPage } from "./PluginPage";
++import * as api from "../api";
++import * as loader from "./pluginModuleLoader";
++import type { PluginPageContext } from "./PluginPage";
++
++vi.mock("../api", async (orig) => ({
++  ...(await orig<typeof import("../api")>()),
++  getPluginPages: vi.fn(),
++}));
++vi.mock("./pluginModuleLoader", () => ({ loadPluginModule: vi.fn() }));
++
++/**
++ * Spec 180 — the page hosts code Sowel did not build, so what is pinned here
++ * is what happens when that code is absent, wrong or broken: the SPA says so
++ * and stays navigable.
++ */
++
++const page = {
++  pluginId: "guest-access",
++  label: "Accès invités",
++  icon: "DoorOpen",
++  entryUrl: "/plugin-ui/guest-access/ui/panel.js?v=1.0.0",
++};
++
++function renderPage(): void {
++  render(
++    <MemoryRouter initialEntries={["/plugins/guest-access/page"]}>
++      <Routes>
++        <Route path="/plugins/:pluginId/page" element={<PluginPage />} />
++      </Routes>
++    </MemoryRouter>,
++  );
++}
++
++beforeEach(() => {
++  vi.mocked(api.getPluginPages).mockResolvedValue([page]);
++});
++
++describe("PluginPage", () => {
++  it("imports the declared entry and mounts it in the page", async () => {
++    const mount = vi.fn();
++    vi.mocked(loader.loadPluginModule).mockResolvedValue({ mount });
++    renderPage();
++
++    await waitFor(() => expect(mount).toHaveBeenCalled());
++    expect(vi.mocked(loader.loadPluginModule)).toHaveBeenCalledWith(page.entryUrl);
++    const [container] = mount.mock.calls[0] as [HTMLElement, PluginPageContext];
++    expect(container).toBeInstanceOf(HTMLElement);
++  });
++
++  it("hands the plugin an api() bound to its own tree, and refuses a stray path", async () => {
++    const mount = vi.fn();
++    vi.mocked(loader.loadPluginModule).mockResolvedValue({ mount });
++    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
++      new Response(JSON.stringify({ ok: true }), {
++        status: 200,
++        headers: { "content-type": "application/json" },
++      }),
++    );
++    renderPage();
++    await waitFor(() => expect(mount).toHaveBeenCalled());
++
++    const ctx = (mount.mock.calls[0] as [HTMLElement, PluginPageContext])[1];
++    await ctx.api("/accesses");
++    expect(fetchMock.mock.calls[0][0]).toBe("/api/v1/plugins/guest-access/page/accesses");
++    await expect(ctx.api("accesses")).rejects.toThrow(/must start/);
++    fetchMock.mockRestore();
++  });
++
++  it("says so when no installed plugin offers that page", async () => {
++    vi.mocked(api.getPluginPages).mockResolvedValue([]);
++    renderPage();
++    expect(await screen.findByText(/guest-access/)).toBeTruthy();
++    expect(vi.mocked(loader.loadPluginModule)).not.toHaveBeenCalled();
++  });
++
++  it("says so when the module exports no mount()", async () => {
++    vi.mocked(loader.loadPluginModule).mockResolvedValue({});
++    renderPage();
++    expect(await screen.findByText(/Accès invités/)).toBeTruthy();
++    expect(await screen.findByText("mount()")).toBeTruthy();
++  });
++
++  it("says so when the module fails to load, and names the reason", async () => {
++    vi.mocked(loader.loadPluginModule).mockRejectedValue(new Error("404 Not Found"));
++    renderPage();
++    expect(await screen.findByText("404 Not Found")).toBeTruthy();
++  });
++
++  it("calls unmount() and empties the container when leaving", async () => {
++    const unmount = vi.fn();
++    const mount = vi.fn((container: HTMLElement) => {
++      container.appendChild(document.createElement("p"));
++    });
++    vi.mocked(loader.loadPluginModule).mockResolvedValue({ mount, unmount });
++    const { unmount: unmountTree } = render(
++      <MemoryRouter initialEntries={["/plugins/guest-access/page"]}>
++        <Routes>
++          <Route path="/plugins/:pluginId/page" element={<PluginPage />} />
++        </Routes>
++      </MemoryRouter>,
++    );
++    await waitFor(() => expect(mount).toHaveBeenCalled());
++    const container = mount.mock.calls[0][0];
++    expect(container.childElementCount).toBe(1);
++
++    unmountTree();
++    expect(unmount).toHaveBeenCalledWith(container);
++    expect(container.childElementCount).toBe(0);
++  });
++});
+diff --git a/ui/src/pages/PluginPage.tsx b/ui/src/pages/PluginPage.tsx
+new file mode 100644
+index 0000000..a6225e3
+--- /dev/null
++++ b/ui/src/pages/PluginPage.tsx
+@@ -0,0 +1,145 @@
++/**
++ * Spec 180 — the page an installed plugin brings into the UI.
++ *
++ * The plugin ships an ES module; this route imports it and hands it a DOM node
++ * plus a context. Deliberately NOT a React component from the plugin: a plugin
++ * is built in its own repository, against its own dependencies, and a second
++ * React in the page is a class of bug nobody should have to debug. Plain DOM
++ * is a contract both sides can keep across versions.
++ *
++ * What the plugin gets is `api()`, which is the SPA's own authenticated client
++ * pointed at `/api/v1/plugins/<id>/page/*` — so the plugin never sees a token
++ * and never has to think about the refresh dance.
++ */
++
++import { useCallback, useEffect, useRef, useState } from "react";
++import { useNavigate, useParams } from "react-router-dom";
++import { useTranslation } from "react-i18next";
++import { AlertTriangle, Loader2 } from "lucide-react";
++import { getPluginPages } from "../api";
++import { fetchJSON, API_BASE } from "../api/client";
++import { loadPluginModule } from "./pluginModuleLoader";
++
++interface PluginPageModule {
++  mount?: (container: HTMLElement, ctx: PluginPageContext) => void | Promise<void>;
++  unmount?: (container: HTMLElement) => void;
++}
++
++export interface PluginPageContext {
++  pluginId: string;
++  /** Call the plugin's own API. `path` starts with a slash. */
++  api: <T>(path: string, init?: { method?: string; body?: unknown }) => Promise<T>;
++  /** UI language, e.g. "fr". */
++  locale: string;
++  /** "dark" while the dark theme is on. */
++  theme: "light" | "dark";
++  /** Navigate inside Sowel — a plugin page may link to an equipment. */
++  navigate: (to: string) => void;
++}
++
++type PageState = "loading" | "ready" | "unknown" | "failed";
++
++export function PluginPage(): React.ReactElement {
++  const { pluginId = "" } = useParams<{ pluginId: string }>();
++  const { t, i18n } = useTranslation();
++  const navigate = useNavigate();
++  const containerRef = useRef<HTMLDivElement>(null);
++  const [state, setState] = useState<PageState>("loading");
++  const [label, setLabel] = useState("");
++  const [detail, setDetail] = useState("");
++
++  const api = useCallback(
++    async <T,>(path: string, init?: { method?: string; body?: unknown }): Promise<T> => {
++      if (!path.startsWith("/")) throw new Error("Plugin API path must start with '/'");
++      return fetchJSON<T>(`${API_BASE}/plugins/${pluginId}/page${path}`, {
++        method: init?.method ?? "GET",
++        ...(init?.body === undefined ? {} : { body: JSON.stringify(init.body) }),
++      });
++    },
++    [pluginId],
++  );
++
++  useEffect(() => {
++    let cancelled = false;
++    let module: PluginPageModule | null = null;
++    const container = containerRef.current;
++
++    setState("loading");
++    setDetail("");
++
++    void (async () => {
++      try {
++        const pages = await getPluginPages();
++        const page = pages.find((p) => p.pluginId === pluginId);
++        if (cancelled) return;
++        if (!page) {
++          setState("unknown");
++          return;
++        }
++        setLabel(page.label);
++
++        module = (await loadPluginModule(page.entryUrl)) as PluginPageModule;
++        if (cancelled || !container) return;
++        if (typeof module.mount !== "function") {
++          setDetail("mount()");
++          setState("failed");
++          return;
++        }
++
++        await module.mount(container, {
++          pluginId,
++          api,
++          locale: i18n.language,
++          theme: document.documentElement.classList.contains("dark") ? "dark" : "light",
++          navigate: (to: string) => navigate(to),
++        });
++        if (!cancelled) setState("ready");
++      } catch (err) {
++        if (cancelled) return;
++        setDetail(err instanceof Error ? err.message : String(err));
++        setState("failed");
++      }
++    })();
++
++    return () => {
++      cancelled = true;
++      try {
++        if (container) module?.unmount?.(container);
++      } catch {
++        // A plugin that throws on the way out must not break navigation:
++        // the container is dropped with the route either way.
++      }
++      if (container) container.replaceChildren();
++    };
++  }, [pluginId, api, i18n.language, navigate]);
++
++  return (
++    <div className="p-4 sm:p-6">
++      {state === "loading" && (
++        <div className="flex items-center gap-2 text-text-secondary">
++          <Loader2 size={16} strokeWidth={1.5} className="animate-spin" />
++          <span>{t("pluginPage.loading")}</span>
++        </div>
++      )}
++
++      {state === "unknown" && (
++        <div className="flex items-start gap-2 text-text-secondary">
++          <AlertTriangle size={16} strokeWidth={1.5} className="text-warning mt-0.5" />
++          <span>{t("pluginPage.unknown", { pluginId })}</span>
++        </div>
++      )}
++
++      {state === "failed" && (
++        <div className="flex items-start gap-2 text-text-secondary">
++          <AlertTriangle size={16} strokeWidth={1.5} className="text-error mt-0.5" />
++          <div>
++            <p>{t("pluginPage.failed", { label: label || pluginId })}</p>
++            {detail && <p className="text-xs text-text-tertiary mt-1 font-mono">{detail}</p>}
++          </div>
++        </div>
++      )}
++
++      <div ref={containerRef} hidden={state !== "ready"} data-testid="plugin-page-root" />
++    </div>
++  );
++}
+diff --git a/ui/src/pages/PluginsPage.tsx b/ui/src/pages/PluginsPage.tsx
+index a3f91b3..473c5de 100644
+--- a/ui/src/pages/PluginsPage.tsx
++++ b/ui/src/pages/PluginsPage.tsx
+@@ -17,6 +17,7 @@ import {
+   X,
+ } from "lucide-react";
+ import { refreshPluginUpdateCount } from "../components/layout/usePluginUpdates";
++import { refreshPluginPages } from "../components/layout/usePluginPages";
+ import { PluginDetailSheet } from "../components/plugins/PluginDetailSheet";
+ import { UpdateAllBanner } from "../components/plugins/UpdateAllBanner";
+ import {
+@@ -34,6 +35,7 @@ import {
+   enablePlugin,
+   disablePlugin,
+   updatePlugin,
++  setPluginPublicTree,
+   getPluginSources,
+   addPluginSource,
+   removePluginSource,
+@@ -86,6 +88,9 @@ export function PluginsPage() {
+       setStore(storeData);
+       setSources(sourcesData);
+       refreshPluginUpdateCount();
++      // Spec 180 — an install, an update or a disable changes which plugins
++      // offer a page, and the sidebar reads that list once.
++      refreshPluginPages();
+     } catch {
+       // ignore
+     } finally {
+@@ -518,6 +523,20 @@ function PluginRow({
+     }
+   };
+ 
++  // Spec 180 — opening or shutting the plugin's anonymous tree.
++  const handleTogglePublic = async () => {
++    setActionLoading("public");
++    setActionError(null);
++    try {
++      await setPluginPublicTree(plugin.manifest.id, !plugin.publicEnabled);
++      onRefresh();
++    } catch (err) {
++      setActionError(err instanceof Error ? err.message : t("plugins.actionFailed"));
++    } finally {
++      setActionLoading(null);
++    }
++  };
++
+   const handleUninstall = async (e?: React.MouseEvent) => {
+     e?.stopPropagation();
+     if (!confirmUninstall) {
+@@ -668,8 +687,12 @@ function PluginRow({
+         actionLoading={actionLoading}
+         actionError={actionError}
+         confirmUninstall={confirmUninstall}
++        pluginId={plugin.manifest.id}
++        publicTree={plugin.manifest.publicTree}
++        publicEnabled={plugin.publicEnabled}
+         onUpdate={() => handleUpdate()}
+         onToggle={() => void handleToggle()}
++        onTogglePublic={() => void handleTogglePublic()}
+         onUninstall={() => void handleUninstall()}
+       />
+ 
+diff --git a/ui/src/pages/pluginModuleLoader.ts b/ui/src/pages/pluginModuleLoader.ts
+new file mode 100644
+index 0000000..36e5430
+--- /dev/null
++++ b/ui/src/pages/pluginModuleLoader.ts
+@@ -0,0 +1,11 @@
++/**
++ * Spec 180 — the one place the SPA imports code it did not build.
++ *
++ * A seam rather than an inline `import()`: the URL is a runtime value, so the
++ * call cannot be mocked where it stands, and the page's own behaviour (what it
++ * shows while loading, what it shows when the module is broken) deserves tests
++ * that do not need a real plugin on disk.
++ */
++export async function loadPluginModule(entryUrl: string): Promise<unknown> {
++  return import(/* @vite-ignore */ entryUrl);
++}
+diff --git a/ui/src/types.ts b/ui/src/types.ts
+index ff5b194..612973b 100644
+--- a/ui/src/types.ts
++++ b/ui/src/types.ts
+@@ -1390,6 +1390,10 @@ export interface PluginManifest {
+   i18n?: Record<string, { name: string; description: string }>;
+   /** Free-form registry tags — feed the search index (spec 137). */
+   tags?: string[];
++  /** Spec 180 — the plugin brings its own page into the UI. */
++  ui?: { entry: string; label: string; icon?: string };
++  /** Spec 180 — the plugin can serve anonymous callers, once an admin allows it. */
++  publicTree?: boolean;
+ }
+ 
+ export interface PluginInfo {
+@@ -1401,6 +1405,17 @@ export interface PluginInfo {
+   offlineDeviceCount: number;
+   latestVersion?: string;
+   source?: PackageSource;
++  /** Spec 180 — set only when the manifest declares a public tree. */
++  publicEnabled?: boolean;
++}
++
++/** Spec 180 — a page an installed plugin offers, as the sidebar lists it. */
++export interface PluginPageInfo {
++  pluginId: string;
++  label: string;
++  icon: string;
++  /** Absolute path the SPA imports the page module from. */
++  entryUrl: string;
+ }
+ 
+ // ============================================================
+-- 
+2.43.0
+
