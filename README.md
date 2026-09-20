@@ -1,81 +1,154 @@
 # Sowel Plugin — Accès invités
 
-Fait remonter dans Sowel les demandes d'ouverture du portail émises par les clients du gîte et de
-la lodge depuis **guestFlow**. Ce plugin ne touche jamais au portail : il expose un device, et
-c'est la recette [`sowel-recipe-guest-gate`](https://github.com/adn-dev-adrien/sowel-recipe-guest-gate)
-qui décide et actionne.
+L'accès au portail des clients du gîte et de la lodge, **tenu par la maison**. Les accès, leurs
+codes, leurs horaires et leur journal vivent ici ; la page de gestion est une page de Sowel, la page
+des clients est servie par Sowel, et **guestFlow n'est qu'une source de séjours** — facultative.
 
-## Pourquoi c'est la maison qui va chercher
+La recette [`sowel-recipe-guest-gate`](https://github.com/adn-dev-adrien/sowel-recipe-guest-gate)
+reste ce qui décide et actionne : ce plugin ne touche toujours pas au portail.
 
-guestFlow est la machine exposée sur Internet. Elle détient les séjours, les codes et les fenêtres
-de validité — et **aucun identifiant sur cette maison**. Elle n'ouvre aucune connexion vers elle.
+## Ce qui a changé, et pourquoi
 
-C'est donc ce plugin qui va demander : une requête HTTP sortante tenue ouverte ~25 s, à laquelle
-guestFlow répond à l'instant où un client appuie sur son bouton. Une compromission de l'application
-de réservation ne peut donc commander **rien** ici.
+Jusqu'à la v0.3, guestFlow détenait les accès et cette maison allait chercher les demandes en
+long-poll. C'était la bonne réponse à une vraie question — guestFlow est la machine exposée sur
+Internet, et un jeton d'API Sowel actionne *tous* les équipements de la maison, sans portée possible
+— mais elle mettait le cerveau du côté du logiciel de réservation.
 
-Un jeton d'API Sowel n'aurait pas permis ça : il hérite du rôle de son créateur, et un rôle
-`standard` actionne *tous* les équipements de la maison. Il n'existe aucune portée par équipement.
+La v1 retourne la question plutôt que de la contourner : **c'est la maison qui décide, et personne ne
+détient de jeton.** Le téléphone du client parle à l'arbre public de Sowel (spec 180 du cœur), ce
+plugin applique les règles, la recette tient la gâchette. guestFlow, lui, n'ouvre aucune connexion
+vers ici et n'a plus rien à décider.
 
-## Ce que le device expose
+Conséquence recherchée : **tout continue de fonctionner sans guestFlow.** Arrêtez-le, changez de
+logiciel de réservation, ou n'en ayez jamais eu : les accès se créent à la main, les clients entrent,
+le journal se remplit.
 
-| Donnée | Type | Rôle |
+## Les trois surfaces
+
+| Surface | Adresse | Qui |
 | --- | --- | --- |
-| `requests` | nombre | **Compteur** des demandes reçues. C'est le déclencheur de la recette : un booléen ou un horodatage la ferait deviner, parce que `equipment.data.changed` se répète avec une valeur inchangée. Un compteur ne repasse jamais par la même valeur. |
-| `last_request_at` | texte | Horodatage de la dernière demande |
-| `last_stay` | texte | « Le Gîte · 202609042 » — de quoi lire le journal |
-| `link` | booléen | Liaison avec guestFlow |
+| La page de gestion | Sowel → Administration → **Accès invités** | L'administrateur, derrière la session Sowel |
+| La page des clients | `https://<sowel>/p/guest-access/` | N'importe qui muni d'un code |
+| L'équipement | Device « Accès invités » | La recette, par ses deux ordres |
 
-| Ordre | Valeurs | Rôle |
-| --- | --- | --- |
-| `result` | `opened`, `already_open`, `refused`, `error` | L'issue, que la recette renvoie quand elle a agi |
-| `gate_state` | `open`, `closed`, `unknown` | Le contact du portail, **poussé par la recette** — un plugin ne peut pas lire le device d'une autre intégration, et guestFlow s'en sert pour intituler le bouton du client |
+### La page de gestion
+
+La liste de tous les accès — ceux que guestFlow configure pour un séjour et ceux que vous créez à la
+main —, groupés par état (actifs, à venir, suspendus, révoqués, terminés), avec pour chacun : le code,
+la validité en toutes lettres, les heures, le nombre de téléphones, le dernier usage et le journal.
+
+Chaque accès peut être **modifié, suspendu, révoqué ou supprimé**, et deux actions se distinguent :
+
+- **Nouvelle invitation** — le code et le lien changent, les téléphones déjà configurés continuent de
+  fonctionner. C'est pour le client qui a perdu son email.
+- **Régénérer l'accès** — le code change **et** tous les téléphones sont coupés. C'est pour le
+  téléphone perdu.
+
+### La page des clients
+
+Quelques kilo-octets de HTML : pas d'application à installer, pas de compte, pas de mot de passe. Le
+lien de l'invitation porte le code **dans le fragment** (`/#i=…`), que ni serveur, ni proxy, ni journal
+d'accès ne voit jamais. Le téléphone garde ensuite un jeton qui lui est propre.
+
+La commande est un **glissement**, pas un appui : un téléphone dans une poche, un enfant qui joue avec
+l'écran, un doigt qui touche l'écran pendant le chargement — un portail qui s'ouvre pour personne est
+l'accident que ce geste évite. Le clavier confirme aussi (Entrée, Espace, →, Fin), parce qu'un geste
+que personne ne peut faire est un portail que personne ne peut ouvrir.
+
+**Rien n'est dit quand ça marche.** Le client a glissé et roule déjà. La page ne parle que lorsque le
+portail ne bougera pas.
 
 ## Réglages
 
-| Clé | Exemple | Note |
+| Clé | Exemple | Rôle |
 | --- | --- | --- |
-| `base_url` | `https://guestflow.adn-dev.fr` | L'adresse de guestFlow, **en HTTPS obligatoirement** : le plugin refuse de démarrer sur du HTTP clair vers une autre machine (seul `localhost` est toléré, pour du développement). Voir ci-dessous. |
-| `api_key` | (secret) | `GATE_API_KEY`, auto-généré dans `server/.env.local` de guestFlow au démarrage. Distinct de `PUBLIC_API_KEY` : la clé du site ne doit pas pouvoir vider la file du portail. |
-| `wait_seconds` | `25` | Durée du long-poll. Plafonnée à 55 s : au-delà, un proxy inverse coupe la connexion en vol. |
+| `guest_base_url` | `https://sowel.adn-dev.fr` | L'adresse publique de Sowel, **en HTTPS**, telle que le téléphone d'un client la joint. Sans elle, les liens d'invitation ne peuvent pas être fabriqués — le code reste tapable. |
+| `guestflow_base_url` | `https://guestflow.adn-dev.fr` | Facultatif. Sans les trois champs guestFlow, le connecteur ne démarre pas et tout le reste fonctionne. |
+| `guestflow_api_key` | (secret) | `GATE_API_KEY`, auto-généré dans le `server/.env.local` de guestFlow. |
+| `guestflow_signing_secret` | (secret) | `GATE_SIGNING_SECRET`. Il ne circule jamais : il signe. |
+| `guestflow_poll_seconds` | `60` | À quelle cadence relire le fil des séjours. |
 
-## Pourquoi le nom public, et pourquoi en HTTPS
+**Et une chose qui n'est pas un réglage du plugin :** la page des clients répond `404` tant qu'un
+administrateur n'a pas ouvert l'**accès public** du plugin (Sowel → Plugins → Accès invités). Une
+porte anonyme qui s'ouvre parce qu'on a installé quelque chose est une porte que personne ne remarque ;
+celle-ci demande un clic délibéré. La page de gestion le dit en toutes lettres tant que c'est fermé.
 
-**Le nom public**, `guestflow.adn-dev.fr`, et non un nom interne : c'est la décision d'Adrien du
-2026-08-27, et le Caddyfile interne du parc la porte déjà noir sur blanc. guestFlow lie ses
-abonnements aux notifications push à l'ORIGINE — servir la même application sous un second nom les
-casserait. Le NAT retourné de la Freebox a été vérifié ce jour-là : la VM domotique joint edge par
-le nom public sans sortir réellement du réseau.
+## Le connecteur guestFlow, dans les deux sens
 
-Conséquence agréable : **aucune règle de pare-feu à ajouter.** Le trafic entre par edge
-(`192.168.0.22`), que `104.fw` autorise déjà ; la VM domotique n'a pas besoin de joindre guestFlow
-directement.
+Toujours sortant : **la maison appelle, la maison n'est jamais appelée.**
 
-**En HTTPS**, parce que la signature et le chiffrement ne font pas le même travail. La signature
-empêche de *forger* — le secret ne circule jamais, lire mille appels ne permet pas d'en fabriquer un
-de plus. Elle n'empêche pas de *lire* : sans TLS, le code du séjour, le logement et le prénom du
-client traverseraient le LAN en clair, sur un réseau qui porte aussi deux coordinateurs Zigbee, une
-imprimante 3D et ce qu'un client apporte. Le certificat validé ferme en plus la route de l'usurpation
-que la signature se contentait de neutraliser.
+- **Elle lit** `GET /public/v1/gate/stays?since=<curseur>` — les séjours, par révisions. Une création,
+  un changement de dates et une annulation arrivent de la même façon, si bien qu'un redémarrage
+  reprend où il s'était arrêté et qu'une page rejouée ne change rien.
+- **Elle écrit** `POST /public/v1/gate/invitations` — le code, le lien et l'état de chaque accès de
+  séjour. guestFlow en garde une copie et la lit pour composer l'email J-7, afficher le QR du SAS ou
+  dessiner la carte de la fiche. **Il n'a donc jamais besoin de joindre la maison pour savoir quoi
+  imprimer** — c'est ce qui fait que les emails n'attendent plus rien.
 
-Le plugin **refuse donc de démarrer** sur une adresse en HTTP clair vers une autre machine, et le dit
-dans son journal. Un réglage qui protège moins qu'annoncé est pire qu'un réglage absent.
+Chaque appel porte la clé d'API *et* une signature HMAC sur la méthode, le chemin, l'horodatage et le
+corps. La signature n'est pas de la ceinture-et-bretelles : une clé au porteur est rejouée en entier à
+chaque appel, alors qu'un secret qui ne circule pas ne se déduit pas de mille appels lus.
 
-## Deux garde-fous à connaître
+Le plugin **refuse de joindre guestFlow en HTTP clair** vers une autre machine (`localhost` excepté,
+où il n'y a pas de fil à écouter) : la signature empêche de forger, pas de lire, et le code du séjour
+traverserait le réseau en clair.
 
-- **L'issue n'est attribuée qu'à la demande en vol.** guestFlow sert une demande à la fois ; une
-  issue rapportée alors que rien n'est en attente est **ignorée avec un avertissement**, jamais
-  devinée. Résoudre la mauvaise demande dirait à un client que son portail s'est ouvert alors que
-  non.
-- **Un plancher d'une seconde entre deux interrogations.** En marche normale la boucle est cadencée
-  par le serveur, qui tient la connexion. Le plancher existe pour le cas où quelque chose répond
-  instantanément — un proxy qui ne tient pas la connexion — où la boucle martèlerait guestFlow
-  aussi vite que le réseau le permet.
+## L'équipement, inchangé
+
+| Donnée | Rôle |
+| --- | --- |
+| `requests` | **Le compteur** des demandes. C'est le déclencheur de la recette : un booléen ou un horodatage la ferait deviner, parce que `equipment.data.changed` se répète avec une valeur inchangée. Un compteur ne repasse jamais par la même valeur. |
+| `last_request_at`, `last_stay` | De quoi lire le journal de la recette |
+| `link` | Liaison avec guestFlow — `false` quand il n'y en a pas, ce qui est honnête |
+| `active_accesses` | Combien d'accès peuvent ouvrir en ce moment |
+| `last_result` | Ce que la maison a répondu la dernière fois |
+
+| Ordre | Valeurs | Rôle |
+| --- | --- | --- |
+| `result` | `opened`, `already_open`, `refused`, `error` | L'issue, que la recette renvoie quand elle a agi. C'est elle qui débloque la réponse au téléphone du client. |
+| `gate_state` | `open`, `closed`, `unknown` | Le contact du portail, poussé par la recette. Il ne va **pas** au client (un bouton qui dit « Fermer » est un afficheur d'état déguisé en verbe, et la page est interrogeable par qui détient un code) ; il est pour vous, sur la page de gestion. |
+
+Les deux ordres et le compteur portent les mêmes noms qu'en v0.3 : une installation déjà liée
+continue de fonctionner après la mise à jour. Les deux nouvelles données sont additives — Sowel ne
+relie pas tout seul une donnée ajoutée, il faut un clic sur la fiche de l'équipement.
+
+## Garde-fous
+
+- **La décision précède toujours le portail.** Un accès suspendu ne fait pas bouger le compteur : la
+  recette n'est pas sollicitée pour être ensuite désavouée.
+- **Un doigt qui ripe n'est pas deux intentions** — deux glissements du même accès en moins de deux
+  secondes sont la même commande. Deux secondes, et pas dix : un client a le droit de refermer le
+  portail derrière lui, et c'est un second geste délibéré.
+- **Personne ne répond ?** Le client est prévenu, au lieu d'attendre devant un portail immobile. La
+  cause habituelle est une recette qui n'est pas liée à cet équipement, et la page de gestion le dit.
+- **Les plafonds sont comptés aux deux niveaux** : 12 ouvertures par heure et par accès, 30 pour le
+  portail — un accès compromis ne peut pas affamer l'autre logement.
+- **Cinq essais de code par adresse et par dix minutes**, et un code verrouillé une heure après dix
+  échecs, d'où qu'ils viennent.
+- **Rien n'est jeté sans raison** : le code d'un séjour reste lisible une semaine après la fin (pour
+  le client qui rappelle le lendemain), le journal est gardé un an, et il **survit à la suppression de
+  l'accès** — « qui est entré cette nuit-là » doit rester une question à laquelle on peut répondre.
+
+## Où vivent les données
+
+Dans `data/plugins/guest-access/` (spec 180 du cœur) : `accesses.json` et `journal.json`. Deux fichiers
+que vous pouvez lire avec `cat` après une coupure de courant, écrits atomiquement, et que la sauvegarde
+de Sowel emporte avec le reste. Un fichier illisible est mis de côté plutôt qu'écrasé : la seule copie
+de qui peut ouvrir le portail ne se remplace pas par un fichier vide.
 
 ## Installation
 
 Source personnelle (spec 136) : **Plugins → Store → Sources personnelles** →
 `adn-dev-adrien/sowel-plugin-guest-access` → Installer → confirmer l'empreinte.
+
+Puis, dans l'ordre :
+
+1. **Plugins → Accès invités → Accès public** : ouvrir la porte des clients.
+2. **Réglages du plugin** : renseigner l'adresse publique de Sowel (et guestFlow, si vous l'utilisez).
+3. **Recette** « Accès invités au portail » : la lier à l'équipement de ce plugin et au portail.
+
+Il faut Sowel **1.72.0 ou plus récent** : les pages de plugin et l'arbre public sont des capacités du
+cœur (spec 180).
 
 ## Licence
 

@@ -1,14 +1,15 @@
 {
   "name": "sowel-plugin-guest-access",
-  "version": "0.3.0",
-  "description": "Brings the gate-opening requests of the gîte and lodge guests from GuestFlow into Sowel",
+  "version": "1.0.0",
+  "description": "Gate access for the guests of the gîte and the lodge, held in the house — Sowel plugin",
   "type": "module",
   "main": "dist/index.js",
   "scripts": {
     "build": "tsc",
     "dev": "tsc --watch",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "pack": "npm run build && tar -czf sowel-plugin-guest-access-$npm_package_version.tar.gz manifest.json package.json dist ui"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",

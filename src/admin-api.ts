@@ -1,0 +1,193 @@
+// ============================================================
+// The owner's page, seen from the server
+//
+// Every rule is applied here and nothing is left to the page: the groups, the
+// states, the refusals and the journal all arrive shaped. The page draws them.
+// That is not ceremony — the page is a few hundred lines of plain DOM inside
+// somebody else's application, and a rule that lives there is a rule that is
+// wrong in the one place nobody tests.
+// ============================================================
+
+import type { Access, JournalEntry } from "./model.js";
+import type { PluginHttpRequest, PluginHttpResponse } from "./plugin-contract.js";
+import type { GuestAccessService } from "./service.js";
+import type { GuestFlowConnector } from "./guestflow.js";
+import { stateOf } from "./guestflow.js";
+import type { Gate } from "./gate.js";
+import { effectiveWindow } from "./validity.js";
+import { formatCode } from "./codes.js";
+
+export interface AdminDeps {
+  service: GuestAccessService;
+  connector: GuestFlowConnector;
+  gate: Gate;
+  guestBaseUrl(): string | null;
+  publicTreeOpen(): boolean;
+  /** Ask the connector to push what changed, without waiting for the loop. */
+  onChanged(access: Access | undefined): void;
+}
+
+export interface AccessRow {
+  id: string;
+  kind: Access["kind"];
+  label: string;
+  state: string;
+  code: string | null;
+  invitationUrl: string | null;
+  validFrom: string | null;
+  validUntil: string | null;
+  stayWindow: { from: string; to: string } | null;
+  earlyOpenedAt: string | null;
+  extendedUntil: string | null;
+  timeWindows: Access["timeWindows"];
+  devices: number;
+  lastUsedAt: string | null;
+  useCount: number;
+  suspendedAt: string | null;
+  revokedAt: string | null;
+  createdBy: string;
+  source: Access["source"];
+}
+
+const GROUPS = ["active", "scheduled", "suspended", "revoked", "ended"] as const;
+
+export function shapeAccess(
+  access: Access,
+  guestBaseUrl: string | null,
+  now: Date,
+  service: GuestAccessService,
+): AccessRow {
+  const window = effectiveWindow(access);
+  const invitation = service.invitation(access, guestBaseUrl);
+  return {
+    id: access.id,
+    kind: access.kind,
+    label: access.label,
+    state: stateOf(access, now),
+    code: access.code ? formatCode(access.code) : null,
+    invitationUrl: invitation.url,
+    validFrom: window.from ? window.from.toISOString() : null,
+    validUntil: window.to ? window.to.toISOString() : null,
+    stayWindow: access.stayWindow,
+    earlyOpenedAt: access.earlyOpenedAt,
+    extendedUntil: access.extendedUntil,
+    timeWindows: access.timeWindows,
+    devices: access.devices.length,
+    lastUsedAt: access.lastUsedAt,
+    useCount: access.useCount,
+    suspendedAt: access.suspendedAt,
+    revokedAt: access.revokedAt,
+    createdBy: access.createdBy,
+    source: access.source,
+  };
+}
+
+function ok(body: unknown): PluginHttpResponse {
+  return { status: 200, body };
+}
+
+function refuse(refusal: { field: string; code: string }): PluginHttpResponse {
+  return { status: 422, body: { error: "refused", ...refusal } };
+}
+
+const notFound: PluginHttpResponse = { status: 404, body: { error: "not_found" } };
+
+export function createAdminApi(deps: AdminDeps) {
+  const { service, connector, gate } = deps;
+
+  const stateBody = (now = new Date()) => {
+    const guestBaseUrl = deps.guestBaseUrl();
+    const rows = service
+      .list()
+      .map((a) => shapeAccess(a, guestBaseUrl, now, service))
+      .sort((a, b) => a.label.localeCompare(b.label, "fr"));
+
+    return {
+      accesses: rows,
+      groups: Object.fromEntries(
+        GROUPS.map((group) => [group, rows.filter((r) => r.state === group).map((r) => r.id)]),
+      ),
+      house: {
+        // The contact the recipe pushes down. The guest never sees it — the
+        // label of a button that names a direction is a state display wearing
+        // a verb — but the owner does.
+        gateState: gate.getGateState(),
+        lastResult: gate.getLastResult(),
+        recipeAnswering: gate.getLastResult() !== null,
+      },
+      guestflow: connector.state(),
+      publicTree: {
+        open: deps.publicTreeOpen(),
+        path: "/p/guest-access/",
+        guestBaseUrl,
+      },
+    };
+  };
+
+  return async function handle(request: PluginHttpRequest): Promise<PluginHttpResponse> {
+    const actor = request.user?.username ?? "admin";
+    const { method, path } = request;
+    const body = (request.body ?? {}) as Record<string, unknown>;
+
+    if (method === "GET" && (path === "/" || path === "/state")) return ok(stateBody());
+
+    if (method === "GET" && path === "/journal") {
+      const accessId = request.query.accessId;
+      const entries: JournalEntry[] = service.journal({
+        accessId: accessId || undefined,
+        limit: Number(request.query.limit) || 200,
+      });
+      return ok({ entries });
+    }
+
+    if (method === "POST" && path === "/accesses") {
+      const result = service.createManual(body, actor);
+      if (result.refusal) return refuse(result.refusal);
+      return { status: 201, body: { access: shapeAccess(result.access!, deps.guestBaseUrl(), new Date(), service) } };
+    }
+
+    if (method === "POST" && path === "/sync") {
+      const state = await connector.syncNow();
+      return ok({ guestflow: state });
+    }
+
+    const match = /^\/accesses\/([A-Za-z0-9_-]+)(\/[a-z-]+)?$/.exec(path);
+    if (match) {
+      const id = match[1];
+      const action = match[2];
+
+      if (method === "PATCH" && !action) {
+        const result = service.edit(id, body, actor);
+        if (result.missing) return notFound;
+        if (result.refusal) return refuse(result.refusal);
+        deps.onChanged(result.access);
+        return ok({ access: shapeAccess(result.access!, deps.guestBaseUrl(), new Date(), service) });
+      }
+
+      if (method === "DELETE" && !action) {
+        const access = service.get(id);
+        if (!service.delete(id, actor)) return notFound;
+        deps.onChanged(access);
+        return ok({ deleted: true });
+      }
+
+      if (method === "POST" && action) {
+        const act: Record<string, () => Access | undefined> = {
+          "/suspend": () => service.suspend(id, actor),
+          "/resume": () => service.resume(id, actor),
+          "/revoke": () => service.revoke(id, actor),
+          "/invitation": () => service.newInvitation(id, actor),
+          "/regenerate": () => service.regenerate(id, actor),
+        };
+        const run = act[action];
+        if (!run) return notFound;
+        const access = run();
+        if (!access) return notFound;
+        deps.onChanged(access);
+        return ok({ access: shapeAccess(access, deps.guestBaseUrl(), new Date(), service) });
+      }
+    }
+
+    return notFound;
+  };
+}

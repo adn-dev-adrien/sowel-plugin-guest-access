@@ -1,29 +1,62 @@
 /**
- * Sowel Plugin: Guest Access
+ * Sowel Plugin — Accès invités
  *
- * The house's half of the guest gate access (guestFlow's specs/guest-gate-access.md).
- * It brings the open requests of the gîte and lodge guests into Sowel — and it
- * does nothing else: it never touches the gate. A recipe binds to the device
- * exposed here, decides, and answers through an order.
+ * The whole guest gate access, in the house. The accesses, their codes, their
+ * hours, the journal, the owner's page and the guests' own page all live here;
+ * guestFlow is one optional source of stays, reached outbound, and the system
+ * keeps working when it is not there at all.
  *
- * The trust model is the point. GuestFlow is the machine exposed on the
- * internet; it holds no credential over this house and opens no connection
- * towards it. This plugin goes and asks (a long poll, outbound), which is why a
- * compromise of the booking app cannot command anything here.
+ * That is the change from v0.3, and it is an inversion rather than a move: the
+ * booking application used to hold the accesses and this house went and asked
+ * for the requests. Everything that made that arrangement necessary — guestFlow
+ * is exposed on the internet, a Sowel API token actuates every equipment there
+ * is — is answered better by the house holding the rules and nobody holding a
+ * token: the guest's phone talks to Sowel's own anonymous tree (core spec 180),
+ * this plugin decides, and the recipe still holds the trigger.
  */
 
-import { GatePoller, DEVICE_ID } from "./gate-poller.js";
-import type { DeviceManager, EventBus, Logger, GateState, RequestOutcome } from "./gate-poller.js";
+import { AccessStore } from "./store.js";
+import { Gate, DEVICE_ID, type GateState, type RecipeOutcome } from "./gate.js";
+import { GuestAccessService } from "./service.js";
+import { GuestFlowConnector, type ConnectorConfig } from "./guestflow.js";
+import { createAdminApi } from "./admin-api.js";
+import { createPublicApi } from "./public-api.js";
+import { isAcceptableUrl } from "./url-guard.js";
+import type {
+  Device,
+  IntegrationSettingDef,
+  IntegrationStatus,
+  PluginHttpRequest,
+  PluginHttpResponse,
+} from "./plugin-contract.js";
+import type { Access } from "./model.js";
+
+export { isAcceptableUrl };
+
+interface Logger {
+  info(obj: unknown, msg?: string): void;
+  debug(obj: unknown, msg?: string): void;
+  warn(obj: unknown, msg?: string): void;
+  error(obj: unknown, msg?: string): void;
+}
 
 interface SettingsManager {
   get(key: string): string | undefined;
+  set(key: string, value: string): void;
 }
 
-interface Device {
-  id: string;
-  integrationId: string;
-  sourceDeviceId: string;
-  name: string;
+interface EventBus {
+  emit(event: Record<string, unknown>): void;
+}
+
+interface DeviceManager {
+  upsertFromDiscovery(integrationId: string, source: string, discovered: unknown): void;
+  updateDeviceData(
+    integrationId: string,
+    sourceDeviceId: string,
+    payload: Record<string, unknown>,
+  ): void;
+  updateDeviceStatus(integrationId: string, sourceDeviceId: string, status: string): void;
 }
 
 interface PluginDeps {
@@ -32,67 +65,21 @@ interface PluginDeps {
   settingsManager: SettingsManager;
   deviceManager: DeviceManager;
   pluginDir: string;
-}
-
-type IntegrationStatus = "connected" | "disconnected" | "not_configured" | "error";
-
-interface IntegrationSettingDef {
-  key: string;
-  label: string;
-  type: "text" | "password" | "number" | "boolean";
-  required: boolean;
-  placeholder?: string;
-  defaultValue?: string;
-}
-
-interface IntegrationPlugin {
-  readonly id: string;
-  readonly name: string;
-  readonly description: string;
-  readonly icon: string;
-  readonly apiVersion?: number;
-  getStatus(): IntegrationStatus;
-  isConfigured(): boolean;
-  getSettingsSchema(): IntegrationSettingDef[];
-  start(options?: { pollOffset?: number }): Promise<void>;
-  stop(): Promise<void>;
-  executeOrder(
-    device: Device,
-    orderKeyOrDispatchConfig: string | Record<string, unknown>,
-    value: unknown,
-  ): Promise<void>;
+  /** Core spec 180 — survives updates. Everything below is kept there. */
+  dataDir: string;
 }
 
 const INTEGRATION_ID = "guest-access";
 const SETTINGS_PREFIX = `integration.${INTEGRATION_ID}.`;
-const DEFAULT_WAIT_SECONDS = 25;
+const CURSOR_KEY = `${SETTINGS_PREFIX}stay_cursor`;
+const PUBLIC_FLAG_KEY = `plugins.${INTEGRATION_ID}.public_enabled`;
+const DEFAULT_POLL_SECONDS = 60;
+const PURGE_EVERY_MS = 6 * 60 * 60 * 1000;
 
-const OUTCOMES: RequestOutcome[] = ["opened", "already_open", "refused", "error"];
-
-/**
- * Plain HTTP is refused towards anything but this machine.
- *
- * The signature makes a sniffed channel survivable — the secret never travels — but it encrypts
- * nothing: the stay code, the lodging and the guest's name would cross the LAN in clear, on a
- * network that also carries whatever a guest brings. GuestFlow is served over TLS under its public
- * name, so there is no reason left to accept anything else.
- *
- * `localhost` stays allowed: that is a developer running both halves on one machine, where there is
- * no wire to listen to.
- */
-export function isAcceptableUrl(raw: string): boolean {
-  let url: URL;
-  try {
-    url = new URL(raw);
-  } catch {
-    return false;
-  }
-  if (url.protocol === "https:") return true;
-  return url.protocol === "http:" && ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname);
-}
+const OUTCOMES: RecipeOutcome[] = ["opened", "already_open", "refused", "error"];
 const GATE_STATES: GateState[] = ["open", "closed", "unknown"];
 
-/** `key` when the core passes a bare order key, `key`/`orderKey` when it passes a dispatch config. */
+/** `key` when the core passes a bare order key, `key`/`orderKey` with a dispatch config. */
 function orderKeyOf(orderKeyOrDispatchConfig: string | Record<string, unknown>): string {
   if (typeof orderKeyOrDispatchConfig === "string") return orderKeyOrDispatchConfig;
   const config = orderKeyOrDispatchConfig || {};
@@ -100,160 +87,236 @@ function orderKeyOf(orderKeyOrDispatchConfig: string | Record<string, unknown>):
   return typeof candidate === "string" ? candidate : "";
 }
 
-class GuestAccessPlugin implements IntegrationPlugin {
+class GuestAccessPlugin {
   readonly id = INTEGRATION_ID;
   readonly name = "Guest Access";
   readonly description =
-    "Brings the gate-opening requests of the gîte and lodge guests from GuestFlow into Sowel";
+    "Gate access for the guests of the gîte and the lodge — accesses, codes and journal held here";
   readonly icon = "DoorOpen";
   readonly apiVersion = 2;
 
-  private logger: Logger;
-  private eventBus: EventBus;
-  private settingsManager: SettingsManager;
-  private deviceManager: DeviceManager;
-  private poller: GatePoller | null = null;
-  private status: IntegrationStatus = "disconnected";
+  private readonly deps: PluginDeps;
+  private readonly store: AccessStore;
+  private readonly gate: Gate;
+  private readonly service: GuestAccessService;
+  private readonly connector: GuestFlowConnector;
+  private readonly admin: (r: PluginHttpRequest) => Promise<PluginHttpResponse>;
+  private readonly guest: (r: PluginHttpRequest) => Promise<PluginHttpResponse>;
+  private purgeTimer: NodeJS.Timeout | null = null;
+  private started = false;
 
   constructor(deps: PluginDeps) {
-    this.logger = deps.logger;
-    this.eventBus = deps.eventBus;
-    this.settingsManager = deps.settingsManager;
-    this.deviceManager = deps.deviceManager;
+    this.deps = deps;
+    this.store = new AccessStore(deps.dataDir, deps.logger);
+    this.gate = new Gate({
+      integrationId: INTEGRATION_ID,
+      deviceManager: deps.deviceManager,
+      logger: deps.logger,
+    });
+    this.service = new GuestAccessService({
+      store: this.store,
+      gate: this.gate,
+      logger: deps.logger,
+      notifier: {
+        // Information, never a block: a cap would lock a legitimate
+        // brother-in-law out at 23 h. An alarm is what Sowel already shows the
+        // owner, and it resolves itself when they have seen it.
+        devicesOverNotice: (access: Access) => {
+          deps.eventBus.emit({
+            type: "system.alarm.raised",
+            alarmId: `guest-access:devices:${access.id}`,
+            level: "warning",
+            source: INTEGRATION_ID,
+            message: `${access.devices.length} téléphones sur l'accès de ${access.label}`,
+          });
+        },
+      },
+    });
+    this.connector = new GuestFlowConnector({
+      service: this.service,
+      logger: deps.logger,
+      readCursor: () => Number(deps.settingsManager.get(CURSOR_KEY) ?? 0) || 0,
+      writeCursor: (cursor) => deps.settingsManager.set(CURSOR_KEY, String(cursor)),
+    });
+
+    this.admin = createAdminApi({
+      service: this.service,
+      connector: this.connector,
+      gate: this.gate,
+      guestBaseUrl: () => this.guestBaseUrl(),
+      publicTreeOpen: () => deps.settingsManager.get(PUBLIC_FLAG_KEY) === "true",
+      onChanged: (access) => {
+        this.connector.markDirty(access);
+        void this.connector.syncNow();
+      },
+    });
+    this.guest = createPublicApi({
+      service: this.service,
+      guestBaseUrl: () => this.guestBaseUrl(),
+    });
+  }
+
+  // ── Lifecycle ──────────────────────────────────────────────
+
+  /**
+   * Always true, and that is the feature: nothing has to be configured for a
+   * guest to be let in. Without guestFlow the accesses are hand-made; without a
+   * public address the code still works, typed.
+   */
+  isConfigured(): boolean {
+    return true;
   }
 
   getStatus(): IntegrationStatus {
-    if (!this.isConfigured()) return "not_configured";
-    if (!this.poller) return this.status;
-    return this.poller.isConnected() ? "connected" : "error";
-  }
-
-  /**
-   * All three, or nothing. The signing secret is not optional hardening: without it the plugin
-   * cannot tell GuestFlow's answer from anyone else's on the LAN, and an answer is what makes the
-   * recipe pulse the gate (§4.4). An integration showing « not configured » is a problem someone
-   * fixes; one silently accepting forged requests is not.
-   */
-  isConfigured(): boolean {
-    return !!this.getSetting("base_url") && !!this.getSetting("api_key") && !!this.getSetting("signing_secret");
+    return this.started ? "connected" : "disconnected";
   }
 
   getSettingsSchema(): IntegrationSettingDef[] {
     return [
       {
-        key: "base_url",
-        label: "GuestFlow URL",
+        key: "guest_base_url",
+        label: "Public address of Sowel (for the guests' link)",
         type: "text",
-        required: true,
+        required: false,
+        placeholder: "https://sowel.adn-dev.fr",
+      },
+      {
+        key: "guestflow_base_url",
+        label: "GuestFlow URL (optional)",
+        type: "text",
+        required: false,
         placeholder: "https://guestflow.adn-dev.fr",
       },
-      { key: "api_key", label: "GuestFlow gate API key", type: "password", required: true },
+      { key: "guestflow_api_key", label: "GuestFlow gate API key", type: "password", required: false },
       {
-        key: "signing_secret",
+        key: "guestflow_signing_secret",
         label: "GuestFlow signing secret",
         type: "password",
-        required: true,
+        required: false,
       },
       {
-        key: "wait_seconds",
-        label: "Long-poll duration (s)",
+        key: "guestflow_poll_seconds",
+        label: "How often to read guestFlow (s)",
         type: "number",
         required: false,
-        defaultValue: String(DEFAULT_WAIT_SECONDS),
+        defaultValue: String(DEFAULT_POLL_SECONDS),
       },
     ];
   }
 
   async start(): Promise<void> {
-    if (!this.isConfigured()) {
-      this.status = "not_configured";
-      return;
-    }
-    const baseUrl = this.getSetting("base_url")!;
-    if (!isAcceptableUrl(baseUrl)) {
-      this.status = "error";
-      this.logger.error(
-        { baseUrl },
-        "Refusing to start: GuestFlow must be reached over HTTPS (use its public name, "
-          + "https://guestflow.adn-dev.fr). Plain HTTP is only accepted towards localhost.",
-      );
-      return;
-    }
+    this.gate.start();
+    this.started = true;
+    this.connector.start(this.connectorConfig());
+    this.service.publishSummary();
 
-    const waitSeconds = Number(this.getSetting("wait_seconds") ?? DEFAULT_WAIT_SECONDS);
-    this.poller = new GatePoller({
+    this.purgeTimer = setInterval(() => {
+      const purged = this.service.purge();
+      if (purged.codes || purged.journal) {
+        this.deps.logger.info(purged, "Guest access housekeeping");
+      }
+    }, PURGE_EVERY_MS);
+    this.purgeTimer.unref?.();
+    this.service.purge();
+
+    if (this.deps.settingsManager.get(PUBLIC_FLAG_KEY) !== "true") {
+      // Worth a line at start: everything else works, and the guests' page is
+      // the one thing that will answer 404 until somebody opens the door.
+      this.deps.logger.warn(
+        {},
+        "Guest access is running, but its public page is shut — open it in Plugins → Accès invités",
+      );
+    }
+    this.deps.eventBus.emit({
+      type: "system.integration.connected",
       integrationId: INTEGRATION_ID,
-      baseUrl,
-      apiKey: this.getSetting("api_key")!,
-      signingSecret: this.getSetting("signing_secret")!,
-      // A wait longer than the reverse proxy's read timeout would be cut mid-air
-      // every time; shorter than a second would be a busy loop.
-      waitSeconds: Number.isFinite(waitSeconds) ? Math.min(Math.max(waitSeconds, 1), 55) : DEFAULT_WAIT_SECONDS,
-      deviceManager: this.deviceManager,
-      eventBus: this.eventBus,
-      logger: this.logger,
     });
-    this.poller.start();
-    this.status = "connected";
-    this.logger.info({}, "Guest Access plugin started");
+    this.deps.logger.info({}, "Guest access started");
   }
 
   async stop(): Promise<void> {
-    if (this.poller) {
-      await this.poller.stop();
-      this.poller = null;
-    }
-    this.status = "disconnected";
-    this.eventBus.emit({ type: "system.integration.disconnected", integrationId: this.id });
-    this.logger.info({}, "Guest Access plugin stopped");
+    this.connector.stop();
+    this.gate.stop();
+    if (this.purgeTimer) clearInterval(this.purgeTimer);
+    this.purgeTimer = null;
+    this.started = false;
+    this.deps.eventBus.emit({
+      type: "system.integration.disconnected",
+      integrationId: INTEGRATION_ID,
+    });
+    this.deps.logger.info({}, "Guest access stopped");
   }
 
-  /**
-   * The two orders the recipe uses.
-   *
-   * `result` is an answer to a request, and it goes out over HTTP. `gate_state`
-   * is the contact the recipe read for us — it costs nothing and travels on the
-   * next poll. An unknown key throws, because a recipe sending one has a bug and
-   * a silent no-op would hide it.
-   */
+  async refresh(): Promise<void> {
+    await this.connector.syncNow();
+  }
+
+  // ── The recipe's two orders ────────────────────────────────
+
   async executeOrder(
     device: Device,
     orderKeyOrDispatchConfig: string | Record<string, unknown>,
     value: unknown,
   ): Promise<void> {
-    if (!this.poller) throw new Error("Guest Access plugin is not started");
     if (device && device.sourceDeviceId && device.sourceDeviceId !== DEVICE_ID) {
       throw new Error(`Unknown device: ${device.sourceDeviceId}`);
     }
-
     const key = orderKeyOf(orderKeyOrDispatchConfig);
     const text = typeof value === "string" ? value : String(value ?? "");
 
     if (key === "result") {
-      if (!OUTCOMES.includes(text as RequestOutcome)) {
-        throw new Error(`Unknown outcome: ${text}`);
-      }
-      await this.poller.report(text as RequestOutcome);
+      if (!OUTCOMES.includes(text as RecipeOutcome)) throw new Error(`Unknown outcome: ${text}`);
+      this.gate.reportResult(text as RecipeOutcome);
       return;
     }
-
     if (key === "gate_state") {
-      if (!GATE_STATES.includes(text as GateState)) {
-        throw new Error(`Unknown gate state: ${text}`);
-      }
-      this.poller.setGateState(text as GateState);
+      if (!GATE_STATES.includes(text as GateState)) throw new Error(`Unknown gate state: ${text}`);
+      this.gate.setGateState(text as GateState);
       return;
     }
-
     throw new Error(`Unsupported order: ${key || "(none)"}`);
   }
 
-  private getSetting(key: string): string | undefined {
-    const raw = this.settingsManager.get(`${SETTINGS_PREFIX}${key}`);
+  // ── The two HTTP surfaces (core spec 180) ──────────────────
+
+  async handlePageRequest(request: PluginHttpRequest): Promise<PluginHttpResponse> {
+    return this.admin(request);
+  }
+
+  async handlePublicRequest(request: PluginHttpRequest): Promise<PluginHttpResponse> {
+    return this.guest(request);
+  }
+
+  // ── Settings ───────────────────────────────────────────────
+
+  private setting(key: string): string | undefined {
+    const raw = this.deps.settingsManager.get(`${SETTINGS_PREFIX}${key}`);
     return raw && raw.trim() ? raw.trim() : undefined;
+  }
+
+  private guestBaseUrl(): string | null {
+    const raw = this.setting("guest_base_url");
+    if (!raw) return null;
+    return isAcceptableUrl(raw) ? raw.replace(/\/+$/, "") : null;
+  }
+
+  /** All three, or no connector: a half-configured channel is not a channel. */
+  private connectorConfig(): ConnectorConfig | null {
+    const baseUrl = this.setting("guestflow_base_url");
+    const apiKey = this.setting("guestflow_api_key");
+    const signingSecret = this.setting("guestflow_signing_secret");
+    if (!baseUrl || !apiKey || !signingSecret) return null;
+    const pollSeconds = Number(this.setting("guestflow_poll_seconds") ?? DEFAULT_POLL_SECONDS);
+    return {
+      baseUrl,
+      apiKey,
+      signingSecret,
+      pollSeconds: Number.isFinite(pollSeconds) ? pollSeconds : DEFAULT_POLL_SECONDS,
+      guestBaseUrl: this.guestBaseUrl(),
+    };
   }
 }
 
-export function createPlugin(deps: PluginDeps): IntegrationPlugin {
+export function createPlugin(deps: PluginDeps): GuestAccessPlugin {
   return new GuestAccessPlugin(deps);
 }

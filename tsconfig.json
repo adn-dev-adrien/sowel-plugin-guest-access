@@ -10,6 +10,12 @@
     "declaration": true,
     "skipLibCheck": true
   },
-  "include": ["src"],
-  "exclude": ["**/*.test.ts"]
+  "include": [
+    "src"
+  ],
+  "exclude": [
+    "**/*.test.ts",
+    "src/serviceFixtures.ts",
+    "src/apiFixtures.ts"
+  ]
 }

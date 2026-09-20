@@ -1,0 +1,43 @@
+name: Release
+
+# The tarball Sowel downloads (spec 053/136). It carries the manifest, the
+# compiled plugin and `ui/` — the owner's page is part of the package, not a
+# build artefact of Sowel.
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci
+      - run: npx tsc --noEmit
+      - run: npm test
+      - run: npm run build
+      - name: Check the tag matches the manifest
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          MANIFEST=$(node -p "require('./manifest.json').version")
+          PACKAGE=$(node -p "require('./package.json').version")
+          if [ "$VERSION" != "$MANIFEST" ] || [ "$VERSION" != "$PACKAGE" ]; then
+            echo "Tag $VERSION, manifest $MANIFEST, package $PACKAGE — they must agree"
+            exit 1
+          fi
+      - name: Pack
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          tar -czf "sowel-plugin-guest-access-$VERSION.tar.gz" manifest.json package.json dist ui
+          sha256sum "sowel-plugin-guest-access-$VERSION.tar.gz" | tee SHA256SUMS
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            sowel-plugin-guest-access-*.tar.gz
+            SHA256SUMS

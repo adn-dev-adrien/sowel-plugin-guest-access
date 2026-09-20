@@ -2,45 +2,58 @@
   "id": "guest-access",
   "type": "integration",
   "name": "Guest Access",
-  "version": "0.3.0",
-  "description": "Brings the gate-opening requests of the gîte and lodge guests from GuestFlow into Sowel",
+  "version": "1.0.0",
+  "description": "Gate access for the guests of the gîte and the lodge — accesses, codes and journal held in the house",
   "icon": "DoorOpen",
   "repo": "adn-dev-adrien/sowel-plugin-guest-access",
   "author": "adn-dev-adrien",
-  "tags": ["access", "guests"],
+  "tags": ["access", "guests", "gate"],
   "i18n": {
     "fr": {
       "name": "Accès invités",
-      "description": "Fait remonter dans Sowel les demandes d'ouverture du portail émises par les clients du gîte et de la lodge depuis guestFlow"
+      "description": "L'accès au portail des clients du gîte et de la lodge : les accès, leurs codes et leur journal vivent ici, et guestFlow n'est qu'une source de séjours"
     }
   },
-  "sowelVersion": ">=1.39.0",
+  "sowelVersion": ">=1.72.0",
+  "ui": {
+    "entry": "ui/panel.js",
+    "label": "Accès invités",
+    "icon": "DoorOpen"
+  },
+  "publicTree": true,
   "settings": [
     {
-      "key": "base_url",
-      "label": "GuestFlow URL",
+      "key": "guest_base_url",
+      "label": "Adresse publique de Sowel (pour le lien des clients)",
       "type": "text",
-      "required": true,
+      "required": false,
+      "placeholder": "https://sowel.adn-dev.fr"
+    },
+    {
+      "key": "guestflow_base_url",
+      "label": "URL de guestFlow (facultatif)",
+      "type": "text",
+      "required": false,
       "placeholder": "https://guestflow.adn-dev.fr"
     },
     {
-      "key": "api_key",
-      "label": "GuestFlow gate API key",
+      "key": "guestflow_api_key",
+      "label": "Clé d'API portail de guestFlow",
       "type": "password",
-      "required": true
+      "required": false
     },
     {
-      "key": "signing_secret",
-      "label": "GuestFlow signing secret",
+      "key": "guestflow_signing_secret",
+      "label": "Secret de signature de guestFlow",
       "type": "password",
-      "required": true
+      "required": false
     },
     {
-      "key": "wait_seconds",
-      "label": "Long-poll duration (s)",
+      "key": "guestflow_poll_seconds",
+      "label": "Relecture de guestFlow (s)",
       "type": "number",
       "required": false,
-      "defaultValue": "25"
+      "defaultValue": "60"
     }
   ],
   "apiVersion": 2
