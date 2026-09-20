@@ -1,7 +1,7 @@
 From 9690aa76891e30a652e027a3ab520aafe87d04d9 Mon Sep 17 00:00:00 2001
 From: Adrien Jouve <adrien.jouve@adn-dev.fr>
 Date: Sun, 20 Sep 2026 16:45:50 +0000
-Subject: [PATCH 1/3] feat(plugins): a plugin may bring a page, a door and a
+Subject: [PATCH 1/5] feat(plugins): a plugin may bring a page, a door and a
  drawer (spec 180)
 MIME-Version: 1.0
 Content-Type: text/plain; charset=UTF-8
@@ -3035,7 +3035,7 @@ index ff5b1941..612973be 100644
 From b438f9d81b2d99bd83be648c0542156988870077 Mon Sep 17 00:00:00 2001
 From: adrienJouve <adrien.jouve@adn-dev.fr>
 Date: Sun, 20 Sep 2026 21:17:31 +0200
-Subject: [PATCH 2/3] docs(spec-180): the architecture and plan the specs gate
+Subject: [PATCH 2/5] docs(spec-180): the architecture and plan the specs gate
  requires
 
 The spec folder carried spec.md alone, and scripts/check-specs-complete.sh
@@ -3304,7 +3304,7 @@ index 00000000..5075fc40
 From 25333f78356b94ce01710704567075b6d6624ba0 Mon Sep 17 00:00:00 2001
 From: adrienJouve <adrien.jouve@adn-dev.fr>
 Date: Sun, 20 Sep 2026 21:22:12 +0200
-Subject: [PATCH 3/3] fix(plugins): a query key may not write on the map's own
+Subject: [PATCH 3/5] fix(plugins): a query key may not write on the map's own
  shape
 
 CodeQL flagged `queryOf` as remote property injection, and it is right: the
@@ -3428,6 +3428,308 @@ index d7693f40..28da2681 100644
      if (typeof value === "string") out[key] = value;
      else if (Array.isArray(value) && typeof value[0] === "string") out[key] = value[0];
    }
+-- 
+2.47.1
+
+
+From 27c598b4a97b332f959a289d90724968750f4d4e Mon Sep 17 00:00:00 2001
+From: adrienJouve <adrien.jouve@adn-dev.fr>
+Date: Sun, 20 Sep 2026 21:25:48 +0200
+Subject: [PATCH 4/5] fix(plugins): build the query map with Object.fromEntries
+
+The null-prototype map still wrote each key with `out[key] = value`, which is
+the dynamic property write CodeQL objects to, guard or no guard.
+`Object.fromEntries` defines each key as an own data property instead of going
+through a setter, so there is no write for a caller-chosen name to reach.
+
+Same behaviour, same 24 cases.
+---
+ .../architecture.md                                 |  9 +++++----
+ src/api/routes/plugin-surface.ts                    | 13 +++++++------
+ 2 files changed, 12 insertions(+), 10 deletions(-)
+
+diff --git a/specs/180-plugin-pages-and-public-tree/architecture.md b/specs/180-plugin-pages-and-public-tree/architecture.md
+index c3a4ca15..e9a80dae 100644
+--- a/specs/180-plugin-pages-and-public-tree/architecture.md
++++ b/specs/180-plugin-pages-and-public-tree/architecture.md
+@@ -47,10 +47,11 @@ Three route trees, registered from `src/api/server.ts`:
+ - **Response headers are an allowlist** too (`PLUGIN_RESPONSE_HEADERS`).
+   Anything else is dropped with a warn log naming the header — `set-cookie`
+   deliberately included, so a plugin can never write on Sowel's origin.
+-- **The query map is null-prototype and drops `__proto__`, `constructor` and
+-  `prototype`.** Its keys are whatever the caller typed after the `?`, and the
+-  plugin reads them by name; the same precaution the settings route takes with a
+-  request body.
++- **The query map is built with `Object.fromEntries`, and drops `__proto__`,
++  `constructor` and `prototype`.** Its keys are whatever the caller typed after
++  the `?`, and the plugin reads them by name: `fromEntries` defines each one as
++  an own data property rather than going through a setter, so no caller-chosen
++  name reaches the object's own shape on the way in.
+ - `withTimeout` turns a plugin that never answers into a 504; a plugin that
+   throws is already degraded to `undefined` by spec 111, and the route answers
+   500 without echoing anything back.
+diff --git a/src/api/routes/plugin-surface.ts b/src/api/routes/plugin-surface.ts
+index 28da2681..5a8c9e9a 100644
+--- a/src/api/routes/plugin-surface.ts
++++ b/src/api/routes/plugin-surface.ts
+@@ -134,16 +134,17 @@ function subPath(params: Record<string, unknown>): string {
+ const UNSAFE_QUERY_KEYS = new Set(["__proto__", "constructor", "prototype"]);
+ 
+ function queryOf(request: FastifyRequest): Record<string, string> {
+-  // A null-prototype map, like the settings route does with a request body:
+-  // nothing inherited can be mistaken for something the caller sent.
+-  const out: Record<string, string> = Object.create(null) as Record<string, string>;
+   const query = (request.query ?? {}) as Record<string, unknown>;
++  const pairs: [string, string][] = [];
+   for (const [key, value] of Object.entries(query)) {
+     if (UNSAFE_QUERY_KEYS.has(key)) continue;
+-    if (typeof value === "string") out[key] = value;
+-    else if (Array.isArray(value) && typeof value[0] === "string") out[key] = value[0];
++    if (typeof value === "string") pairs.push([key, value]);
++    else if (Array.isArray(value) && typeof value[0] === "string") pairs.push([key, value[0]]);
+   }
+-  return out;
++  // `Object.fromEntries`, not `out[key] = value`: it defines each key as an own
++  // data property instead of going through a setter, so no caller-chosen name
++  // can reach the object's own shape on the way in.
++  return Object.fromEntries(pairs);
+ }
+ 
+ /**
+-- 
+2.47.1
+
+
+From fb7ad6a199b6a0a966148632c0a431e04b6a4c03 Mon Sep 17 00:00:00 2001
+From: adrienJouve <adrien.jouve@adn-dev.fr>
+Date: Sun, 20 Sep 2026 22:23:59 +0200
+Subject: [PATCH 5/5] fix(plugins): announce the page URL the asset tree
+ actually serves
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+The listing composed the module's URL from the entry's path inside the package
+(`/plugin-ui/<id>/ui/panel.js`) while the asset route serves the entry's own
+DIRECTORY as its root, so the file is at `/plugin-ui/<id>/panel.js`. The two
+disagreed by exactly that directory: the sidebar entry appeared, the page
+opened, and the module 404'd.
+
+Both suites were green throughout — one tested the listing against a composed
+string, the other fetched a hand-written path, and nothing joined them.
+
+- `pluginAssetUrl()` is exported and composes the URL once; `getPages()` and
+  the route test both call it.
+- A route case takes what `GET /api/v1/plugins/pages` announces and fetches it,
+  expecting the module back (25 cases now).
+
+Found by running the first plugin that brings a page against a real Sowel.
+---
+ .../architecture.md                           |  5 ++-
+ .../180-plugin-pages-and-public-tree/plan.md  |  2 +-
+ .../180-plugin-pages-and-public-tree/spec.md  |  7 ++--
+ src/api/routes/plugin-surface.test.ts         | 32 +++++++++++++++++--
+ src/plugins/plugin-loader.ts                  | 30 ++++++++++++-----
+ src/plugins/plugin-pages.test.ts              |  7 ++--
+ 6 files changed, 67 insertions(+), 16 deletions(-)
+
+diff --git a/specs/180-plugin-pages-and-public-tree/architecture.md b/specs/180-plugin-pages-and-public-tree/architecture.md
+index e9a80dae..5bba07ea 100644
+--- a/specs/180-plugin-pages-and-public-tree/architecture.md
++++ b/specs/180-plugin-pages-and-public-tree/architecture.md
+@@ -67,7 +67,10 @@ Three route trees, registered from `src/api/server.ts`:
+ `getPages(): PluginPageInfo[]` reads the **installed manifests**, not the loaded
+ plugins: a plugin whose integration failed to start still has its page, and a
+ sidebar entry that vanishes when a broker is down would be worse than useless.
+-`entryUrl` carries the installed version (`?v=1.2.0`) because ESM caches a
++`entryUrl` is composed by the exported `pluginAssetUrl()`, which the route test
++uses too: it names the file **inside the entry's directory**, because that
++directory is what the asset route serves as its root. It carries the installed
++version (`?v=1.2.0`) because ESM caches a
+ module by URL for the life of the document — without it, an admin who updates a
+ plugin and returns to its page runs the previous release's panel against the new
+ API. `i18n.<lang>.ui` overrides `label` when present.
+diff --git a/specs/180-plugin-pages-and-public-tree/plan.md b/specs/180-plugin-pages-and-public-tree/plan.md
+index 074bd540..830e055e 100644
+--- a/specs/180-plugin-pages-and-public-tree/plan.md
++++ b/specs/180-plugin-pages-and-public-tree/plan.md
+@@ -76,7 +76,7 @@
+ 
+ ### Counts
+ 
+-24 route cases (`src/api/routes/plugin-surface.test.ts`), 7 on the page listing
++25 route cases (`src/api/routes/plugin-surface.test.ts`), 7 on the page listing
+ (`src/plugins/plugin-pages.test.ts`), 3 on `getDataDir`
+ (`src/packages/package-manager.test.ts`), 3 on the settings proxy
+ (`src/plugins/scoped-deps.test.ts`), 2 on the backup
+diff --git a/specs/180-plugin-pages-and-public-tree/spec.md b/specs/180-plugin-pages-and-public-tree/spec.md
+index 20c7b3ef..ff7ee4d3 100644
+--- a/specs/180-plugin-pages-and-public-tree/spec.md
++++ b/specs/180-plugin-pages-and-public-tree/spec.md
+@@ -65,7 +65,10 @@ another machine holds the reason it exists.
+ 3. The module's URL carries the installed **version** (`?v=1.2.0`). ESM caches a
+    module by URL for the life of the document, so without it an admin who
+    updates a plugin and returns to its page runs the previous release's panel
+-   against the new API.
++   against the new API. The URL names the file **inside the entry's directory**
++   (`ui/panel.js` is announced as `/plugin-ui/<id>/panel.js`), because that
++   directory is what R1.6 serves as the root — one function composes it so the
++   listing and the asset tree cannot drift apart.
+ 4. The SPA imports the module at `/plugins/<id>/page` and calls
+    `mount(container, ctx)`, then `unmount(container)` when leaving. `ctx` gives
+    the plugin `api()` — the SPA's own authenticated client, pointed at that
+@@ -148,7 +151,7 @@ another machine holds the reason it exists.
+ 
+ | File                                    | Covers                                             |
+ | --------------------------------------- | -------------------------------------------------- |
+-| `src/api/routes/plugin-surface.test.ts` | R1.2, R1.6, R2.7–R2.10, R4, R5 (24 cases)          |
++| `src/api/routes/plugin-surface.test.ts` | R1.2, R1.6, R2.7–R2.10, R4, R5 (25 cases)          |
+ | `src/plugins/plugin-pages.test.ts`      | R1.1–R1.3 (7 cases)                                |
+ | `src/packages/package-manager.test.ts`  | R3.11 (3 cases in `getDataDir`)                    |
+ | `src/backup/backup-manager.test.ts`     | R3.13 (2 cases)                                    |
+diff --git a/src/api/routes/plugin-surface.test.ts b/src/api/routes/plugin-surface.test.ts
+index 84a51a27..586087cc 100644
+--- a/src/api/routes/plugin-surface.test.ts
++++ b/src/api/routes/plugin-surface.test.ts
+@@ -14,6 +14,7 @@ import Fastify, { type FastifyInstance } from "fastify";
+ import { describe, it, expect, afterEach, vi } from "vitest";
+ import { createLogger } from "../../core/logger.js";
+ import { registerPluginSurfaceRoutes } from "./plugin-surface.js";
++import { pluginAssetUrl } from "../../plugins/plugin-loader.js";
+ import { publicTreeSettingKey } from "../../shared/constants.js";
+ import type { PluginHttpRequest, PluginHttpResponse, UserRole } from "../../shared/types.js";
+ 
+@@ -96,7 +97,12 @@ async function buildApp(opts: BuildOpts = {}): Promise<FastifyInstance> {
+   registerPluginSurfaceRoutes(app, {
+     pluginLoader: {
+       getPages: () => [
+-        { pluginId: "demo", label: "Demo", icon: "Cpu", entryUrl: "/plugin-ui/demo/ui/panel.js" },
++        {
++          pluginId: "demo",
++          label: "Demo",
++          icon: "Cpu",
++          entryUrl: pluginAssetUrl("demo", "ui/panel.js", "1.0.0"),
++        },
+       ],
+     } as never,
+     packageManager: {
+@@ -136,12 +142,34 @@ describe("plugin pages listing", () => {
+     expect(res.statusCode).toBe(403);
+   });
+ 
++  it("announces a URL the asset tree actually serves", async () => {
++    // The one case neither half could see on its own: the listing composes the
++    // module's URL, the asset route resolves it, and they live in different
++    // files. When they disagreed the sidebar entry appeared, the page opened,
++    // and the module 404'd — with both suites green.
++    const app = await buildApp({
++      ui: { entry: "ui/panel.js", label: "Demo" },
++      pkgDir: makePluginDir(),
++    });
++    const listed = await app.inject({ method: "GET", url: "/api/v1/plugins/pages" });
++    const entryUrl = (listed.json() as Array<{ entryUrl: string }>)[0].entryUrl;
++
++    const asset = await app.inject({ method: "GET", url: entryUrl });
++    expect(asset.statusCode).toBe(200);
++    expect(asset.headers["content-type"]).toContain("text/javascript");
++  });
++
+   it("returns the declared pages", async () => {
+     const app = await buildApp();
+     const res = await app.inject({ method: "GET", url: "/api/v1/plugins/pages" });
+     expect(res.statusCode).toBe(200);
+     expect(res.json()).toEqual([
+-      { pluginId: "demo", label: "Demo", icon: "Cpu", entryUrl: "/plugin-ui/demo/ui/panel.js" },
++      {
++        pluginId: "demo",
++        label: "Demo",
++        icon: "Cpu",
++        entryUrl: pluginAssetUrl("demo", "ui/panel.js", "1.0.0"),
++      },
+     ]);
+   });
+ });
+diff --git a/src/plugins/plugin-loader.ts b/src/plugins/plugin-loader.ts
+index cb6cbdeb..48fa3949 100644
+--- a/src/plugins/plugin-loader.ts
++++ b/src/plugins/plugin-loader.ts
+@@ -1,4 +1,4 @@
+-import { resolve } from "node:path";
++import { basename, resolve } from "node:path";
+ import { pathToFileURL } from "node:url";
+ import { cpSync, existsSync, readFileSync, readdirSync, rmSync } from "node:fs";
+ import type { Logger } from "../core/logger.js";
+@@ -22,6 +22,26 @@ import {
+  * Uses PackageManager for distribution, handles integration lifecycle
+  * (import, createPlugin, register with IntegrationRegistry).
+  */
++/**
++ * Where the SPA imports a plugin's page module from.
++ *
++ * One function because the two halves have to agree and they live apart: the
++ * asset route (`/plugin-ui/:id/*`) serves the entry's own DIRECTORY as the
++ * root, so the rest of the package stays unreachable, and what it takes after
++ * the plugin id is therefore the file NAME — `ui/panel.js` on disk is served at
++ * `/plugin-ui/<id>/panel.js`. Composing the URL from the path inside the
++ * package instead hands the SPA a 404 and a page that never renders, which is
++ * exactly what two suites testing the halves separately failed to notice.
++ *
++ * The version rides along because ESM caches a module by URL for the life of
++ * the document: without it, an admin who updates a plugin and comes back to its
++ * page keeps running the previous release's panel against the new API.
++ */
++export function pluginAssetUrl(pluginId: string, entry: string, version?: string): string {
++  const file = basename(entry.replace(/^\/+/, ""));
++  return `/plugin-ui/${pluginId}/${file}?v=${encodeURIComponent(version ?? "0")}`;
++}
++
+ export class PluginLoader {
+   private packageManager: PackageManager;
+   private integrationRegistry: IntegrationRegistry;
+@@ -267,17 +287,11 @@ export class PluginLoader {
+     for (const pkg of this.packageManager.getInstalledByType("integration")) {
+       const ui = pkg.manifest.ui;
+       if (!pkg.enabled || !ui || typeof ui.entry !== "string" || !ui.entry) continue;
+-      const entry = ui.entry.replace(/^\/+/, "");
+-      // The version is in the URL because ESM caches a module by URL for the
+-      // life of the page: without it, an admin who updates a plugin and comes
+-      // back to its page keeps running the previous release's panel against
+-      // the new API until they reload the whole SPA.
+-      const version = encodeURIComponent(pkg.manifest.version ?? "0");
+       pages.push({
+         pluginId: pkg.manifest.id,
+         label: ui.label || pkg.manifest.name,
+         icon: ui.icon || pkg.manifest.icon,
+-        entryUrl: `/plugin-ui/${pkg.manifest.id}/${entry}?v=${version}`,
++        entryUrl: pluginAssetUrl(pkg.manifest.id, ui.entry, pkg.manifest.version),
+       });
+     }
+     return pages;
+diff --git a/src/plugins/plugin-pages.test.ts b/src/plugins/plugin-pages.test.ts
+index 584facb6..01c7fa8f 100644
+--- a/src/plugins/plugin-pages.test.ts
++++ b/src/plugins/plugin-pages.test.ts
+@@ -57,7 +57,7 @@ describe("PluginLoader.getPages", () => {
+         pluginId: "guest-access",
+         label: "Accès invités",
+         icon: "DoorOpen",
+-        entryUrl: "/plugin-ui/guest-access/ui/panel.js?v=1.0.0",
++        entryUrl: "/plugin-ui/guest-access/panel.js?v=1.0.0",
+       },
+     ]);
+   });
+@@ -96,7 +96,10 @@ describe("PluginLoader.getPages", () => {
+     const loader = makeLoader([
+       { manifest: { ...base, ui: { entry: "/ui/panel.js", label: "X" } }, enabled: true },
+     ]);
+-    expect(loader.getPages()[0].entryUrl).toBe("/plugin-ui/guest-access/ui/panel.js?v=1.0.0");
++    // The entry is `ui/panel.js` in the manifest, and the asset tree serves
++    // that directory AS `/plugin-ui/<id>/` — so the announced URL carries the
++    // file name, not the path inside the package.
++    expect(loader.getPages()[0].entryUrl).toBe("/plugin-ui/guest-access/panel.js?v=1.0.0");
+   });
+ 
+   it("carries the installed version, so an update is not served from the ESM cache", () => {
 -- 
 2.47.1
 

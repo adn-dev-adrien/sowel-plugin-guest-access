@@ -28,7 +28,7 @@ git checkout feat/plugin-pages-and-public-tree
 npm install && npm run validate       # backend + UI: typecheck, lint, format, tests
 ```
 
-Or, from the patch kept here (three commits, `git am` takes them in one go):
+Or, from the patch kept here (five commits, `git am` takes them in one go):
 
 ```bash
 git checkout -b feat/plugin-pages-and-public-tree origin/main
@@ -40,9 +40,9 @@ Beyond the code it carries `specs/180-plugin-pages-and-public-tree/`
 `docs/technical/plugin-development.md` and `docs/technical/api-reference.md` — the documentation
 gates that repository runs on every pull request.
 
-**Tests it adds:** 24 route cases (`src/api/routes/plugin-surface.test.ts`), 7 on the page listing,
+**Tests it adds:** 25 route cases (`src/api/routes/plugin-surface.test.ts`), 7 on the page listing,
 3 on `getDataDir`, 3 on the settings proxy, 2 on the backup, and 6 on the SPA page. `npm run validate`
-is green on the branch: 2 618 backend tests, 1 122 UI tests.
+is green on the branch: 2 619 backend tests, 1 122 UI tests.
 
 ## Until it is merged
 
