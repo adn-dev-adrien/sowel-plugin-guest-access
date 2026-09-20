@@ -1,8 +1,8 @@
-From 2f025010da14e27f0373dd2002cf29bac876e3e7 Mon Sep 17 00:00:00 2001
+From 9690aa76891e30a652e027a3ab520aafe87d04d9 Mon Sep 17 00:00:00 2001
 From: Adrien Jouve <adrien.jouve@adn-dev.fr>
 Date: Sun, 20 Sep 2026 16:45:50 +0000
-Subject: [PATCH] feat(plugins): a plugin may bring a page, a door and a drawer
- (spec 180)
+Subject: [PATCH 1/3] feat(plugins): a plugin may bring a page, a door and a
+ drawer (spec 180)
 MIME-Version: 1.0
 Content-Type: text/plain; charset=UTF-8
 Content-Transfer-Encoding: 8bit
@@ -82,7 +82,7 @@ specs/180 and both indexes.
  create mode 100644 ui/src/pages/pluginModuleLoader.ts
 
 diff --git a/docs/specs-index.fr.md b/docs/specs-index.fr.md
-index 9bc3109..247a86f 100644
+index 9bc3109c..247a86fa 100644
 --- a/docs/specs-index.fr.md
 +++ b/docs/specs-index.fr.md
 @@ -308,6 +308,7 @@ Les specs sont regroupées par thème et annotées d'un statut :
@@ -94,7 +94,7 @@ index 9bc3109..247a86f 100644
  ---
  
 diff --git a/docs/specs-index.md b/docs/specs-index.md
-index acd55d8..6fcb9ee 100644
+index acd55d86..6fcb9ee8 100644
 --- a/docs/specs-index.md
 +++ b/docs/specs-index.md
 @@ -329,6 +329,7 @@ Specs are grouped by theme and annotated with status:
@@ -106,7 +106,7 @@ index acd55d8..6fcb9ee 100644
  ---
  
 diff --git a/docs/technical/api-reference.fr.md b/docs/technical/api-reference.fr.md
-index 9b73be3..8f24730 100644
+index 9b73be36..8f247302 100644
 --- a/docs/technical/api-reference.fr.md
 +++ b/docs/technical/api-reference.fr.md
 @@ -387,19 +387,21 @@ Routes admin uniquement pour gérer les plugins d'intégration de devices.
@@ -162,7 +162,7 @@ index 9b73be3..8f24730 100644
  
  ## Settings (Admin)
 diff --git a/docs/technical/api-reference.md b/docs/technical/api-reference.md
-index 6de25de..7c939e0 100644
+index 6de25de4..7c939e0d 100644
 --- a/docs/technical/api-reference.md
 +++ b/docs/technical/api-reference.md
 @@ -460,19 +460,21 @@ Admin-only routes for managing device integration plugins.
@@ -218,7 +218,7 @@ index 6de25de..7c939e0 100644
  
  ## Settings (Admin)
 diff --git a/docs/technical/plugin-development.fr.md b/docs/technical/plugin-development.fr.md
-index 389f2ed..36d5b50 100644
+index 389f2edc..36d5b505 100644
 --- a/docs/technical/plugin-development.fr.md
 +++ b/docs/technical/plugin-development.fr.md
 @@ -12,14 +12,15 @@ Le plugin `sowel-plugin-weather-forecast` est utilisé comme exemple de référe
@@ -444,7 +444,7 @@ index 389f2ed..36d5b50 100644
  
  La fonction usine `createPlugin` doit retourner un objet qui implémente l'interface `IntegrationPlugin` :
 diff --git a/docs/technical/plugin-development.md b/docs/technical/plugin-development.md
-index db1ca67..31a9ecf 100644
+index db1ca679..31a9ecf9 100644
 --- a/docs/technical/plugin-development.md
 +++ b/docs/technical/plugin-development.md
 @@ -12,14 +12,15 @@ The `sowel-plugin-weather-forecast` plugin is used as the reference example thro
@@ -671,7 +671,7 @@ index db1ca67..31a9ecf 100644
  The `createPlugin` factory must return an object implementing the `IntegrationPlugin` interface:
 diff --git a/specs/180-plugin-pages-and-public-tree/spec.md b/specs/180-plugin-pages-and-public-tree/spec.md
 new file mode 100644
-index 0000000..e44c49a
+index 00000000..e44c49a6
 --- /dev/null
 +++ b/specs/180-plugin-pages-and-public-tree/spec.md
 @@ -0,0 +1,162 @@
@@ -839,7 +839,7 @@ index 0000000..e44c49a
 +`sowelVersion` in its manifest is for.
 diff --git a/src/api/routes/plugin-surface.test.ts b/src/api/routes/plugin-surface.test.ts
 new file mode 100644
-index 0000000..ef2646d
+index 00000000..ef2646df
 --- /dev/null
 +++ b/src/api/routes/plugin-surface.test.ts
 @@ -0,0 +1,378 @@
@@ -1223,7 +1223,7 @@ index 0000000..ef2646d
 +});
 diff --git a/src/api/routes/plugin-surface.ts b/src/api/routes/plugin-surface.ts
 new file mode 100644
-index 0000000..d7693f4
+index 00000000..d7693f40
 --- /dev/null
 +++ b/src/api/routes/plugin-surface.ts
 @@ -0,0 +1,402 @@
@@ -1630,7 +1630,7 @@ index 0000000..d7693f4
 +  });
 +}
 diff --git a/src/api/server.ts b/src/api/server.ts
-index 9f33c47..30c474a 100644
+index 9f33c47a..30c474aa 100644
 --- a/src/api/server.ts
 +++ b/src/api/server.ts
 @@ -67,6 +67,7 @@ import { registerNotificationPublisherRoutes } from "./routes/notification-publi
@@ -1658,7 +1658,7 @@ index 9f33c47..30c474a 100644
    registerSystemRoutes(app, {
      versionChecker,
 diff --git a/src/backup/backup-manager.test.ts b/src/backup/backup-manager.test.ts
-index 5637248..0a4b449 100644
+index 56372486..0a4b4496 100644
 --- a/src/backup/backup-manager.test.ts
 +++ b/src/backup/backup-manager.test.ts
 @@ -558,6 +558,42 @@ describe("BackupManager", () => {
@@ -1705,7 +1705,7 @@ index 5637248..0a4b449 100644
    //
    // The #401 guardrail compares the instance id carried in the settings table
 diff --git a/src/backup/backup-manager.ts b/src/backup/backup-manager.ts
-index d6ed25a..987dd8f 100644
+index d6ed25a6..987dd8fe 100644
 --- a/src/backup/backup-manager.ts
 +++ b/src/backup/backup-manager.ts
 @@ -733,6 +733,43 @@ export class BackupManager {
@@ -1764,7 +1764,7 @@ index d6ed25a..987dd8f 100644
  }
  
 diff --git a/src/integrations/integration-registry.ts b/src/integrations/integration-registry.ts
-index b8c7f9a..d8d6cc8 100644
+index b8c7f9a4..d8d6cc85 100644
 --- a/src/integrations/integration-registry.ts
 +++ b/src/integrations/integration-registry.ts
 @@ -5,6 +5,8 @@ import type {
@@ -1802,7 +1802,7 @@ index b8c7f9a..d8d6cc8 100644
  
  // ============================================================
 diff --git a/src/packages/package-manager.test.ts b/src/packages/package-manager.test.ts
-index 38dd2df..101b922 100644
+index 38dd2df1..101b922e 100644
 --- a/src/packages/package-manager.test.ts
 +++ b/src/packages/package-manager.test.ts
 @@ -1247,6 +1247,54 @@ describe("getPackageDir — the package-id boundary", () => {
@@ -1861,7 +1861,7 @@ index 38dd2df..101b922 100644
   * `repo` reaches the path of an authenticated outbound request to GitHub, so
   * its shape decides where that request goes.
 diff --git a/src/packages/package-manager.ts b/src/packages/package-manager.ts
-index 67957b6..8f327d0 100644
+index 67957b6b..8f327d0a 100644
 --- a/src/packages/package-manager.ts
 +++ b/src/packages/package-manager.ts
 @@ -119,6 +119,8 @@ export class PackageManager {
@@ -1922,7 +1922,7 @@ index 67957b6..8f327d0 100644
    getInstalled(): InstalledPackage[] {
      const rows = this.stmts.getAll.all() as PackageRow[];
 diff --git a/src/plugins/plugin-loader.test.ts b/src/plugins/plugin-loader.test.ts
-index 6830dd8..0e6e853 100644
+index 6830dd81..0e6e8532 100644
 --- a/src/plugins/plugin-loader.test.ts
 +++ b/src/plugins/plugin-loader.test.ts
 @@ -68,7 +68,7 @@ function makeIntegrationRegistry(): IntegrationRegistry & { unregisterCalls: str
@@ -1935,7 +1935,7 @@ index 6830dd8..0e6e853 100644
      logger,
      eventBus: { on: () => () => {}, emit: () => {} } as unknown as PluginDeps["eventBus"],
 diff --git a/src/plugins/plugin-loader.ts b/src/plugins/plugin-loader.ts
-index 4ba2359..cb6cbde 100644
+index 4ba2359b..cb6cbdeb 100644
 --- a/src/plugins/plugin-loader.ts
 +++ b/src/plugins/plugin-loader.ts
 @@ -6,9 +6,10 @@ import type {
@@ -2027,7 +2027,7 @@ index 4ba2359..cb6cbde 100644
      // Dynamic import of the plugin entry point.
 diff --git a/src/plugins/plugin-pages.test.ts b/src/plugins/plugin-pages.test.ts
 new file mode 100644
-index 0000000..584facb
+index 00000000..584facb6
 --- /dev/null
 +++ b/src/plugins/plugin-pages.test.ts
 @@ -0,0 +1,111 @@
@@ -2143,7 +2143,7 @@ index 0000000..584facb
 +  });
 +});
 diff --git a/src/plugins/scoped-deps.integration.test.ts b/src/plugins/scoped-deps.integration.test.ts
-index d822d14..0c3e8dd 100644
+index d822d147..0c3e8dd6 100644
 --- a/src/plugins/scoped-deps.integration.test.ts
 +++ b/src/plugins/scoped-deps.integration.test.ts
 @@ -70,6 +70,7 @@ describe("scoped-deps integration with canary plugin", () => {
@@ -2163,7 +2163,7 @@ index d822d14..0c3e8dd 100644
      const canary = createCanaryPlugin(deps, attempts);
      const wrapped = wrapPluginMethods(canary, CANARY_ID, logger);
 diff --git a/src/plugins/scoped-deps.test.ts b/src/plugins/scoped-deps.test.ts
-index 451c655..a5f8ad2 100644
+index 451c6551..a5f8ad2b 100644
 --- a/src/plugins/scoped-deps.test.ts
 +++ b/src/plugins/scoped-deps.test.ts
 @@ -51,6 +51,25 @@ describe("SettingsManagerProxy", () => {
@@ -2193,7 +2193,7 @@ index 451c655..a5f8ad2 100644
      const inner = makeMockSettings();
      const proxy = makeSettingsManagerProxy("netatmo", inner, logger);
 diff --git a/src/plugins/scoped-deps.ts b/src/plugins/scoped-deps.ts
-index 75ab1c4..0f60cac 100644
+index 75ab1c44..0f60cac1 100644
 --- a/src/plugins/scoped-deps.ts
 +++ b/src/plugins/scoped-deps.ts
 @@ -4,6 +4,7 @@ import type { SettingsManager } from "../core/settings-manager.js";
@@ -2253,7 +2253,7 @@ index 75ab1c4..0f60cac 100644
    };
  }
 diff --git a/src/shared/constants.ts b/src/shared/constants.ts
-index 4ac8f2e..7865c72 100644
+index 4ac8f2e1..7865c72d 100644
 --- a/src/shared/constants.ts
 +++ b/src/shared/constants.ts
 @@ -480,3 +480,17 @@ export function defaultEnergyTimingsFor(type: EquipmentType): { minOnS: number;
@@ -2275,7 +2275,7 @@ index 4ac8f2e..7865c72 100644
 +  return `plugins.${pluginId}.public_enabled`;
 +}
 diff --git a/src/shared/plugin-api.ts b/src/shared/plugin-api.ts
-index 4d87ba9..c71c95d 100644
+index 4d87ba9a..c71c95d6 100644
 --- a/src/shared/plugin-api.ts
 +++ b/src/shared/plugin-api.ts
 @@ -10,6 +10,17 @@ export interface PluginDeps {
@@ -2297,7 +2297,7 @@ index 4d87ba9..c71c95d 100644
  
  export type PluginFactory = (deps: PluginDeps) => IntegrationPlugin;
 diff --git a/src/shared/types.ts b/src/shared/types.ts
-index 19ee6c0..6618042 100644
+index 19ee6c0a..6618042b 100644
 --- a/src/shared/types.ts
 +++ b/src/shared/types.ts
 @@ -1762,6 +1762,69 @@ export interface PluginManifest {
@@ -2380,7 +2380,7 @@ index 19ee6c0..6618042 100644
  
  // ============================================================
 diff --git a/ui/src/App.tsx b/ui/src/App.tsx
-index a7af0f4..fe9af8c 100644
+index a7af0f47..fe9af8c2 100644
 --- a/ui/src/App.tsx
 +++ b/ui/src/App.tsx
 @@ -15,6 +15,7 @@ import { HomePage } from "./pages/HomePage";
@@ -2401,7 +2401,7 @@ index a7af0f4..fe9af8c 100644
            <Route path="/notification-publishers" element={<AdminRoute><NotificationPublishersPage /></AdminRoute>} />
            <Route path="/logs" element={<AdminRoute><LogsPage /></AdminRoute>} />
 diff --git a/ui/src/api/integrations.ts b/ui/src/api/integrations.ts
-index 007b50a..8d8ab4f 100644
+index 007b50ad..8d8ab4f2 100644
 --- a/ui/src/api/integrations.ts
 +++ b/ui/src/api/integrations.ts
 @@ -2,6 +2,7 @@ import type {
@@ -2437,7 +2437,7 @@ index 007b50a..8d8ab4f 100644
 +  });
 +}
 diff --git a/ui/src/components/layout/Sidebar.tsx b/ui/src/components/layout/Sidebar.tsx
-index 1220603..479ce95 100644
+index 1220603a..479ce950 100644
 --- a/ui/src/components/layout/Sidebar.tsx
 +++ b/ui/src/components/layout/Sidebar.tsx
 @@ -26,6 +26,8 @@ import { useAuth } from "../../store/useAuth";
@@ -2481,7 +2481,7 @@ index 1220603..479ce95 100644
              </>
 diff --git a/ui/src/components/layout/usePluginPages.ts b/ui/src/components/layout/usePluginPages.ts
 new file mode 100644
-index 0000000..c82dace
+index 00000000..c82dace5
 --- /dev/null
 +++ b/ui/src/components/layout/usePluginPages.ts
 @@ -0,0 +1,39 @@
@@ -2525,7 +2525,7 @@ index 0000000..c82dace
 +  usePluginPagesStore.getState().refresh();
 +}
 diff --git a/ui/src/components/plugins/PluginDetailSheet.tsx b/ui/src/components/plugins/PluginDetailSheet.tsx
-index 7d798a7..c7e07cd 100644
+index 7d798a72..c7e07cd4 100644
 --- a/ui/src/components/plugins/PluginDetailSheet.tsx
 +++ b/ui/src/components/plugins/PluginDetailSheet.tsx
 @@ -1,6 +1,6 @@
@@ -2606,7 +2606,7 @@ index 7d798a7..c7e07cd 100644
          {latestVersion && (
            <button
 diff --git a/ui/src/i18n/locales/en.json b/ui/src/i18n/locales/en.json
-index 90c0d73..13e58df 100644
+index 90c0d73f..13e58dfc 100644
 --- a/ui/src/i18n/locales/en.json
 +++ b/ui/src/i18n/locales/en.json
 @@ -1598,5 +1598,13 @@
@@ -2625,7 +2625,7 @@ index 90c0d73..13e58df 100644
 +  "plugins.openPage": "Open its page"
  }
 diff --git a/ui/src/i18n/locales/fr.json b/ui/src/i18n/locales/fr.json
-index a7a2ff7..615b9c4 100644
+index a7a2ff74..615b9c40 100644
 --- a/ui/src/i18n/locales/fr.json
 +++ b/ui/src/i18n/locales/fr.json
 @@ -1598,5 +1598,13 @@
@@ -2645,7 +2645,7 @@ index a7a2ff7..615b9c4 100644
  }
 diff --git a/ui/src/pages/PluginPage.test.tsx b/ui/src/pages/PluginPage.test.tsx
 new file mode 100644
-index 0000000..c6fbeba
+index 00000000..c6fbeba7
 --- /dev/null
 +++ b/ui/src/pages/PluginPage.test.tsx
 @@ -0,0 +1,114 @@
@@ -2765,7 +2765,7 @@ index 0000000..c6fbeba
 +});
 diff --git a/ui/src/pages/PluginPage.tsx b/ui/src/pages/PluginPage.tsx
 new file mode 100644
-index 0000000..a6225e3
+index 00000000..a6225e3f
 --- /dev/null
 +++ b/ui/src/pages/PluginPage.tsx
 @@ -0,0 +1,145 @@
@@ -2915,7 +2915,7 @@ index 0000000..a6225e3
 +  );
 +}
 diff --git a/ui/src/pages/PluginsPage.tsx b/ui/src/pages/PluginsPage.tsx
-index a3f91b3..473c5de 100644
+index a3f91b32..473c5def 100644
 --- a/ui/src/pages/PluginsPage.tsx
 +++ b/ui/src/pages/PluginsPage.tsx
 @@ -17,6 +17,7 @@ import {
@@ -2980,7 +2980,7 @@ index a3f91b3..473c5de 100644
  
 diff --git a/ui/src/pages/pluginModuleLoader.ts b/ui/src/pages/pluginModuleLoader.ts
 new file mode 100644
-index 0000000..36e5430
+index 00000000..36e54306
 --- /dev/null
 +++ b/ui/src/pages/pluginModuleLoader.ts
 @@ -0,0 +1,11 @@
@@ -2996,7 +2996,7 @@ index 0000000..36e5430
 +  return import(/* @vite-ignore */ entryUrl);
 +}
 diff --git a/ui/src/types.ts b/ui/src/types.ts
-index ff5b194..612973b 100644
+index ff5b1941..612973be 100644
 --- a/ui/src/types.ts
 +++ b/ui/src/types.ts
 @@ -1390,6 +1390,10 @@ export interface PluginManifest {
@@ -3029,5 +3029,405 @@ index ff5b194..612973b 100644
  
  // ============================================================
 -- 
-2.43.0
+2.47.1
+
+
+From b438f9d81b2d99bd83be648c0542156988870077 Mon Sep 17 00:00:00 2001
+From: adrienJouve <adrien.jouve@adn-dev.fr>
+Date: Sun, 20 Sep 2026 21:17:31 +0200
+Subject: [PATCH 2/3] docs(spec-180): the architecture and plan the specs gate
+ requires
+
+The spec folder carried spec.md alone, and scripts/check-specs-complete.sh
+fails a PR that creates a folder without all three documents.
+
+- architecture.md: the contract, the three route trees and their allowlists,
+  the data directory and the backup walk, the SPA host page, and why the page
+  contract is plain DOM rather than React.
+- plan.md: the ten implementation steps as landed, the per-module test plan
+  behind the 44 cases, and the gate 4 commands.
+---
+ .../architecture.md                           | 134 ++++++++++++++++++
+ .../180-plugin-pages-and-public-tree/plan.md  |  98 +++++++++++++
+ 2 files changed, 232 insertions(+)
+ create mode 100644 specs/180-plugin-pages-and-public-tree/architecture.md
+ create mode 100644 specs/180-plugin-pages-and-public-tree/plan.md
+
+diff --git a/specs/180-plugin-pages-and-public-tree/architecture.md b/specs/180-plugin-pages-and-public-tree/architecture.md
+new file mode 100644
+index 00000000..72b2f3d0
+--- /dev/null
++++ b/specs/180-plugin-pages-and-public-tree/architecture.md
+@@ -0,0 +1,134 @@
++# Spec 180 — Architecture
++
++Everything here is plumbing on purpose. The core decides **who** may call and
++**how much** they may say; what the call means is the plugin's business, and the
++core never parses it.
++
++## Contract (`src/shared/`)
++
++**`types.ts`** — `PluginManifest` gains two optional fields:
++
++```ts
++/** Spec 180 — the plugin brings its own page into the Sowel UI. */
++ui?: PluginUiDef;          // { entry, label, icon? }
++/** Spec 180 — the plugin serves anonymous callers under `/p/<id>/*`. */
++publicTree?: boolean;
++```
++
++plus `PluginPageInfo` (`{ pluginId, label, icon, entryUrl }`), the shape the
++sidebar reads, and the request/response pair a plugin answers with
++(`{ status, body, contentType, headers }`). Mirrored in `ui/src/types.ts`.
++
++**`plugin-api.ts`** — `PluginDeps` gains `dataDir: string`, and
++`IntegrationPlugin` gains two optional handlers, `handlePageRequest` and
++`handlePublicRequest`. Both optional: a plugin that implements neither is
++unaffected, which is why the migration section of the spec is empty.
++
++**`constants.ts`** — `publicTreeSettingKey(pluginId)` → `plugins.<id>.public_enabled`.
++Core-owned, deliberately outside `integration.<id>.*`: that namespace belongs to
++the plugin, and a door a plugin can open for itself is not a door anyone guards.
++
++## Backend
++
++### `src/api/routes/plugin-surface.ts` (new)
++
++Three route trees, registered from `src/api/server.ts`:
++
++| Route                        | Auth  | Timeout | Notes                                                |
++| ---------------------------- | ----- | ------- | ---------------------------------------------------- |
++| `/api/v1/plugins/:id/page/*` | admin | 15 s    | `user: { id, username, role }` named to the plugin   |
++| `/plugin-ui/:id/*`           | none  | —       | static assets from the entry's own directory         |
++| `/p/:id/*`                   | none  | 30 s    | 60 req/min per IP, `X-Robots-Tag: noindex, nofollow` |
++
++- **Request headers are an allowlist**, not a pass-through: `accept`,
++  `accept-language`, `content-type`, `user-agent`, plus `authorization` on the
++  public surface only. On the page API the bearer belongs to the core and never
++  reaches the plugin (R1.5 / R4.14).
++- **Response headers are an allowlist** too (`PLUGIN_RESPONSE_HEADERS`).
++  Anything else is dropped with a warn log naming the header — `set-cookie`
++  deliberately included, so a plugin can never write on Sowel's origin.
++- `withTimeout` turns a plugin that never answers into a 504; a plugin that
++  throws is already degraded to `undefined` by spec 111, and the route answers
++  500 without echoing anything back.
++- The asset tree resolves inside the entry's directory and serves by extension
++  allowlist (`ASSET_CONTENT_TYPES`). A path that leaves it, an extension outside
++  the list, a disabled plugin and a plugin declaring no page are all the same 404.
++- `/p/:id/*` answers that same 404 while the manifest does not declare
++  `publicTree`, **and** while `plugins.<id>.public_enabled` is not set — so the
++  setting cannot be probed from outside.
++
++### `src/plugins/plugin-loader.ts`
++
++`getPages(): PluginPageInfo[]` reads the **installed manifests**, not the loaded
++plugins: a plugin whose integration failed to start still has its page, and a
++sidebar entry that vanishes when a broker is down would be worse than useless.
++`entryUrl` carries the installed version (`?v=1.2.0`) because ESM caches a
++module by URL for the life of the document — without it, an admin who updates a
++plugin and returns to its page runs the previous release's panel against the new
++API. `i18n.<lang>.ui` overrides `label` when present.
++
++### `src/plugins/scoped-deps.ts`
++
++- Wraps the two new handlers with the existing `wrapAsync` degradation, so an
++  exception becomes a missing answer the route turns into a 500 — never a stack
++  reaching an anonymous caller, never a double log.
++- The settings proxy gains exactly one core-owned readable key: the plugin's
++  **own** `plugins.<id>.public_enabled` (R2.8.bis). A plugin that cannot tell
++  whether its door is open cannot say so on its own page. Writing it stays
++  refused like any other foreign key, which is the whole reason it does not live
++  in the plugin's namespace.
++
++### `src/packages/package-manager.ts`
++
++`getDataDir(packageId)` / `ensureDataDir(packageId)` → `data/plugins/<id>/`,
++resolved under the writable data root and refusing a traversing id. Created
++before the factory runs (`integration-registry.ts` passes it as `deps.dataDir`),
++and `install`, `updateFiles` and `uninstall` never touch it — an uninstall
++leaves it, because a plugin removed by mistake and reinstalled the same
++afternoon must not have dropped what it held.
++
++### `src/backup/backup-manager.ts`
++
++`scanPluginDataFiles` walks `data/plugins/` to `PLUGIN_DATA_MAX_DEPTH = 4` under
++the same extension whitelist as the rest of `data/` (`.sh` excluded), so the
++directory rides inside the archive and the restore puts it back where it was.
++
++## UI
++
++- **`pages/PluginPage.tsx`** (route `/plugins/:pluginId/page`, admin-only) —
++  imports the declared module and calls `mount(container, ctx)`, then
++  `unmount(container)` and `replaceChildren()` on the way out. `ctx` is
++  `{ pluginId, api, locale, theme, navigate }`; `api()` is the SPA's own
++  authenticated client pointed at `/api/v1/plugins/<id>/page/*`, so the plugin
++  never sees a token and never has to think about the refresh dance. Three
++  failure screens — unknown page, module without `mount()`, module that would
++  not load — each naming the reason and leaving the SPA navigable.
++- **`pages/pluginModuleLoader.ts`** — the one place the SPA imports code it did
++  not build, extracted as a seam so the page's behaviour can be tested without a
++  real plugin on disk.
++- **`components/layout/usePluginPages.ts` + `Sidebar.tsx`** — the pages appear
++  in the Administration menu with their Lucide icon (`Puzzle` as fallback).
++  `refreshPluginPages()` is called after an install, update, uninstall, enable or
++  disable. A sidebar that cannot list the pages shows none, which is what it
++  showed before any plugin brought one.
++- **`components/plugins/PluginDetailSheet.tsx`** — the anonymous door gets its
++  own block, above the ordinary actions, with the sentence that is the point of
++  showing it there: "This plugin serves pages to anonymous visitors under
++  `/p/<id>/`. Turn it on only if you mean to."
++
++## Why plain DOM and not React
++
++A plugin is built in its own repository against its own dependencies. Two Reacts
++in one page is a class of bug nobody should have to debug, and pinning a plugin
++to the SPA's React version would make every core upgrade a plugin release. The
++contract is a DOM node and a context object — something both sides can keep
++across versions.
++
++## Security posture
++
++Nothing here widens spec 111: a plugin already runs in-process. What the two
++surfaces add is reachability, and both are opt-in twice — declared in the
++manifest, then turned on by an admin (audit-logged as
++`plugin.public.enable` / `.disable`, and warn-logged) — so nothing new is
++reachable by accident. No plugin route lives under `/api/`, so no plugin can
++shadow or precede a core route.
+diff --git a/specs/180-plugin-pages-and-public-tree/plan.md b/specs/180-plugin-pages-and-public-tree/plan.md
+new file mode 100644
+index 00000000..5075fc40
+--- /dev/null
++++ b/specs/180-plugin-pages-and-public-tree/plan.md
+@@ -0,0 +1,98 @@
++# Spec 180 — Implementation plan
++
++## Steps (in dependency order)
++
++1. ✅ **Contract** — `PluginUiDef`, `PluginPageInfo`, the request/response pair
++   and `ui` / `publicTree` on `PluginManifest` (`src/shared/types.ts`, mirrored
++   in `ui/src/types.ts`); `dataDir` on `PluginDeps` and the two optional
++   handlers on `IntegrationPlugin` (`src/shared/plugin-api.ts`);
++   `publicTreeSettingKey()` (`src/shared/constants.ts`).
++2. ✅ **Data directory** — `getDataDir` / `ensureDataDir` in
++   `package-manager.ts`, created before the factory runs by
++   `integration-registry.ts`, untouched by install, update and uninstall.
++3. ✅ **Backup** — `scanPluginDataFiles` in `backup-manager.ts`, same extension
++   whitelist as the rest of `data/`.
++4. ✅ **Page listing** — `PluginLoader.getPages()` off the installed manifests,
++   `entryUrl` carrying the version.
++5. ✅ **Scoped deps** — the two handlers wrapped with the spec 111 degradation;
++   the plugin's own `plugins.<id>.public_enabled` made readable, not writable.
++6. ✅ **Routes** — `plugin-surface.ts`: the page API, the asset tree and the
++   anonymous tree, with the header allowlists, the timeouts, the rate limit and
++   the `X-Robots-Tag`; registered from `server.ts`.
++7. ✅ **Admin switch** — `PUT /api/v1/plugins/:id/public`, audit-logged and
++   warn-logged.
++8. ✅ **UI** — `PluginPage.tsx` + `pluginModuleLoader.ts`, the route in
++   `App.tsx`, `usePluginPages` and the sidebar entries, the public-tree block in
++   `PluginDetailSheet`, i18n en/fr.
++9. ✅ **Tests** — see the test plan below.
++10. ✅ **Docs** — `docs/technical/plugin-development.md` (+ `.fr`) for the three
++    capabilities, `docs/technical/api-reference.md` (+ `.fr`) for the routes,
++    and the row in both spec indexes.
++
++## Test plan
++
++### Modules to test
++
++- `api/routes/plugin-surface` (who may call, what gets through, what comes back)
++- `plugins/plugin-loader` (the page listing)
++- `packages/package-manager` (`getDataDir`)
++- `backup/backup-manager` (the archive)
++- `plugins/scoped-deps` (the one readable core key)
++- `ui/pages/PluginPage` (mount, context, and the three failure screens)
++
++### Scenarios per module
++
++| Module          | Scenario                                                                    | Expected                                                                                                                                   |
++| --------------- | --------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
++| plugin-surface  | `GET /api/v1/plugins/pages` and `/plugins/<id>/page/*` as a `standard` user | 403 before the plugin is reached                                                                                                           |
++| plugin-surface  | Page call as an admin                                                       | The plugin is handed `user: { id, username, role }`, never the bearer                                                                      |
++| plugin-surface  | Request carrying a header outside the allowlist                             | Not forwarded                                                                                                                              |
++| plugin-surface  | Plugin answers `set-cookie`                                                 | Dropped, warn log naming the header                                                                                                        |
++| plugin-surface  | Plugin answers a header inside `PLUGIN_RESPONSE_HEADERS`                    | Sent through                                                                                                                               |
++| plugin-surface  | Plugin never returns                                                        | 504 (15 s page / 30 s public)                                                                                                              |
++| plugin-surface  | Plugin throws                                                               | 500, nothing of the plugin echoed back                                                                                                     |
++| plugin-surface  | `/p/<id>/*` on a plugin that does not declare `publicTree`                  | 404                                                                                                                                        |
++| plugin-surface  | `/p/<id>/*` declared but `public_enabled` unset                             | The **same** 404 — the setting cannot be probed                                                                                            |
++| plugin-surface  | `/p/<id>/*` declared and enabled                                            | Served, with `X-Robots-Tag: noindex, nofollow`                                                                                             |
++| plugin-surface  | Public call carrying `authorization`                                        | Passed through (it is the plugin's own token, not Sowel's)                                                                                 |
++| plugin-surface  | 61st public call in a minute from one IP                                    | 429                                                                                                                                        |
++| plugin-surface  | Asset path containing `..`                                                  | 404                                                                                                                                        |
++| plugin-surface  | Asset with an extension outside the allowlist                               | 404                                                                                                                                        |
++| plugin-surface  | Asset of a disabled plugin, or of one declaring no page                     | 404                                                                                                                                        |
++| plugin-loader   | Two installed plugins, one declaring `ui`                                   | One page listed, `entryUrl` carrying the version                                                                                           |
++| plugin-loader   | Plugin whose integration failed to start                                    | Its page is still listed                                                                                                                   |
++| plugin-loader   | `i18n.<lang>.ui` present                                                    | Overrides `label`                                                                                                                          |
++| package-manager | `getDataDir("guest-access")`                                                | `data/plugins/guest-access`, never the package directory                                                                                   |
++| package-manager | Traversing id                                                               | Refused                                                                                                                                    |
++| package-manager | `updateFiles` on a plugin holding data                                      | The data directory survives                                                                                                                |
++| backup-manager  | `data/plugins/<id>/store.json`                                              | Inside the archive, restored in place                                                                                                      |
++| backup-manager  | `data/plugins/<id>/run.sh`                                                  | Excluded, like everywhere else in `data/`                                                                                                  |
++| scoped-deps     | Plugin reads its own `plugins.<id>.public_enabled`                          | Allowed                                                                                                                                    |
++| scoped-deps     | Plugin reads another plugin's, or writes its own                            | Refused                                                                                                                                    |
++| PluginPage      | Module exporting `mount`                                                    | Imported from `entryUrl`, mounted in the container; `api()` bound to `/api/v1/plugins/<id>/page/*`, a path without a leading slash refused |
++| PluginPage      | No installed plugin offers that page                                        | Says so, does not import anything                                                                                                          |
++| PluginPage      | Module without `mount()`, or that fails to load                             | Says so and names the reason; SPA stays navigable                                                                                          |
++| PluginPage      | Leaving the route                                                           | `unmount(container)` called, container emptied                                                                                             |
++
++### Counts
++
++23 route cases (`src/api/routes/plugin-surface.test.ts`), 7 on the page listing
++(`src/plugins/plugin-pages.test.ts`), 3 on `getDataDir`
++(`src/packages/package-manager.test.ts`), 3 on the settings proxy
++(`src/plugins/scoped-deps.test.ts`), 2 on the backup
++(`src/backup/backup-manager.test.ts`), 6 on the SPA page
++(`ui/src/pages/PluginPage.test.tsx`).
++
++### Retro-compat
++
++Every field is optional, every route is new, `PluginDeps` only grows. A plugin
++built before this spec loads and runs unchanged — covered by the existing
++`plugin-loader` and `scoped-deps` suites, which are untouched apart from the two
++new cases.
++
++## Gate 4 checks
++
++- `npx tsc --noEmit`, `npx tsc -p tsconfig.test.json`, `cd ui && npx tsc -b --noEmit`
++- `npx vitest run` and `cd ui && npx vitest run`
++- `npx eslint src/`, `npx prettier --check`
++- `bash scripts/check-specs-complete.sh && bash scripts/check-docs-parity.sh && bash scripts/check-docs-impact.sh && bash scripts/check-specs-index.sh folders`
+-- 
+2.47.1
+
+
+From 25333f78356b94ce01710704567075b6d6624ba0 Mon Sep 17 00:00:00 2001
+From: adrienJouve <adrien.jouve@adn-dev.fr>
+Date: Sun, 20 Sep 2026 21:22:12 +0200
+Subject: [PATCH 3/3] fix(plugins): a query key may not write on the map's own
+ shape
+
+CodeQL flagged `queryOf` as remote property injection, and it is right: the
+keys are whatever the caller typed after the `?`, and the map is handed to a
+plugin that reads it by name.
+
+- The map is null-prototype, like the one the settings route builds from a
+  request body.
+- `__proto__`, `constructor` and `prototype` are dropped rather than
+  forwarded: `__proto__` is swallowed by the setter instead of being stored,
+  and the other two shadow what a plugin may expect to find, so handing them
+  over would be handing over a map that lies.
+
+One route case added (24 now), spec and plan updated with it.
+---
+ .../architecture.md                              |  4 ++++
+ specs/180-plugin-pages-and-public-tree/plan.md   |  2 +-
+ specs/180-plugin-pages-and-public-tree/spec.md   |  4 ++--
+ src/api/routes/plugin-surface.test.ts            | 10 ++++++++++
+ src/api/routes/plugin-surface.ts                 | 16 +++++++++++++++-
+ 5 files changed, 32 insertions(+), 4 deletions(-)
+
+diff --git a/specs/180-plugin-pages-and-public-tree/architecture.md b/specs/180-plugin-pages-and-public-tree/architecture.md
+index 72b2f3d0..c3a4ca15 100644
+--- a/specs/180-plugin-pages-and-public-tree/architecture.md
++++ b/specs/180-plugin-pages-and-public-tree/architecture.md
+@@ -47,6 +47,10 @@ Three route trees, registered from `src/api/server.ts`:
+ - **Response headers are an allowlist** too (`PLUGIN_RESPONSE_HEADERS`).
+   Anything else is dropped with a warn log naming the header — `set-cookie`
+   deliberately included, so a plugin can never write on Sowel's origin.
++- **The query map is null-prototype and drops `__proto__`, `constructor` and
++  `prototype`.** Its keys are whatever the caller typed after the `?`, and the
++  plugin reads them by name; the same precaution the settings route takes with a
++  request body.
+ - `withTimeout` turns a plugin that never answers into a 504; a plugin that
+   throws is already degraded to `undefined` by spec 111, and the route answers
+   500 without echoing anything back.
+diff --git a/specs/180-plugin-pages-and-public-tree/plan.md b/specs/180-plugin-pages-and-public-tree/plan.md
+index 5075fc40..074bd540 100644
+--- a/specs/180-plugin-pages-and-public-tree/plan.md
++++ b/specs/180-plugin-pages-and-public-tree/plan.md
+@@ -76,7 +76,7 @@
+ 
+ ### Counts
+ 
+-23 route cases (`src/api/routes/plugin-surface.test.ts`), 7 on the page listing
++24 route cases (`src/api/routes/plugin-surface.test.ts`), 7 on the page listing
+ (`src/plugins/plugin-pages.test.ts`), 3 on `getDataDir`
+ (`src/packages/package-manager.test.ts`), 3 on the settings proxy
+ (`src/plugins/scoped-deps.test.ts`), 2 on the backup
+diff --git a/specs/180-plugin-pages-and-public-tree/spec.md b/specs/180-plugin-pages-and-public-tree/spec.md
+index e44c49a6..20c7b3ef 100644
+--- a/specs/180-plugin-pages-and-public-tree/spec.md
++++ b/specs/180-plugin-pages-and-public-tree/spec.md
+@@ -88,7 +88,7 @@ another machine holds the reason it exists.
+    namespace belongs to the plugin and a door a plugin can open for itself is
+    not a door anyone guards. Flipping it is audit-logged
+    (`plugin.public.enable` / `.disable`) and warn-logged.
+-8.bis The plugin may **read** its own flag through the scoped settings proxy —
++   8.bis The plugin may **read** its own flag through the scoped settings proxy —
+    and only its own — so its page can say the door is shut instead of leaving
+    the owner to work out why one they declared answers 404. Writing it is
+    refused like any other foreign key.
+@@ -148,7 +148,7 @@ another machine holds the reason it exists.
+ 
+ | File                                    | Covers                                             |
+ | --------------------------------------- | -------------------------------------------------- |
+-| `src/api/routes/plugin-surface.test.ts` | R1.2, R1.6, R2.7–R2.10, R4, R5 (23 cases)          |
++| `src/api/routes/plugin-surface.test.ts` | R1.2, R1.6, R2.7–R2.10, R4, R5 (24 cases)          |
+ | `src/plugins/plugin-pages.test.ts`      | R1.1–R1.3 (7 cases)                                |
+ | `src/packages/package-manager.test.ts`  | R3.11 (3 cases in `getDataDir`)                    |
+ | `src/backup/backup-manager.test.ts`     | R3.13 (2 cases)                                    |
+diff --git a/src/api/routes/plugin-surface.test.ts b/src/api/routes/plugin-surface.test.ts
+index ef2646df..84a51a27 100644
+--- a/src/api/routes/plugin-surface.test.ts
++++ b/src/api/routes/plugin-surface.test.ts
+@@ -176,6 +176,16 @@ describe("the page API", () => {
+     expect(seen[0].user).toEqual({ id: "u1", username: "adrien", role: "admin" });
+   });
+ 
++  it("drops a query key that would write on the map's own shape", async () => {
++    const app = await buildApp({ handlePage: async () => ({ body: {} }) });
++    await app.inject({
++      method: "GET",
++      url: "/api/v1/plugins/demo/page/x?__proto__=polluted&constructor=nope&view=active",
++    });
++    expect(seen[0].query).toEqual({ view: "active" });
++    expect(({} as Record<string, unknown>)["polluted"]).toBeUndefined();
++  });
++
+   it("never hands the caller's bearer token to the plugin", async () => {
+     const app = await buildApp({ handlePage: async () => ({ body: {} }) });
+     await app.inject({
+diff --git a/src/api/routes/plugin-surface.ts b/src/api/routes/plugin-surface.ts
+index d7693f40..28da2681 100644
+--- a/src/api/routes/plugin-surface.ts
++++ b/src/api/routes/plugin-surface.ts
+@@ -122,10 +122,24 @@ function subPath(params: Record<string, unknown>): string {
+   return `/${raw.replace(/^\/+/, "")}`;
+ }
+ 
++/**
++ * Property names that must never be written from a query string.
++ *
++ * The keys here are whatever the caller typed after the `?`, and the plugin
++ * receiving the map will read it by name. `__proto__` on a plain object is
++ * swallowed by the setter rather than stored, and `constructor` / `prototype`
++ * shadow what a plugin may legitimately expect to find — so the honest answer
++ * is to drop all three rather than hand over a map that lies.
++ */
++const UNSAFE_QUERY_KEYS = new Set(["__proto__", "constructor", "prototype"]);
++
+ function queryOf(request: FastifyRequest): Record<string, string> {
+-  const out: Record<string, string> = {};
++  // A null-prototype map, like the settings route does with a request body:
++  // nothing inherited can be mistaken for something the caller sent.
++  const out: Record<string, string> = Object.create(null) as Record<string, string>;
+   const query = (request.query ?? {}) as Record<string, unknown>;
+   for (const [key, value] of Object.entries(query)) {
++    if (UNSAFE_QUERY_KEYS.has(key)) continue;
+     if (typeof value === "string") out[key] = value;
+     else if (Array.isArray(value) && typeof value[0] === "string") out[key] = value[0];
+   }
+-- 
+2.47.1
 
