@@ -21,6 +21,7 @@ import { GuestAccessService } from "./service.js";
 import { GuestFlowConnector, type ConnectorConfig } from "./guestflow.js";
 import { createAdminApi } from "./admin-api.js";
 import { createPublicApi } from "./public-api.js";
+import { DEFAULT_GUEST_PATH, normaliseGuestPath } from "./guest-url.js";
 import { isAcceptableUrl } from "./url-guard.js";
 import type {
   Device,
@@ -144,6 +145,7 @@ class GuestAccessPlugin {
       connector: this.connector,
       gate: this.gate,
       guestBaseUrl: () => this.guestBaseUrl(),
+      guestPath: () => this.guestPath(),
       publicTreeOpen: () => deps.settingsManager.get(PUBLIC_FLAG_KEY) === "true",
       onChanged: (access) => {
         this.connector.markDirty(access);
@@ -153,6 +155,7 @@ class GuestAccessPlugin {
     this.guest = createPublicApi({
       service: this.service,
       guestBaseUrl: () => this.guestBaseUrl(),
+      guestPath: () => this.guestPath(),
     });
   }
 
@@ -179,6 +182,13 @@ class GuestAccessPlugin {
         type: "text",
         required: false,
         placeholder: "https://sowel.adn-dev.fr",
+      },
+      {
+        key: "guest_path",
+        label: "Path of the guests' page under that address",
+        type: "text",
+        required: false,
+        placeholder: DEFAULT_GUEST_PATH,
       },
       {
         key: "guestflow_base_url",
@@ -300,6 +310,23 @@ class GuestAccessPlugin {
     return isAcceptableUrl(raw) ? raw.replace(/\/+$/, "") : null;
   }
 
+  /**
+   * The default unless the house publishes Sowel under an alias of its own —
+   * a refused value is logged rather than repaired, because the link it would
+   * produce is only ever read by a guest standing at a gate.
+   */
+  private guestPath(): string {
+    const raw = this.setting("guest_path");
+    if (!raw) return DEFAULT_GUEST_PATH;
+    const path = normaliseGuestPath(raw);
+    if (path) return path;
+    this.deps.logger.warn(
+      { guestPath: raw },
+      "Guest access: unusable guests' path, falling back to " + DEFAULT_GUEST_PATH,
+    );
+    return DEFAULT_GUEST_PATH;
+  }
+
   /** All three, or no connector: a half-configured channel is not a channel. */
   private connectorConfig(): ConnectorConfig | null {
     const baseUrl = this.setting("guestflow_base_url");
@@ -313,6 +340,7 @@ class GuestAccessPlugin {
       signingSecret,
       pollSeconds: Number.isFinite(pollSeconds) ? pollSeconds : DEFAULT_POLL_SECONDS,
       guestBaseUrl: this.guestBaseUrl(),
+      guestPath: this.guestPath(),
     };
   }
 }

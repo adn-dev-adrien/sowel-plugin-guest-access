@@ -58,6 +58,7 @@ function connect(
     signingSecret: "secret",
     pollSeconds: 3600,
     guestBaseUrl: "https://sowel.example.com",
+    guestPath: "/p/guest-access/",
   });
   return { connector, calls, cursorOf: () => cursor, harness };
 }

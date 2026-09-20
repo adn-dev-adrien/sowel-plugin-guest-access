@@ -21,6 +21,7 @@ import {
 } from "./model.js";
 import { formatCode, generateCode, generateDeviceToken, hashToken, normalizeCode, randomId } from "./codes.js";
 import { AccessStore } from "./store.js";
+import { DEFAULT_GUEST_PATH, invitationUrl } from "./guest-url.js";
 import type { Gate, PressOutcome } from "./gate.js";
 import {
   decide,
@@ -543,9 +544,14 @@ export class GuestAccessService {
   }
 
   /** The invitation, as every surface shows it. */
-  invitation(access: Access, guestBaseUrl: string | null): { code: string; url: string | null } {
-    const code = formatCode(access.code);
-    if (!guestBaseUrl || !access.code) return { code, url: null };
-    return { code, url: `${guestBaseUrl.replace(/\/+$/, "")}/p/guest-access/#i=${access.code}` };
+  invitation(
+    access: Access,
+    guestBaseUrl: string | null,
+    guestPath: string = DEFAULT_GUEST_PATH,
+  ): { code: string; url: string | null } {
+    return {
+      code: formatCode(access.code),
+      url: invitationUrl(guestBaseUrl, guestPath, access.code),
+    };
   }
 }

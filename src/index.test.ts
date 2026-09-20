@@ -135,6 +135,7 @@ describe("the plugin Sowel loads", () => {
     const keys = plugin.getSettingsSchema().map((s) => s.key);
     expect(keys).toEqual([
       "guest_base_url",
+      "guest_path",
       "guestflow_base_url",
       "guestflow_api_key",
       "guestflow_signing_secret",

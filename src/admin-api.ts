@@ -16,12 +16,15 @@ import { stateOf } from "./guestflow.js";
 import type { Gate } from "./gate.js";
 import { effectiveWindow } from "./validity.js";
 import { formatCode } from "./codes.js";
+import { DEFAULT_GUEST_PATH } from "./guest-url.js";
 
 export interface AdminDeps {
   service: GuestAccessService;
   connector: GuestFlowConnector;
   gate: Gate;
   guestBaseUrl(): string | null;
+  /** Where the guests' page answers under that address (see guest-url.ts). */
+  guestPath(): string;
   publicTreeOpen(): boolean;
   /** Ask the connector to push what changed, without waiting for the loop. */
   onChanged(access: Access | undefined): void;
@@ -56,9 +59,10 @@ export function shapeAccess(
   guestBaseUrl: string | null,
   now: Date,
   service: GuestAccessService,
+  guestPath: string = DEFAULT_GUEST_PATH,
 ): AccessRow {
   const window = effectiveWindow(access);
-  const invitation = service.invitation(access, guestBaseUrl);
+  const invitation = service.invitation(access, guestBaseUrl, guestPath);
   return {
     id: access.id,
     kind: access.kind,
@@ -97,9 +101,10 @@ export function createAdminApi(deps: AdminDeps) {
 
   const stateBody = (now = new Date()) => {
     const guestBaseUrl = deps.guestBaseUrl();
+    const guestPath = deps.guestPath();
     const rows = service
       .list()
-      .map((a) => shapeAccess(a, guestBaseUrl, now, service))
+      .map((a) => shapeAccess(a, guestBaseUrl, now, service, guestPath))
       .sort((a, b) => a.label.localeCompare(b.label, "fr"));
 
     return {
@@ -118,8 +123,11 @@ export function createAdminApi(deps: AdminDeps) {
       guestflow: connector.state(),
       publicTree: {
         open: deps.publicTreeOpen(),
-        path: "/p/guest-access/",
+        // Where Sowel itself answers, which is what the owner checks when the
+        // page 404s — never the same field as the address the guests get.
+        path: DEFAULT_GUEST_PATH,
         guestBaseUrl,
+        guestPath,
       },
     };
   };
@@ -143,7 +151,7 @@ export function createAdminApi(deps: AdminDeps) {
     if (method === "POST" && path === "/accesses") {
       const result = service.createManual(body, actor);
       if (result.refusal) return refuse(result.refusal);
-      return { status: 201, body: { access: shapeAccess(result.access!, deps.guestBaseUrl(), new Date(), service) } };
+      return { status: 201, body: { access: shapeAccess(result.access!, deps.guestBaseUrl(), new Date(), service, deps.guestPath()) } };
     }
 
     if (method === "POST" && path === "/sync") {
@@ -161,7 +169,7 @@ export function createAdminApi(deps: AdminDeps) {
         if (result.missing) return notFound;
         if (result.refusal) return refuse(result.refusal);
         deps.onChanged(result.access);
-        return ok({ access: shapeAccess(result.access!, deps.guestBaseUrl(), new Date(), service) });
+        return ok({ access: shapeAccess(result.access!, deps.guestBaseUrl(), new Date(), service, deps.guestPath()) });
       }
 
       if (method === "DELETE" && !action) {
@@ -184,7 +192,7 @@ export function createAdminApi(deps: AdminDeps) {
         const access = run();
         if (!access) return notFound;
         deps.onChanged(access);
-        return ok({ access: shapeAccess(access, deps.guestBaseUrl(), new Date(), service) });
+        return ok({ access: shapeAccess(access, deps.guestBaseUrl(), new Date(), service, deps.guestPath()) });
       }
     }
 

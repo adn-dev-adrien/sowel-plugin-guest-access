@@ -108,6 +108,16 @@ Sowel and the guests a page of their own, and treats guestFlow as one optional s
     it** (core spec 180). Plain HTML, CSS and JavaScript, a few kilobytes, installable.
 18. The invitation link carries the code **in the fragment** (`/#i=…`), which no server, proxy or
     access log ever sees. It is consumed once and removed from the address bar.
+    Its address is **two settings, not a constant**: `guest_base_url`, the name the house publishes,
+    and `guest_path`, where the page answers under that name (`/p/guest-access/` by default). A house
+    that fronts Sowel under a name of its own — `acces.domainesolio.com`, a vhost whose tree is
+    rewritten onto `/p/guest-access/` upstream — sets the path to `/` and hands its guests
+    `https://acces.domainesolio.com/#i=CODE`. **That rewrite must cover the whole subtree, not just
+    the root**: the page fetches `app.js`, `style.css`, `icon.svg` and `enrol` relative to itself, so
+    a rule mapping the root alone serves an HTML page whose every asset 404s. A path that is not
+    plainly a path is refused and logged rather than repaired — a nearly-right link is discovered by
+    a guest standing at a gate. The owner's page states the link its guests get and the tree the
+    alias has to rewrite onto.
 19. A phone keeps a token of its own; only its SHA-256 is stored. The code is never kept on the phone.
 20. **The control is a slide**, with a keyboard equivalent. **Nothing is said on success.** A failure
     note replaces the previous one rather than stacking.
@@ -156,6 +166,7 @@ Sowel and the guests a page of their own, and treats guestFlow as one optional s
 | `model.ts` | What an access is, and the ceilings |
 | `paris.ts` | The Paris wall clock, both transitions, no dependency |
 | `codes.ts` | The code a guest dictates and the token a phone keeps |
+| `guest-url.ts` | The address the guest is given: the alias, its path, the fragment |
 | `validity.ts` | The window in force, the decision, and what the owner may write |
 | `store.ts` | Two JSON files in `dataDir`, written atomically, corrupt ones kept aside |
 | `gate.ts` | The device, the counter, and waiting for the recipe's answer |
@@ -175,7 +186,7 @@ times a week, and a file the owner can read after a power cut.
 
 ## 6. Test plan
 
-152 unit tests, `npm test`:
+162 unit tests, `npm test`:
 
 | Suite | Covers |
 |---|---|
@@ -192,9 +203,12 @@ times a week, and a file the owner can read after a power cut.
 | `guestflow` (13) | Pull, push, the pending push, the signature, the HTTP refusal |
 | `index` (8) | The core contract, the orders, the data directory |
 | `url-guard` (5) | HTTPS or localhost, and the host that merely contains « localhost » |
+| `guest-url` (10) | The alias, the path it is served under, what is refused, the fragment |
 
 Manual: install, open the public access, flash the link on a phone, press in front of the gate, cut
-guestFlow off and check that everything else still answers.
+guestFlow off and check that everything else still answers. Under an alias, check it on the alias:
+the page must arrive styled and its slide must work, which is what proves the rewrite covers more
+than the root.
 
 ## 7. Out of scope
 

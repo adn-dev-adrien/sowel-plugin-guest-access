@@ -28,6 +28,7 @@ import {
 export interface PublicDeps {
   service: GuestAccessService;
   guestBaseUrl(): string | null;
+  guestPath(): string;
 }
 
 const NO_STORE = { "cache-control": "no-store" };
@@ -53,7 +54,7 @@ export function createPublicApi(deps: PublicDeps) {
       // they are sleeping.
       label: access.label,
       until: window.to ? window.to.toISOString() : null,
-      invitationUrl: service.invitation(access, deps.guestBaseUrl()).url,
+      invitationUrl: service.invitation(access, deps.guestBaseUrl(), deps.guestPath()).url,
       decision: decision.ok ? { ok: true } : { ...decision, reason: decision.reason },
     };
   };

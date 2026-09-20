@@ -63,6 +63,7 @@ portail ne bougera pas.
 | Clé | Exemple | Rôle |
 | --- | --- | --- |
 | `guest_base_url` | `https://sowel.adn-dev.fr` | L'adresse publique de Sowel, **en HTTPS**, telle que le téléphone d'un client la joint. Sans elle, les liens d'invitation ne peuvent pas être fabriqués — le code reste tapable. |
+| `guest_path` | `/` | Facultatif. Là où la page des clients répond **sous cette adresse**. Par défaut `/p/guest-access/`, le chemin que le cœur de Sowel impose. Mettez `/` si l'adresse ci-dessus est un alias dédié (voir plus bas). |
 | `guestflow_base_url` | `https://guestflow.adn-dev.fr` | Facultatif. Sans les trois champs guestFlow, le connecteur ne démarre pas et tout le reste fonctionne. |
 | `guestflow_api_key` | (secret) | `GATE_API_KEY`, auto-généré dans le `server/.env.local` de guestFlow. |
 | `guestflow_signing_secret` | (secret) | `GATE_SIGNING_SECRET`. Il ne circule jamais : il signe. |
@@ -72,6 +73,35 @@ portail ne bougera pas.
 administrateur n'a pas ouvert l'**accès public** du plugin (Sowel → Plugins → Accès invités). Une
 porte anonyme qui s'ouvre parce qu'on a installé quelque chose est une porte que personne ne remarque ;
 celle-ci demande un clic délibéré. La page de gestion le dit en toutes lettres tant que c'est fermé.
+
+### Donner aux clients une adresse à vous
+
+Le cœur de Sowel sert la page des clients sous un chemin qu'il choisit lui-même, `/p/guest-access/`.
+Ce n'est pas une adresse qu'on a envie de lire dans un e-mail. Un sous-domaine dédié, posé devant
+Sowel, règle ça sans redirection : le client reste sur votre nom, du QR jusqu'à l'ouverture.
+
+```caddy
+acces.domainesolio.com {
+    rewrite * /p/guest-access{uri}
+    reverse_proxy sowel:3000
+}
+```
+
+Puis, dans les réglages du plugin : `guest_base_url = https://acces.domainesolio.com` et
+`guest_path = /`. Les clients reçoivent `https://acces.domainesolio.com/#i=4K7M9QT2`.
+
+**La réécriture doit couvrir tout l'arbre, pas seulement la racine.** La page appelle `app.js`,
+`style.css`, `icon.svg` et `enrol` relativement à elle-même : une règle qui ne mappe que `/` sert une
+page HTML dont tous les fichiers répondent 404 — elle s'affiche nue et le slide ne fait rien. C'est
+exactement ce que teste la vérification manuelle « ouvrir le lien sur l'alias, depuis un téléphone ».
+
+**Une redirection 301 ferait autre chose.** Le client verrait `sowel.adn-dev.fr` dans sa barre
+d'adresse dès l'ouverture, et le code ne survivrait au saut que parce que les navigateurs conservent
+le fragment — un comportement conforme, mais qu'on n'a aucune raison de mettre sur le chemin critique.
+L'alias, lui, ne redirige rien : c'est la même page, servie sous votre nom.
+
+**Le code reste dans le fragment dans tous les cas.** Un fragment n'est jamais envoyé au serveur :
+ni Sowel, ni l'alias, ni quoi que ce soit entre les deux n'en voit passer un seul dans ses journaux.
 
 ## Le connecteur guestFlow, dans les deux sens
 

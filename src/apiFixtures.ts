@@ -10,6 +10,7 @@ import { GuestAccessService } from "./service.js";
 import { GuestFlowConnector } from "./guestflow.js";
 import { createAdminApi } from "./admin-api.js";
 import { createPublicApi } from "./public-api.js";
+import { DEFAULT_GUEST_PATH } from "./guest-url.js";
 import type { PluginHttpRequest, PluginHttpResponse } from "./plugin-contract.js";
 
 export const silent = { info: () => {}, debug: () => {}, warn: () => {}, error: () => {} };
@@ -34,12 +35,13 @@ export interface ApiHarness {
 }
 
 export function makeApiHarness(
-  opts: { guestBaseUrl?: string | null; publicOpen?: boolean } = {},
+  opts: { guestBaseUrl?: string | null; guestPath?: string; publicOpen?: boolean } = {},
 ): ApiHarness {
   // `?? default` would turn an explicit null — « nobody has said where Sowel is
   // reachable » — back into an address, which is the case worth testing.
   const guestBaseUrl = (): string | null =>
     opts.guestBaseUrl === undefined ? "https://sowel.example.com" : opts.guestBaseUrl;
+  const guestPath = (): string => opts.guestPath ?? DEFAULT_GUEST_PATH;
   const dir = mkdtempSync(resolve(tmpdir(), "guest-access-api-"));
   const store = new AccessStore(dir, silent);
   const gate = new Gate({
@@ -77,13 +79,14 @@ export function makeApiHarness(
         connector,
         gate,
         guestBaseUrl,
+        guestPath,
         publicTreeOpen: () => harness.publicOpen,
         onChanged: () => {},
       });
       return handle(request(method, path, options));
     },
     async guest(method, path, options = {}) {
-      const handle = createPublicApi({ service, guestBaseUrl });
+      const handle = createPublicApi({ service, guestBaseUrl, guestPath });
       return handle(
         request(method, path, {
           ...options,

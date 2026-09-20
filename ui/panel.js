@@ -23,6 +23,7 @@ const S = {
     doorShut: "Page des clients fermée",
     doorShutHelp: "Ouvrez « Accès public » dans Plugins → Accès invités, sinon le lien des clients répond 404.",
     noGuestUrl: "Adresse publique de Sowel non renseignée : les liens d'invitation ne peuvent pas être fabriqués (Réglages du plugin).",
+    aliasNote: "Les clients reçoivent {link} — ce nom doit réécrire tout son arbre vers {tree}, pas seulement sa racine, sinon la page s'affiche sans style et les boutons ne répondent pas.",
     guestflowOff: "Aucun guestFlow configuré — les accès sont créés à la main.",
     guestflowOk: "guestFlow synchronisé",
     guestflowKo: "guestFlow injoignable",
@@ -115,6 +116,7 @@ const S = {
     doorShut: "Guests' page is shut",
     doorShutHelp: "Open « Public access » in Plugins → Guest access, or the guests' link answers 404.",
     noGuestUrl: "Sowel's public address is not set: invitation links cannot be built (plugin settings).",
+    aliasNote: "Guests are given {link} — that name must rewrite its whole tree onto {tree}, not just its root, or the page loads without its style and its buttons do nothing.",
     guestflowOff: "No guestFlow configured — accesses are made by hand.",
     guestflowOk: "guestFlow in step",
     guestflowKo: "guestFlow unreachable",
@@ -358,6 +360,13 @@ export async function mount(container, ctx) {
     const notes = [];
     if (!data.publicTree.open) notes.push(t("doorShutHelp"));
     if (!data.publicTree.guestBaseUrl) notes.push(t("noGuestUrl"));
+    if (data.publicTree.guestBaseUrl && data.publicTree.guestPath !== data.publicTree.path)
+      notes.push(
+        t("aliasNote", {
+          link: `${data.publicTree.guestBaseUrl}${data.publicTree.guestPath}`,
+          tree: data.publicTree.path,
+        }),
+      );
     if (!data.house.recipeAnswering) notes.push(t("recipeMissing"));
     if (data.guestflow.pendingPushes)
       notes.push(t("pending", { n: data.guestflow.pendingPushes }));

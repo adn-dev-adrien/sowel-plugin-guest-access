@@ -28,6 +28,7 @@
 import { createHash, createHmac } from "node:crypto";
 import type { Access } from "./model.js";
 import type { GuestAccessService, StayFeedItem } from "./service.js";
+import { DEFAULT_GUEST_PATH } from "./guest-url.js";
 import { isAcceptableUrl } from "./url-guard.js";
 import { effectiveWindow } from "./validity.js";
 
@@ -44,6 +45,8 @@ export interface ConnectorConfig {
   signingSecret: string;
   pollSeconds: number;
   guestBaseUrl: string | null;
+  /** Where the guests' page answers under that address (see guest-url.ts). */
+  guestPath: string;
 }
 
 export interface ConnectorState {
@@ -278,7 +281,11 @@ export class GuestFlowConnector {
       // nothing, and its fiche then offers « recréer ».
       return { reservationId, state: "deleted" as const };
     }
-    const invitation = this.service.invitation(access, this.config?.guestBaseUrl ?? null);
+    const invitation = this.service.invitation(
+      access,
+      this.config?.guestBaseUrl ?? null,
+      this.config?.guestPath ?? DEFAULT_GUEST_PATH,
+    );
     const window = effectiveWindow(access);
     return {
       reservationId,
