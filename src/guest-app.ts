@@ -311,6 +311,11 @@ async function enrol(code) {
 }
 
 async function operate() {
+  // The previous answer goes first. Nothing is said on success, so a refusal
+  // left on screen would still be there after the press that worked — the page
+  // would be telling a guest the house did not answer while the gate moves in
+  // front of them.
+  say("");
   const { ok, payload } = await call("open", {});
   // Nothing is said on success — the gate is moving and the guest is driving in.
   if (!ok || payload.outcome !== "opened") say(reason(payload));

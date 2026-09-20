@@ -178,6 +178,22 @@ Sowel and the guests a page of their own, and treats guestFlow as one optional s
 | `index.ts` | The Sowel contract: settings, device, orders, the two HTTP surfaces |
 | `ui/panel.js` | The owner's page, plain DOM, Sowel's design tokens |
 
+### The device's identity
+
+The device is declared — and addressed — as **« Accès invités »**. Sowel keys a discovered device by
+its `friendlyName`: that string becomes `source_device_id`, and every later data update, status
+change and order is matched against it. A lookup that misses is not an error anywhere, the core
+simply returns. So a plugin whose declared name and published id differ publishes into a void: the
+counter never moves, no recipe is ever triggered, and the recipe's answer comes back « Unknown
+device ». v0.3 shipped exactly that. The name is also why it must not be renamed here: an installed
+Sowel would file a second device and leave every equipment bound to the first.
+
+**The counter is published at rest**, on start, before anyone can press. The recipe takes the
+counter as it stands for its starting point and only fires above it, so an unpublished counter makes
+the first guest's press its own starting point — swallowed, in front of a gate. Publishing the
+resting value is also what re-bases the recipe after a Sowel restart, when the in-memory counter
+begins again at zero.
+
 ## 5. Data
 
 `data/plugins/guest-access/accesses.json` and `journal.json` (core spec 180 — the directory survives
@@ -186,7 +202,7 @@ times a week, and a file the owner can read after a power cut.
 
 ## 6. Test plan
 
-162 unit tests, `npm test`:
+165 unit tests, `npm test`:
 
 | Suite | Covers |
 |---|---|

@@ -37,7 +37,22 @@ export type GateState = "open" | "closed" | "unknown";
 export type RecipeOutcome = "opened" | "already_open" | "refused" | "error";
 export type PressOutcome = "opened" | RefusalReason;
 
-export const DEVICE_ID = "guest-access";
+/**
+ * The device's identity in Sowel.
+ *
+ * The core keys a discovered device by its `friendlyName` — that string becomes
+ * `source_device_id` — and finds it again by that exact string on every data
+ * update, status change and order (`DeviceManager.upsertFromDiscovery`, then
+ * `findDeviceBySource`). A lookup that misses is not an error anywhere: the
+ * core returns early and the plugin is none the wiser.
+ *
+ * v0.3 declared « Accès invités » and published under `guest-access`, so none
+ * of its updates matched a device: the counter never moved, no recipe was ever
+ * triggered, and the recipe's `result` came back « Unknown device ». Declaring
+ * the name as the id is what keeps the two in step — and it keeps the device
+ * row an earlier install created, with every equipment bound to it.
+ */
+export const DEVICE_ID = "Accès invités";
 export const REQUESTS_KEY = "requests";
 
 /** How long the phone waits for the house to answer before being told nothing came. */
@@ -57,7 +72,7 @@ const MAX_QUEUE = 3;
  */
 export function describeDevice(): Record<string, unknown> {
   return {
-    friendlyName: "Accès invités",
+    friendlyName: DEVICE_ID,
     manufacturer: "Sowel",
     model: "Guest gate access",
     data: [
@@ -137,6 +152,20 @@ export class Gate {
     // to be reached for a guest to be served. What may be missing is the link
     // to guestFlow, which is its own reading.
     this.opts.deviceManager.updateDeviceStatus(this.opts.integrationId, DEVICE_ID, "online");
+
+    // The counter at rest, published before anyone can press.
+    //
+    // The recipe takes the counter as it stands for its starting point and only
+    // fires on a value ABOVE it, so that a restart never opens the gate. On an
+    // installation where the counter has never been published the reading is
+    // null, that starting point is the guest's first press — and the first
+    // guest ever to use a new installation is told the house did not answer,
+    // standing at the gate.
+    //
+    // Publishing the resting value is also what re-bases the recipe after a
+    // Sowel restart, when this counter starts from zero again: whichever of the
+    // two reads the other first, both end up on the same number.
+    this.publish({ [REQUESTS_KEY]: this.requestCount });
   }
 
   stop(): void {

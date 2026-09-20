@@ -3,15 +3,37 @@ import { Gate, DEVICE_ID, describeDevice, REQUESTS_KEY } from "./gate.js";
 
 const silent = { info: () => {}, debug: () => {}, warn: () => {}, error: () => {} };
 
+/**
+ * A device manager that behaves like the core's: it stores the device under the
+ * `friendlyName` it was handed, and every later update has to name that exact
+ * string or it lands nowhere — silently, which is how v0.3 shipped a plugin
+ * whose counter never moved.
+ *
+ * A double that ignored the id would let that come back without a red test.
+ */
 function makeGate(answerMs = 50) {
   const data: Array<Record<string, unknown>> = [];
   const statuses: string[] = [];
+  const missed: string[] = [];
+  let registeredAs: string | null = null;
   const deviceManager = {
-    upsertFromDiscovery: vi.fn(),
-    updateDeviceData: (_i: string, _d: string, payload: Record<string, unknown>) => {
+    upsertFromDiscovery: vi.fn(
+      (_i: string, _source: string, discovered: Record<string, unknown>) => {
+        registeredAs = discovered.friendlyName as string;
+      },
+    ),
+    updateDeviceData: (_i: string, id: string, payload: Record<string, unknown>) => {
+      if (id !== registeredAs) {
+        missed.push(id);
+        return;
+      }
       data.push(payload);
     },
-    updateDeviceStatus: (_i: string, _d: string, status: string) => {
+    updateDeviceStatus: (_i: string, id: string, status: string) => {
+      if (id !== registeredAs) {
+        missed.push(id);
+        return;
+      }
       statuses.push(status);
     },
   };
@@ -21,10 +43,18 @@ function makeGate(answerMs = 50) {
     logger: silent,
     answerMs,
   });
-  return { gate, data, statuses, deviceManager };
+  return { gate, data, statuses, missed, deviceManager };
 }
 
 const press = { accessId: "a1", label: "Camille", stay: "Le Gîte · 202609042" };
+
+/**
+ * The publishes a PRESS made, as opposed to the resting counter the plugin
+ * publishes on start. A press is the one that carries `last_request_at`.
+ */
+function pressPublishes(data: Array<Record<string, unknown>>) {
+  return data.filter((d) => "last_request_at" in d);
+}
 
 describe("the device", () => {
   it("still carries what the recipe binds to", () => {
@@ -40,7 +70,7 @@ describe("the device", () => {
   });
 
   it("is online as soon as the plugin runs — nothing has to be reached", () => {
-    const { gate, statuses, deviceManager } = makeGate();
+    const { gate, statuses, missed, deviceManager } = makeGate();
     gate.start();
     expect(deviceManager.upsertFromDiscovery).toHaveBeenCalledWith(
       "guest-access",
@@ -48,6 +78,41 @@ describe("the device", () => {
       expect.any(Object),
     );
     expect(statuses).toEqual(["online"]);
+    expect(missed).toEqual([]);
+  });
+
+  it("keeps the exact name earlier versions filed it under", () => {
+    // The core stores `friendlyName` as `source_device_id` and looks the device
+    // up by that string on every write, so the id and the declared name must be
+    // one value — they are, `describeDevice` reads DEVICE_ID.
+    //
+    // This pins the STRING as well, and that is the part a rename would break:
+    // change it and an installed Sowel files a second device, leaving the first
+    // one — and every equipment and recipe bound to it — pointing at a plugin
+    // that no longer writes there. Renaming the device in the UI is safe (the
+    // core keeps `source_device_id`); renaming it here is not.
+    expect(DEVICE_ID).toBe("Accès invités");
+    expect((describeDevice() as { friendlyName: string }).friendlyName).toBe(DEVICE_ID);
+  });
+});
+
+describe("the counter at rest", () => {
+  // The recipe only fires on a value ABOVE the one it started from. A counter
+  // that is published for the first time BY a press makes that press the
+  // starting point, and it is swallowed — in front of a gate.
+  it("is published as soon as the plugin runs, before anyone can press", () => {
+    const { gate, data } = makeGate();
+    gate.start();
+    expect(data).toEqual([{ [REQUESTS_KEY]: 0 }]);
+  });
+
+  it("so the very first press of a new installation counts above it", async () => {
+    const { gate, data } = makeGate();
+    gate.start();
+    void gate.press(press);
+    const counts = data.map((d) => d[REQUESTS_KEY]).filter((v) => v !== undefined);
+    expect(counts).toEqual([0, 1]);
+    expect(pressPublishes(data)).toHaveLength(1);
   });
 });
 
@@ -75,9 +140,7 @@ describe("a press", () => {
     const second = harness.gate.press({ ...press, accessId: "a2" });
     harness.gate.reportResult("opened");
     await second;
-    const counters = harness.data
-      .filter((d) => REQUESTS_KEY in d)
-      .map((d) => d[REQUESTS_KEY]);
+    const counters = pressPublishes(harness.data).map((d) => d[REQUESTS_KEY]);
     expect(counters).toEqual([1, 2]);
   });
 
@@ -106,7 +169,7 @@ describe("a press", () => {
     await expect(first).resolves.toBe("opened");
     await expect(second).resolves.toBe("opened");
     // One press reached the recipe, not two.
-    expect(harness.data.filter((d) => REQUESTS_KEY in d)).toHaveLength(1);
+    expect(pressPublishes(harness.data)).toHaveLength(1);
   });
 
   it("still lets a guest close the gate behind them", async () => {
@@ -117,18 +180,18 @@ describe("a press", () => {
     const second = harness.gate.press(press);
     harness.gate.reportResult("opened");
     await expect(second).resolves.toBe("opened");
-    expect(harness.data.filter((d) => REQUESTS_KEY in d)).toHaveLength(2);
+    expect(pressPublishes(harness.data)).toHaveLength(2);
   });
 
   it("queues two guests rather than racing them", async () => {
     const first = harness.gate.press(press);
     const second = harness.gate.press({ ...press, accessId: "a2" });
     // Only the first has reached the recipe so far.
-    expect(harness.data.filter((d) => REQUESTS_KEY in d)).toHaveLength(1);
+    expect(pressPublishes(harness.data)).toHaveLength(1);
     harness.gate.reportResult("opened");
     await expect(first).resolves.toBe("opened");
     await new Promise((r) => setTimeout(r, 1));
-    expect(harness.data.filter((d) => REQUESTS_KEY in d)).toHaveLength(2);
+    expect(pressPublishes(harness.data)).toHaveLength(2);
     harness.gate.reportResult("refused");
     await expect(second).resolves.toBe("refused_by_house");
   });

@@ -6,6 +6,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { createPlugin } from "./index.js";
+import { DEVICE_ID } from "./gate.js";
 
 const silent = { info: () => {}, debug: () => {}, warn: () => {}, error: () => {} };
 const dirs: string[] = [];
@@ -110,10 +111,12 @@ describe("the plugin Sowel loads", () => {
   it("takes the recipe's two orders, and refuses anything else", async () => {
     const { plugin } = makePlugin();
     await plugin.start();
+    // What the core really hands back: it files a discovered device under its
+    // `friendlyName`, so THAT is the `sourceDeviceId` an order arrives with.
     const device = {
       id: "d",
       integrationId: "guest-access",
-      sourceDeviceId: "guest-access",
+      sourceDeviceId: DEVICE_ID,
       name: "Accès invités",
     };
 
