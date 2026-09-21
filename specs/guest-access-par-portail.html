@@ -1,0 +1,482 @@
+<!doctype html>
+<html lang="fr">
+<meta charset="utf-8">
+<title>Accès par portail</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+:root{
+  color-scheme: light dark;
+  --paper:#F5F0E6; --card:#FFFDF8; --ink:#1F241D; --muted:#5F665A; --line:#DDD5C4;
+  --sapin:#2E3B2A; --lichen:#5A6B48; --ocre:#B87B2A; --ok:#2F6B3A; --ko:#A33A2A;
+  --vert:#E1EBD3; --ambre:#F3E1C1; --gris:#ECE6D8;
+  --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  --serif:"Iowan Old Style","Palatino Linotype",Palatino,Georgia,serif;
+  --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+  /* Sowel, ses vraies couleurs */
+  --s-bg:#F4F6F8; --s-surface:#FFFFFF; --s-text:#16202a; --s-muted:#5c6b79; --s-faint:#9aa8b4;
+  --s-line:#e5e9ed; --s-line2:#dfe4e9; --s-primary:#1A4F6E; --s-primary-soft:#E3EEF4;
+  --s-ok:#1FA260; --s-warn:#F2C035; --s-ko:#b3261e; --s-hover:#eef1f4; --s-disabled:#c9d1d8;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --paper:#161C16; --card:#1F261E; --ink:#EDE8DC; --muted:#A8AE9F; --line:#39433A;
+    --sapin:#C9D8BC; --lichen:#9DB286; --ocre:#E0A956; --ok:#7CC48A; --ko:#EE8A7A;
+    --vert:#2B3A26; --ambre:#443520; --gris:#2C2A22;
+    --s-bg:#0f151b; --s-surface:#182028; --s-text:#e9eef2; --s-muted:#9aa8b4; --s-faint:#6b7a87;
+    --s-line:#26313b; --s-line2:#2a353f; --s-primary:#7FB8D4; --s-primary-soft:#1d3342;
+    --s-ok:#3DDB89; --s-warn:#F2BC6E; --s-ko:#e8827a; --s-hover:#212c36; --s-disabled:#3a4650;
+  }
+}
+:root[data-theme="dark"]{
+  --paper:#161C16; --card:#1F261E; --ink:#EDE8DC; --muted:#A8AE9F; --line:#39433A;
+  --sapin:#C9D8BC; --lichen:#9DB286; --ocre:#E0A956; --ok:#7CC48A; --ko:#EE8A7A;
+  --vert:#2B3A26; --ambre:#443520; --gris:#2C2A22;
+  --s-bg:#0f151b; --s-surface:#182028; --s-text:#e9eef2; --s-muted:#9aa8b4; --s-faint:#6b7a87;
+  --s-line:#26313b; --s-line2:#2a353f; --s-primary:#7FB8D4; --s-primary-soft:#1d3342;
+  --s-ok:#3DDB89; --s-warn:#F2BC6E; --s-ko:#e8827a; --s-hover:#212c36; --s-disabled:#3a4650;
+}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+body{margin:0;background:var(--paper);color:var(--ink);font:15px/1.55 var(--sans)}
+.wrap{max-width:1060px;margin:0 auto;padding:28px 16px 90px}
+h1{font:600 31px/1.2 var(--serif);color:var(--sapin);margin:0 0 4px}
+h2{font:600 22px/1.25 var(--serif);color:var(--sapin);margin:48px 0 10px;padding-top:8px;border-top:1px solid var(--line)}
+h3{font:600 13px/1.3 var(--sans);margin:18px 0 8px;text-transform:uppercase;letter-spacing:.07em;color:var(--lichen)}
+p{margin:0 0 10px}
+.meta{color:var(--muted);font-size:13.5px;margin-bottom:18px}
+.lead{color:var(--muted);max-width:830px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:16px}
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:14px}
+ul.tight{margin:6px 0 0;padding-left:18px} ul.tight li{margin:5px 0}
+.note{border-left:4px solid var(--ocre);background:var(--card);padding:12px 14px;border-radius:6px;margin:12px 0}
+.good{border-left:4px solid var(--ok);background:var(--card);padding:12px 14px;border-radius:6px;margin:12px 0}
+.ask{background:var(--ambre);border:1px solid var(--line);border-radius:10px;padding:14px 16px;margin:14px 0}
+.ask b{display:block;margin-bottom:4px}
+.tblwrap{overflow-x:auto}
+table.plain{border-collapse:collapse;width:100%;font-size:14px;min-width:560px}
+table.plain th,table.plain td{border-bottom:1px solid var(--line);padding:9px 8px;text-align:left;vertical-align:top}
+table.plain th{font-size:12.5px;color:var(--muted);font-weight:600}
+code{font-family:var(--mono);font-size:12.5px}
+button.seg{font:inherit;border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:8px;padding:9px 13px;min-height:44px;cursor:pointer}
+button.seg[aria-pressed=true]{background:var(--sapin);color:var(--paper);border-color:var(--sapin)}
+.segrow{display:flex;gap:8px;flex-wrap:wrap;margin:6px 0 14px}
+s.gone{color:var(--muted)}
+
+/* ── la coque Sowel ───────────────────────────── */
+.sw{background:var(--s-bg);color:var(--s-text);border:1px solid var(--line);border-radius:12px;overflow:hidden;font:14px/1.45 var(--sans);display:grid;grid-template-columns:200px 1fr;min-height:420px}
+.sw svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.side{background:var(--s-surface);border-right:1px solid var(--s-line);padding:12px 8px;display:flex;flex-direction:column;gap:2px}
+.side .logo{font:800 15px/1 var(--sans);letter-spacing:.18em;color:var(--s-primary);padding:6px 10px 14px}
+.nav{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:8px;color:var(--s-muted);cursor:default;font-size:13.5px}
+.nav.on{background:var(--s-primary-soft);color:var(--s-primary);font-weight:600}
+.nav.sub{padding-left:24px;font-size:13px}
+.side .sep{height:1px;background:var(--s-line);margin:6px 4px}
+.side .admin{margin-top:auto;border-top:1px solid var(--s-line);padding-top:6px}
+.main{padding:18px;min-width:0}
+.crumb{font-size:12px;color:var(--s-muted);margin-bottom:6px}
+.main h4{font-size:18px;font-weight:600;margin:0 0 2px}
+.main .sub2{font-size:12px;color:var(--s-muted);margin:0 0 12px}
+.tabs{display:flex;gap:4px;border-bottom:1px solid var(--s-line);margin-bottom:12px;overflow-x:auto}
+.tab{font:inherit;font-size:13px;background:none;border:0;border-bottom:2px solid transparent;color:var(--s-muted);padding:8px 12px;cursor:pointer;display:flex;gap:6px;align-items:center;white-space:nowrap}
+.tab[aria-selected=true]{color:var(--s-primary);border-color:var(--s-primary);font-weight:600}
+.tab .n{font-size:11px;background:var(--s-hover);border-radius:99px;padding:0 7px;color:var(--s-muted)}
+.eqcard{background:var(--s-surface);border:1px solid var(--s-line);border-radius:12px;padding:12px 14px;margin-bottom:10px}
+.eqcard h5{margin:0 0 8px;font-size:14px}
+.slot{display:flex;align-items:center;gap:8px;color:var(--s-muted);font-size:13px}
+
+/* ── la liste ─────────────────────────────── */
+.toolbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px}
+.toolbar .grow{flex:1}
+.chip{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--s-line);border-radius:999px;padding:3px 10px;font-size:12px;background:var(--s-surface);color:var(--s-muted);min-height:28px}
+.chip button{all:unset;cursor:pointer;display:inline-flex;color:var(--s-muted)}
+.chip button svg{width:14px;height:14px}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--s-faint)} .dot.ok{background:var(--s-ok)} .dot.ko{background:var(--s-ko)}
+.ib{all:unset;box-sizing:border-box;width:34px;height:34px;border-radius:8px;display:inline-flex;align-items:center;justify-content:center;color:var(--s-muted);cursor:pointer;position:relative}
+.ib:hover{background:var(--s-hover);color:var(--s-text)}
+.ib:focus-visible{outline:2px solid var(--s-primary)}
+.ib[data-tip]:hover::after{content:attr(data-tip);position:absolute;bottom:calc(100% + 4px);left:50%;transform:translateX(-50%);background:var(--s-text);color:var(--s-surface);font-size:11px;padding:3px 8px;border-radius:6px;white-space:nowrap;z-index:5}
+.primary{all:unset;box-sizing:border-box;display:inline-flex;align-items:center;gap:6px;height:34px;padding:0 12px;border-radius:8px;background:var(--s-primary);color:#fff;font-size:13px;cursor:pointer}
+:root:not([data-theme="light"]) .primary{color:var(--s-bg)}
+.grp{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--s-faint);font-weight:600;margin:12px 0 6px}
+.row{display:grid;grid-template-columns:1fr auto;gap:8px;align-items:center;background:var(--s-surface);border:1px solid var(--s-line);border-radius:12px;padding:10px 8px 10px 14px;margin-bottom:6px}
+.row .l1{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}
+.row .nm{font-weight:600}
+.row .cd{font-family:var(--mono);font-size:13.5px;letter-spacing:1px;color:var(--s-muted)}
+.row .l2{display:flex;gap:4px 12px;flex-wrap:wrap;font-size:12px;color:var(--s-muted);margin-top:2px}
+.row .l2 span{display:inline-flex;align-items:center;gap:4px}
+.row .l2 svg{width:13px;height:13px}
+.row .acts{display:flex;gap:0;align-items:center}
+.row.held{opacity:.62}
+.tagp{font-size:11px;border-radius:999px;padding:1px 8px;background:var(--s-hover);color:var(--s-muted)}
+.menu{position:absolute;right:0;top:calc(100% + 4px);background:var(--s-surface);border:1px solid var(--s-line2);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.14);padding:4px;min-width:220px;z-index:10}
+.menu button{all:unset;box-sizing:border-box;display:flex;gap:10px;align-items:center;width:100%;padding:8px 10px;border-radius:6px;font-size:13px;cursor:pointer;color:var(--s-text)}
+.menu button:hover{background:var(--s-hover)}
+.menu button.danger{color:var(--s-ko)}
+.menu hr{border:0;border-top:1px solid var(--s-line);margin:4px}
+.toast{position:absolute;left:50%;bottom:14px;transform:translateX(-50%);background:var(--s-text);color:var(--s-surface);padding:6px 12px;border-radius:99px;font-size:12px;z-index:20}
+
+/* avant : la vraie ligne d'aujourd'hui */
+.old .row{grid-template-columns:1fr}
+.old .acts{display:flex;flex-wrap:wrap;gap:6px}
+.old .btn{font:inherit;font-size:12.5px;min-height:32px;padding:0 11px;border-radius:8px;border:1px solid var(--s-line2);background:transparent;color:var(--s-text)}
+.old .btn.d{color:var(--s-ko);border-color:var(--s-ko)}
+
+/* ── la feuille d'édition ─────────────────────────────── */
+.sheet{background:var(--s-surface);color:var(--s-text);border:1px solid var(--line);border-radius:12px;padding:18px;max-width:520px;display:grid;gap:14px;font:14px/1.45 var(--sans)}
+.sheet h5{font-size:17px;margin:0}
+.fld{display:grid;gap:6px}
+.fld > label,.fld > .lb{font-size:12px;color:var(--s-muted)}
+.sheet input,.sheet select{font:inherit;padding:8px 10px;border-radius:8px;border:1px solid var(--s-line2);background:transparent;color:inherit;min-height:40px}
+.sheet select option:disabled{color:var(--s-disabled)}
+.dt{display:grid;grid-template-columns:1fr 110px;gap:8px}
+.refus{color:var(--s-ko);font-size:12px}
+.sheet .foot{display:flex;justify-content:flex-end;gap:8px}
+.sheet .btn{font:inherit;font-size:13px;min-height:36px;padding:0 14px;border-radius:8px;border:1px solid var(--s-line2);background:transparent;color:inherit;cursor:pointer}
+.sheet .btn.p{background:var(--s-primary);border-color:var(--s-primary);color:#fff}
+.sheet .btn:disabled{opacity:.45;cursor:not-allowed}
+.hint{font-size:12px;color:var(--s-muted)}
+.cal{display:grid;grid-template-columns:repeat(7,1fr);gap:2px;font-size:12px;text-align:center;margin-top:4px}
+.cal b{font-weight:600;color:var(--s-faint);padding:4px 0}
+.cal button{all:unset;padding:6px 0;border-radius:6px;cursor:pointer}
+.cal button:hover:not(:disabled){background:var(--s-hover)}
+.cal button:disabled{color:var(--s-disabled);cursor:not-allowed;text-decoration:line-through}
+.cal button.sel{background:var(--s-primary);color:#fff}
+.cal button.from{outline:1px dashed var(--s-primary)}
+.pop{border:1px solid var(--s-line2);border-radius:10px;padding:10px;background:var(--s-surface)}
+.pop .hd{display:flex;justify-content:space-between;align-items:center;font-weight:600;font-size:13px}
+.times{display:grid;grid-template-columns:repeat(6,1fr);gap:4px;margin-top:8px;max-height:132px;overflow:auto}
+.times button{all:unset;font-size:12px;text-align:center;padding:5px 0;border-radius:6px;border:1px solid var(--s-line);cursor:pointer;font-variant-numeric:tabular-nums}
+.times button:disabled{color:var(--s-disabled);border-color:transparent;cursor:not-allowed;text-decoration:line-through}
+.times button.sel{background:var(--s-primary);color:#fff;border-color:var(--s-primary)}
+.trigger{all:unset;box-sizing:border-box;display:flex;align-items:center;gap:8px;border:1px solid var(--s-line2);border-radius:8px;padding:0 10px;min-height:40px;cursor:pointer}
+.trigger.bad{border-color:var(--s-ko)}
+.trigger svg{width:16px;height:16px;color:var(--s-muted)}
+.gatebox{display:flex;flex-wrap:wrap;gap:8px}
+.gatebox label{display:inline-flex;gap:6px;align-items:center;border:1px solid var(--s-line2);border-radius:8px;padding:6px 10px;font-size:13px;color:var(--s-text)}
+
+@media (max-width: 720px){
+  .sw{grid-template-columns:1fr}
+  .side{display:none}
+  .row{grid-template-columns:1fr}
+  .row .acts{justify-content:flex-end;margin-top:-4px}
+}
+</style>
+
+<div class="wrap">
+<h1>Accès partagés, un portail à la fois</h1>
+<p class="meta">Plugin <code>guest-access</code> · cœur (spec 180) · recette <code>guest-gate</code> · 21 septembre 2026 · à trancher avant d'écrire une ligne</p>
+
+<div class="good"><b>Tranché le 21 septembre, et livré en v1.3.0 :</b> A — menu principal, un onglet par portail ; un seul accès avec des cases de portails (un code, une glissière par portail) ; page réservée aux administrateurs. Les trois propositions d'écran (ligne à icônes, doublons fusionnés, période ordonnée avec « Valable ») sont reprises telles quelles.</div>
+
+<p class="lead">Trois retours sur le shadow. Le premier change le modèle : aujourd'hui le plugin tient <b>une</b> liste pour <b>un</b> portail, rangée dans Administration. Les deux autres sont de l'écran : une ligne d'accès qui ne soit plus un mur de boutons, et une période qu'on ne peut plus saisir à l'envers.</p>
+
+<div class="grid2">
+  <div class="card"><h3 style="margin-top:0">Constat</h3>
+    <ul class="tight">
+      <li>La page vit dans <b>Administration</b>, à côté de Plugins et Journaux : on y configure la maison, on n'y gère pas qui entre.</li>
+      <li>Le plugin publie <b>un seul</b> device (« Accès invités »), donc une seule recette, donc un seul portail. Un second portail n'a nulle part où aller.</li>
+      <li>Chaque ligne porte jusqu'à <b>8 boutons texte</b>, dont trois paires qui font presque la même chose.</li>
+      <li>La période accepte un « jusqu'au » avant le « à partir du » : le refus n'arrive qu'à l'enregistrement. Et le libellé « Valable à partir du » coiffe à la fois le choix <i>permanent / période</i> et le premier champ.</li>
+    </ul></div>
+  <div class="card"><h3 style="margin-top:0">Ce qu'on ne fait pas</h3>
+    <ul class="tight">
+      <li>Pas de 128 bits ni de changement de l'anti-devinette : il reste global, quel que soit le nombre de portails.</li>
+      <li>Pas de nouvelle adresse publique : un seul lien par personne, même si elle ouvre deux portails.</li>
+      <li>On ne casse pas l'installation actuelle : le device « Accès invités » devient le <b>premier portail</b>, avec ses liaisons et sa recette, sans rien relier à 23 h devant le portail.</li>
+    </ul></div>
+</div>
+
+<!-- ═════════════════════════ 1 ═════════════════════════ -->
+<h2>1. Une liste par portail — et où elle vit</h2>
+<p>Dans les deux variantes le modèle est le même : <b>un portail = un device du plugin</b> (« Accès partagés · Portail d'entrée »), relié à son équipement par sa propre instance de la recette. Un accès dit <b>quels portails</b> il ouvre. La liste d'un portail, c'est la liste des personnes qui peuvent l'ouvrir.</p>
+
+<div class="segrow" role="group" aria-label="Variante">
+  <button class="seg" data-place="menu" aria-pressed="true">A · Menu principal, un onglet par portail</button>
+  <button class="seg" data-place="fiche" aria-pressed="false">B · Dans la fiche de chaque portail</button>
+</div>
+
+<div class="sw" id="shell" style="position:relative">
+  <aside class="side">
+    <div class="logo">SOWEL</div>
+    <div class="nav"><svg viewBox="0 0 24 24"><rect width="7" height="9" x="3" y="3" rx="1"/><rect width="7" height="5" x="14" y="3" rx="1"/><rect width="7" height="9" x="14" y="12" rx="1"/><rect width="7" height="5" x="3" y="16" rx="1"/></svg>Tableau de bord</div>
+    <div class="sep"></div>
+    <div class="nav" id="navHome"><svg viewBox="0 0 24 24"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>Maison</div>
+    <div class="nav sub" id="navGate" hidden>Extérieur › Portail d'entrée</div>
+    <div class="sep"></div>
+    <div class="nav"><svg viewBox="0 0 24 24"><path d="m12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83Z"/><path d="m22 17.65-9.17 4.16a2 2 0 0 1-1.66 0L2 17.65"/><path d="m22 12.65-9.17 4.16a2 2 0 0 1-1.66 0L2 12.65"/></svg>Modes</div>
+    <div class="sep"></div>
+    <div class="nav"><svg viewBox="0 0 24 24"><path d="M3 3v18h18"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/></svg>Analyse</div>
+    <div class="sep" id="sepAcc"></div>
+    <div class="nav on" id="navAcc"><svg viewBox="0 0 24 24"><path d="M13 4h3a2 2 0 0 1 2 2v14"/><path d="M2 20h3"/><path d="M13 20h9"/><path d="M10 12v.01"/><path d="M13 4.562v16.157a1 1 0 0 1-1.242.97L5 20V5.562a2 2 0 0 1 1.515-1.94l4-1A2 2 0 0 1 13 4.561Z"/></svg>Accès partagés</div>
+    <div class="admin"><div class="nav"><svg viewBox="0 0 24 24"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/></svg>Administration</div></div>
+  </aside>
+  <section class="main" id="place"></section>
+</div>
+
+<div class="grid2" style="margin-top:14px">
+  <div class="card"><h3 style="margin-top:0">A · Menu principal</h3>
+    <ul class="tight">
+      <li>Une entrée « Accès partagés » entre Analyse et Administration ; un onglet par portail, plus « Tous » dès qu'il y en a deux.</li>
+      <li>Au cœur : un champ de manifeste <code>ui.placement: "main"</code> (défaut <code>"admin"</code>, rien ne change pour les autres plugins). Petit ajout à la PR #969.</li>
+      <li>Tout se fait au même endroit, y compris « quelqu'un qui ouvre les deux ».</li>
+    </ul></div>
+  <div class="card"><h3 style="margin-top:0">B · Fiche du portail</h3>
+    <ul class="tight">
+      <li>La liste apparaît dans <b>Maison › Extérieur › Portail d'entrée</b>, sous les commandes. C'est là qu'on la cherche, instinctivement.</li>
+      <li>Au cœur : un <b>nouveau point d'extension</b> — un plugin qui monte une section dans la fiche d'un équipement. Une deuxième spec, bien plus lourde à faire accepter à Marc que A.</li>
+      <li>Une personne qui ouvre deux portails apparaît dans les deux fiches ; la modifier dans l'une la modifie dans l'autre.</li>
+    </ul></div>
+</div>
+
+<h3>Une personne, deux portails</h3>
+<p>Dans l'éditeur, les portails sont des cases. Un seul code, un seul lien : son téléphone affiche une glissière par portail, chacune titrée du nom de l'équipement. Essayez de tout décocher.</p>
+<div class="sheet" id="gatesSheet">
+  <div class="fld"><div class="lb">Portails</div>
+    <div class="gatebox">
+      <label><input type="checkbox" checked data-g> Portail d'entrée</label>
+      <label><input type="checkbox" data-g> Porte du garage</label>
+    </div>
+    <div class="refus" id="gatesRefus" hidden>Cochez au moins un portail — un accès qui n'ouvre rien ne sert à rien.</div>
+  </div>
+</div>
+
+<div class="note"><b>Ajouter un portail</b> : bouton « + portail » en bout d'onglets (A) → on le nomme, le plugin crée son device. Reste à créer son équipement puis l'instance de recette qui le relie au vrai portail — les deux mêmes gestes qu'aujourd'hui. La page le signale tant qu'aucune recette n'a répondu pour ce portail.</div>
+
+<!-- ═════════════════════════ 2 ═════════════════════════ -->
+<h2>2. La ligne d'accès : quatre icônes au lieu de huit boutons</h2>
+<p>Sur une ligne, on garde ce qui sert tous les jours : <b>copier le lien</b>, <b>modifier</b>, <b>suspendre / reprendre</b>. Le reste va dans le menu <b>⋯</b>. Les icônes sont celles de Sowel (Lucide), avec leur libellé au survol et pour les lecteurs d'écran.</p>
+
+<div class="segrow" role="group" aria-label="Avant après">
+  <button class="seg" data-rowv="after" aria-pressed="true">Proposé</button>
+  <button class="seg" data-rowv="before" aria-pressed="false">Aujourd'hui</button>
+</div>
+<div class="sw" style="grid-template-columns:1fr;min-height:0;position:relative" id="rowsBox"><section class="main" id="rows"></section></div>
+
+<h3>Les doublons, et ce qu'ils deviennent</h3>
+<div class="tblwrap"><table class="plain">
+<tr><th>Aujourd'hui</th><th>Proposé</th><th>Pourquoi</th></tr>
+<tr><td>« Nouvelle invitation » <i>et</i> « Régénérer l'accès »</td><td><b>Changer le code</b> (menu), avec une case « couper aussi les téléphones déjà configurés »</td><td>Les deux changent le code et le lien ; seule la coupure des téléphones les distingue. Une case le dit mieux qu'un deuxième bouton au nom obscur.</td></tr>
+<tr><td>« Révoquer » <i>et</i> « Supprimer »</td><td><b>Révoquer</b> tant que l'accès vit ; <b>Supprimer</b> seulement une fois révoqué ou terminé</td><td>Supprimer un accès actif, c'était révoquer plus effacer la ligne : on ne propose plus les deux en même temps.</td></tr>
+<tr><td>« Journal » sur chaque ligne <i>et</i> en tête de page</td><td>Icône <b>historique</b> dans la barre (tout) ; « Journal de cet accès » dans le menu ⋯</td><td>Le même mot désignait deux vues.</td></tr>
+<tr><td>« Synchroniser » (gros bouton)</td><td>Icône ↻ collée à la pastille guestFlow</td><td>Elle n'agit que sur guestFlow ; invisible quand guestFlow n'est pas configuré.</td></tr>
+<tr><td>Filtres « Tous / guestFlow / Créés par moi »</td><td>Inchangés, mais seulement si guestFlow est configuré</td><td>Sans guestFlow, les trois filtres montrent la même liste.</td></tr>
+</table></div>
+
+<!-- ═════════════════════════ 3 ═════════════════════════ -->
+<h2>3. La période : « Valable », puis deux dates dans l'ordre</h2>
+<p>Le premier choix s'appelle désormais <b>Valable</b> (<i>en permanence</i> / <i>sur une période</i>). Dès que « Jusqu'au » s'ouvre, tout ce qui précède « À partir du » est <b>grisé et barré, non cliquable</b> — les jours, puis les heures du même jour. Si l'on repousse « À partir du » au-delà de « Jusqu'au », la fin est décalée d'autant (la durée est conservée) plutôt que laissée à l'envers.</p>
+
+<div class="sheet" id="period">
+  <h5>Artisan — plombier</h5>
+  <div class="fld"><label for="pMode">Valable</label>
+    <select id="pMode"><option value="permanent">En permanence</option><option value="ranged" selected>Sur une période</option></select></div>
+  <div id="pRange" style="display:grid;gap:14px">
+    <div class="fld"><div class="lb">À partir du</div>
+      <button class="trigger" id="tFrom" type="button"><svg viewBox="0 0 24 24" style="fill:none;stroke:currentColor;stroke-width:1.6"><path d="M8 2v4"/><path d="M16 2v4"/><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M3 10h18"/></svg><span></span></button>
+      <div class="pop" id="popFrom" hidden></div></div>
+    <div class="fld"><div class="lb">Jusqu'au</div>
+      <button class="trigger" id="tTo" type="button"><svg viewBox="0 0 24 24" style="fill:none;stroke:currentColor;stroke-width:1.6"><path d="M8 2v4"/><path d="M16 2v4"/><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M3 10h18"/></svg><span></span></button>
+      <div class="pop" id="popTo" hidden></div>
+      <div class="hint" id="pShift" hidden></div></div>
+  </div>
+  <div class="foot"><button class="btn" type="button">Annuler</button><button class="btn p" type="button">Enregistrer</button></div>
+</div>
+<div class="note">Pourquoi un sélecteur à nous plutôt que le champ date-heure du navigateur : celui-ci accepte un minimum, mais Safari et Firefox n'y grisent pas les heures, seulement les jours — et encore, pas partout. Le même contrôle sert aux deux champs d'un séjour guestFlow (« Ouvrir dès » grise ce qui suit l'arrivée, « Prolonger jusqu'au » ce qui précède le départ). Le serveur garde son refus <code>end_before_start</code> : l'écran empêche l'erreur, il ne la remplace pas.</div>
+
+<h2>Arbitrages</h2>
+<div class="ask"><b>1 · Où vit la liste ?</b> A (menu principal + onglets, petit ajout au cœur) ou B (fiche de chaque portail, nouveau point d'extension au cœur).</div>
+<div class="ask"><b>2 · Une personne qui ouvre deux portails</b> : un seul accès avec des cases (proposé ici), ou un accès distinct par portail, chacun avec son code ?</div>
+<div class="ask"><b>3 · Qui voit la page</b> : administrateurs seulement (comme aujourd'hui), ou tout utilisateur connecté de Sowel — pour qu'un membre de la famille puisse ouvrir à un artisan ?</div>
+</div>
+
+<script>
+const ICON = {
+  link:'<path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>',
+  pencil:'<path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"/><path d="m15 5 4 4"/>',
+  pause:'<rect x="14" y="4" width="4" height="16" rx="1"/><rect x="6" y="4" width="4" height="16" rx="1"/>',
+  play:'<polygon points="6 3 20 12 6 21 6 3"/>',
+  more:'<circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/>',
+  plus:'<path d="M5 12h14"/><path d="M12 5v14"/>',
+  refresh:'<path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/>',
+  history:'<path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/>',
+  key:'<path d="M2.586 17.414A2 2 0 0 0 2 18.828V21a1 1 0 0 0 1 1h3a1 1 0 0 0 1-1v-1a1 1 0 0 1 1-1h1a1 1 0 0 0 1-1v-1a1 1 0 0 1 1-1h.172a2 2 0 0 0 1.414-.586l.814-.814a6.5 6.5 0 1 0-4-4z"/><circle cx="16.5" cy="7.5" r=".5"/>',
+  ban:'<circle cx="12" cy="12" r="10"/><path d="m4.9 4.9 14.2 14.2"/>',
+  trash:'<path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/>',
+  cal:'<path d="M8 2v4"/><path d="M16 2v4"/><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M3 10h18"/>',
+  clock:'<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>',
+  phone:'<rect width="14" height="20" x="5" y="2" rx="2" ry="2"/><path d="M12 18h.01"/>',
+  door:'<path d="M13 4h3a2 2 0 0 1 2 2v14"/><path d="M2 20h3"/><path d="M13 20h9"/><path d="M10 12v.01"/><path d="M13 4.562v16.157a1 1 0 0 1-1.242.97L5 20V5.562a2 2 0 0 1 1.515-1.94l4-1A2 2 0 0 1 13 4.561Z"/>',
+};
+const svg = (n) => `<svg viewBox="0 0 24 24" aria-hidden="true">${ICON[n]}</svg>`;
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+// ── les données du mock ─────────────────────────
+const people = [
+  { id:1, name:"Famille Martin", code:"K7QM-2XRA", gates:[0], kind:"stay", held:false, when:"20 sept. → 27 sept.", hours:"À toute heure", phones:2, last:"hier 18:42" },
+  { id:2, name:"Léa (ma fille)", code:"YJJV-656N", gates:[0,1], kind:"manual", held:false, when:"En permanence", hours:"À toute heure", phones:1, last:"aujourd'hui 08:05" },
+  { id:3, name:"Plombier — M. Roux", code:"PW4E-9HTD", gates:[1], kind:"manual", held:false, when:"23 sept. 08:00 → 23 sept. 18:00", hours:"08:00–18:00", phones:0, last:null },
+  { id:4, name:"Femme de ménage", code:"3NZC-HB7Q", gates:[0], kind:"manual", held:true, when:"En permanence", hours:"Mardi 9:00–12:00", phones:1, last:"il y a 8 j" },
+];
+const gates = ["Portail d'entrée", "Porte du garage"];
+let place = "menu", tab = 0, rowv = "after", openMenu = null;
+
+function toast(box, msg){ const t=document.createElement("div"); t.className="toast"; t.textContent=msg; box.appendChild(t); setTimeout(()=>t.remove(),1600); }
+
+function rowHtml(p, withGates){
+  const g = withGates ? ` <span class="tagp">${p.gates.map(i=>esc(gates[i])).join(" · ")}</span>` : "";
+  return `<div class="row ${p.held?"held":""}" data-id="${p.id}">
+    <div><div class="l1"><span class="nm">${esc(p.name)}</span><span class="cd">${p.code}</span>${p.kind==="stay"?'<span class="tagp">guestFlow</span>':""}${g}${p.held?'<span class="tagp">suspendu</span>':""}</div>
+      <div class="l2"><span>${svg("cal")}${esc(p.when)}</span><span>${svg("clock")}${esc(p.hours)}</span><span>${svg("phone")}${p.phones}</span><span>${p.last?"vu "+esc(p.last):"jamais utilisé"}</span></div></div>
+    <div class="acts">
+      <button class="ib" data-a="copy" data-tip="Copier le lien" aria-label="Copier le lien">${svg("link")}</button>
+      <button class="ib" data-a="edit" data-tip="Modifier" aria-label="Modifier">${svg("pencil")}</button>
+      <button class="ib" data-a="hold" data-tip="${p.held?"Reprendre":"Suspendre"}" aria-label="${p.held?"Reprendre":"Suspendre"}">${svg(p.held?"play":"pause")}</button>
+      <span style="position:relative"><button class="ib" data-a="more" data-tip="Plus" aria-label="Plus d'actions" aria-expanded="${openMenu===p.id}">${svg("more")}</button>
+      ${openMenu===p.id?`<div class="menu" role="menu">
+        <button data-a="code">${svg("key")}Changer le code…</button>
+        <button data-a="journal">${svg("history")}Journal de cet accès</button><hr>
+        <button data-a="revoke" class="danger">${svg("ban")}Révoquer</button></div>`:""}</span>
+    </div></div>`;
+}
+
+function listHtml(list, withGates, gateName){
+  const bar = `<div class="toolbar">
+    ${(gateName?[gateName]:gates).map(g=>`<span class="chip"><span class="dot ok"></span>${esc(g)} · fermé</span>`).join("")}
+    <span class="chip"><span class="dot ok"></span>guestFlow · 09:12 <button aria-label="Synchroniser" title="Synchroniser">${svg("refresh")}</button></span>
+    <span class="grow"></span>
+    <button class="ib" data-tip="Journal" aria-label="Journal">${svg("history")}</button>
+    <button class="primary">${svg("plus")}Nouvel accès</button></div>`;
+  const act = list.filter(p=>!p.held), held = list.filter(p=>p.held);
+  return bar + (act.length?`<div class="grp">Actifs</div>${act.map(p=>rowHtml(p,withGates)).join("")}`:"")
+             + (held.length?`<div class="grp">Suspendus</div>${held.map(p=>rowHtml(p,withGates)).join("")}`:"")
+             + (list.length?"":'<p style="color:var(--s-muted)">Personne ne peut encore ouvrir ce portail.</p>');
+}
+
+function renderPlace(){
+  const el = document.getElementById("place");
+  document.getElementById("navAcc").hidden = place!=="menu";
+  document.getElementById("sepAcc").hidden = place!=="menu";
+  document.getElementById("navGate").hidden = place!=="fiche";
+  document.getElementById("navHome").classList.toggle("on", place==="fiche");
+  document.getElementById("navGate").classList.toggle("on", place==="fiche");
+  if (place==="menu"){
+    const tabs = ["Tous", ...gates];
+    const list = tab===0 ? people : people.filter(p=>p.gates.includes(tab-1));
+    el.innerHTML = `<h4>Accès partagés</h4><p class="sub2">Qui peut ouvrir, et jusqu'à quand.</p>
+      <div class="tabs" role="tablist">${tabs.map((t,i)=>`<button class="tab" role="tab" data-tab="${i}" aria-selected="${i===tab}">${i?svg("door"):""}${esc(t)} <span class="n">${i===0?people.length:people.filter(p=>p.gates.includes(i-1)).length}</span></button>`).join("")}
+      <button class="tab" aria-label="Ajouter un portail">${svg("plus")}portail</button></div>` + listHtml(list, tab===0, tab?gates[tab-1]:null);
+  } else {
+    const list = people.filter(p=>p.gates.includes(0));
+    el.innerHTML = `<div class="crumb">Maison › Extérieur</div><h4>Portail d'entrée</h4><p class="sub2">Portail · LoRa</p>
+      <div class="eqcard"><h5>Commandes</h5><div class="slot">[ glissière d'ouverture du cœur ]</div></div>
+      <div class="eqcard"><h5>Accès partagés</h5>${listHtml(list, false, "Portail d'entrée")}</div>
+      <div class="eqcard"><h5>Configuration</h5><div class="slot">Devices, historique…</div></div>`;
+  }
+}
+
+function renderRows(){
+  const el = document.getElementById("rows");
+  if (rowv==="after"){ el.innerHTML = listHtml(people.filter(p=>p.gates.includes(0)), false, "Portail d'entrée"); return; }
+  const btns = ["Copier le lien","Modifier","Suspendre","Nouvelle invitation","Régénérer l'accès"].map(b=>`<button class="btn">${b}</button>`).join("")
+    + `<button class="btn d">Révoquer</button><button class="btn">Journal</button><button class="btn d">Supprimer</button>`;
+  el.innerHTML = `<div class="old"><div class="toolbar"><span class="chip"><span class="dot ok"></span>Portail d'entrée · fermé</span><span class="chip"><span class="dot ok"></span>Page d'ouverture en ligne</span><span class="chip"><span class="dot ok"></span>guestFlow synchronisé</span><span class="grow"></span><button class="btn" style="font:inherit;font-size:13px;min-height:36px;padding:0 14px;border-radius:8px;border:1px solid var(--s-line2);background:transparent;color:inherit">Synchroniser</button><button class="primary">Nouvel accès</button></div>
+    <div class="toolbar"><span class="chip">Tous</span><span class="chip">guestFlow</span><span class="chip">Créés par moi</span><span class="chip">Journal</span></div>
+    <div class="grp">Actifs</div>` + people.filter(p=>p.gates.includes(0)&&!p.held).map(p=>`<div class="row"><div><div class="l1"><span class="nm">${esc(p.name)}</span><span class="tagp">${p.kind==="stay"?"guestFlow":"créé par moi"}</span><span class="cd">${p.code}</span></div><div class="l2">${esc(p.when)} · ${esc(p.hours)} · ${p.phones} téléphone(s)</div></div><div class="acts">${btns}</div></div>`).join("") + `</div>`;
+}
+
+function onListClick(e, box, rerender){
+  const b = e.target.closest("[data-a],[data-tab]"); if(!b) return;
+  if (b.dataset.tab!==undefined){ tab=+b.dataset.tab; openMenu=null; return rerender(); }
+  const row = b.closest(".row"); const p = row && people.find(x=>x.id===+row.dataset.id);
+  const a = b.dataset.a;
+  if (a==="copy"){ toast(box,"Lien copié"); }
+  else if (a==="edit"){ toast(box,"→ la feuille d'édition (§3)"); }
+  else if (a==="hold"){ p.held=!p.held; openMenu=null; toast(box, p.held?"Suspendu":"Repris"); rerenderAll(); }
+  else if (a==="more"){ openMenu = openMenu===p.id?null:p.id; rerenderAll(); }
+  else if (a==="code"){ openMenu=null; rerenderAll(); const cut = confirm("Changer le code de « "+p.name+" » ?\n\nLe code et le lien changent.\n[OK] puis on demande : couper aussi les téléphones déjà configurés ?"); if(cut){ const phones = confirm("Couper aussi les "+p.phones+" téléphone(s) déjà configuré(s) ?\n(Annuler = ils continuent de fonctionner)"); p.code = Math.random().toString(36).slice(2,6).toUpperCase()+"-"+Math.random().toString(36).slice(2,6).toUpperCase(); if(phones) p.phones=0; rerenderAll(); toast(box, phones?"Nouveau code, téléphones coupés":"Nouveau code"); } }
+  else if (a==="journal"){ openMenu=null; rerenderAll(); toast(box,"→ journal filtré sur « "+p.name+" »"); }
+  else if (a==="revoke"){ openMenu=null; if(confirm("Révoquer « "+p.name+" » ? L'accès cesse immédiatement.")){ people.splice(people.indexOf(p),1); toast(box,"Révoqué — il passe dans « Révoqués », où « Supprimer » apparaît"); } rerenderAll(); }
+}
+function rerenderAll(){ renderPlace(); renderRows(); }
+document.getElementById("shell").addEventListener("click", (e)=>onListClick(e, document.getElementById("shell"), rerenderAll));
+document.getElementById("rowsBox").addEventListener("click", (e)=>{ if(rowv==="after") onListClick(e, document.getElementById("rowsBox"), rerenderAll); });
+document.querySelectorAll("[data-place]").forEach(b=>b.onclick=()=>{ place=b.dataset.place; tab=0; openMenu=null; document.querySelectorAll("[data-place]").forEach(x=>x.setAttribute("aria-pressed", String(x===b))); renderPlace(); });
+document.querySelectorAll("[data-rowv]").forEach(b=>b.onclick=()=>{ rowv=b.dataset.rowv; openMenu=null; document.querySelectorAll("[data-rowv]").forEach(x=>x.setAttribute("aria-pressed", String(x===b))); renderRows(); });
+
+// ── portails cochés ─────────────────────────
+document.getElementById("gatesSheet").addEventListener("change", ()=>{
+  const any = [...document.querySelectorAll("[data-g]")].some(c=>c.checked);
+  document.getElementById("gatesRefus").hidden = any;
+});
+
+// ── la période ─────────────────────────
+const MONTHS = ["janv.","févr.","mars","avr.","mai","juin","juil.","août","sept.","oct.","nov.","déc."];
+let from = new Date(2026, 8, 23, 8, 0), to = new Date(2026, 8, 23, 18, 0);
+let open = null, view = { from: new Date(2026, 8, 1), to: new Date(2026, 8, 1) };
+const fmtD = (d) => `${d.getDate()} ${MONTHS[d.getMonth()]} ${d.getFullYear()} · ${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}`;
+const sameDay = (a,b) => a.getFullYear()===b.getFullYear() && a.getMonth()===b.getMonth() && a.getDate()===b.getDate();
+const dayStart = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate());
+
+function pop(which){
+  const cur = which==="from" ? from : to;
+  const min = which==="to" ? from : null;
+  const v = view[which];
+  const first = new Date(v.getFullYear(), v.getMonth(), 1);
+  const lead = (first.getDay()+6)%7;
+  const days = new Date(v.getFullYear(), v.getMonth()+1, 0).getDate();
+  let cal = ["L","M","M","J","V","S","D"].map(d=>`<b>${d}</b>`).join("") + "<span></span>".repeat(lead);
+  for (let d=1; d<=days; d++){
+    const date = new Date(v.getFullYear(), v.getMonth(), d);
+    const dis = min && date < dayStart(min);
+    const cls = [sameDay(date,cur)?"sel":"", min&&sameDay(date,min)?"from":""].join(" ");
+    cal += `<button type="button" data-day="${d}" class="${cls}" ${dis?"disabled":""} aria-label="${d} ${MONTHS[v.getMonth()]}">${d}</button>`;
+  }
+  let times = "";
+  for (let m=0; m<24*60; m+=30){
+    const h=Math.floor(m/60), mm=m%60;
+    const t = new Date(cur.getFullYear(), cur.getMonth(), cur.getDate(), h, mm);
+    const dis = min && t <= min;
+    const sel = cur.getHours()===h && cur.getMinutes()===mm;
+    times += `<button type="button" data-time="${m}" class="${sel?"sel":""}" ${dis?"disabled":""}>${String(h).padStart(2,"0")}:${String(mm).padStart(2,"0")}</button>`;
+  }
+  return `<div class="hd"><button class="ib" type="button" data-nav="-1" aria-label="Mois précédent">‹</button>${["janvier","février","mars","avril","mai","juin","juillet","août","septembre","octobre","novembre","décembre"][v.getMonth()]} ${v.getFullYear()}<button class="ib" type="button" data-nav="1" aria-label="Mois suivant">›</button></div>
+    <div class="cal">${cal}</div><div class="times">${times}</div>`;
+}
+function renderPeriod(){
+  const ranged = document.getElementById("pMode").value==="ranged";
+  document.getElementById("pRange").hidden = !ranged;
+  document.querySelector("#tFrom span").textContent = fmtD(from);
+  document.querySelector("#tTo span").textContent = fmtD(to);
+  const pf = document.getElementById("popFrom"), pt = document.getElementById("popTo");
+  pf.hidden = open!=="from"; pt.hidden = open!=="to";
+  if (open==="from") pf.innerHTML = pop("from");
+  if (open==="to") pt.innerHTML = pop("to");
+  if (open) { const s = (open==="from"?pf:pt).querySelector(".times .sel"); if (s) s.scrollIntoView({block:"nearest"}); }
+}
+function setFrom(next){
+  const dur = to - from;
+  from = next;
+  const note = document.getElementById("pShift");
+  if (to <= from){ to = new Date(from.getTime() + Math.max(dur, 30*60*1000)); note.textContent = "Fin décalée pour garder la même durée."; note.hidden = false; }
+  else note.hidden = true;
+}
+document.getElementById("pMode").onchange = renderPeriod;
+document.getElementById("tFrom").onclick = ()=>{ open = open==="from"?null:"from"; view.from = new Date(from.getFullYear(), from.getMonth(), 1); renderPeriod(); };
+document.getElementById("tTo").onclick = ()=>{ open = open==="to"?null:"to"; view.to = new Date(to.getFullYear(), to.getMonth(), 1); renderPeriod(); };
+document.getElementById("period").addEventListener("click", (e)=>{
+  const b = e.target.closest("[data-day],[data-time],[data-nav]"); if(!b || b.disabled) return;
+  const which = b.closest("#popFrom") ? "from" : "to";
+  const cur = which==="from" ? from : to;
+  let next;
+  if (b.dataset.nav){ const v=view[which]; view[which]=new Date(v.getFullYear(), v.getMonth()+ +b.dataset.nav, 1); return renderPeriod(); }
+  if (b.dataset.day){ const v=view[which]; next = new Date(v.getFullYear(), v.getMonth(), +b.dataset.day, cur.getHours(), cur.getMinutes());
+    // « Jusqu'au » le jour même du début : l'heure glisse à la première heure libre plutôt que de rester avant.
+    if (which==="to" && next <= from) next = new Date(from.getTime() + 30*60*1000);
+  }
+  if (b.dataset.time){ const m=+b.dataset.time; next = new Date(cur.getFullYear(), cur.getMonth(), cur.getDate(), Math.floor(m/60), m%60); }
+  if (which==="from") setFrom(next); else { to = next; document.getElementById("pShift").hidden = true; }
+  renderPeriod();
+});
+
+rerenderAll(); renderPeriod();
+</script>
