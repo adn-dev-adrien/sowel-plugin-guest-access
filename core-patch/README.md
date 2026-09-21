@@ -28,7 +28,7 @@ git checkout feat/plugin-pages-and-public-tree
 npm install && npm run validate       # backend + UI: typecheck, lint, format, tests
 ```
 
-Or, from the patch kept here (seven commits, `git am` takes them in one go):
+Or, from the patch kept here (eight commits, `git am` takes them in one go):
 
 ```bash
 git checkout -b feat/plugin-pages-and-public-tree origin/main

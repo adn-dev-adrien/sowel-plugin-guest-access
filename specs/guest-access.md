@@ -42,6 +42,51 @@ holds a copy of the invitation, pushed to it, and composes its emails from what 
 
 ---
 
+## 0.bis What it looks like (v1.4.0)
+
+Captured on the shadow on 2026-09-21 (dark theme). The alias note under the toolbar is the shadow's
+own `localhost:8080`.
+
+**The owner's page** — in the main navigation, a tab per gate, one line per access with Sowel's icons
+(§3.5, rules 24–25.bis). On « Tous » each line says which gates it opens.
+
+![The owner's page](screenshots/page-tabs.png)
+
+**The « ⋯ » menu** — change the code, this access's journal, revoke. Delete appears only once an access
+is revoked or ended.
+
+![The menu of a line](screenshots/row-menu.png)
+
+**« + portail »** — a choice among the house's gates as the recipe sees them; the ones already listed
+are shown and not choosable (§3.1.bis, rule 6.ter).
+
+![Adding a gate](screenshots/add-gate.png)
+
+**The period** — « Valable », then the day from a calendar where every day before the start is struck
+(left), and the time from two standard lists, minutes in steps of five, where the minutes before the
+start are disabled on its day (right). The end moved to 14:25, the first minute that fits (rule 25.ter).
+
+| Days | Minutes |
+|---|---|
+| ![Calendar of « Jusqu'au »](screenshots/editor-calendar.png) | ![Minutes of « Jusqu'au »](screenshots/editor-time.png) |
+
+**On the gate's own page** — the card beside « Confirmation avant action » (rule 25.quater). For a gate
+with no list yet it offers to open one, and its link arrives on « + portail » with the equipment
+already picked.
+
+![The card on a gate's page](screenshots/equipment-card.png)
+
+| A gate with no list | Arriving from its card |
+|---|---|
+| ![The card of a gate with no list](screenshots/equipment-card-empty.png) | ![« + portail » already picked](screenshots/arrival-preselected.png) |
+
+**The guest's phone** — one slide per gate the access opens, titled by the equipment (rule 20.bis);
+green with a check, and no word, once the command has gone.
+
+| Two gates | After a slide |
+|---|---|
+| ![Two slides](screenshots/phone-two-gates.png) | ![The slide, done](screenshots/phone-done.png) |
+
 ## 1. Context
 
 `sowel-plugin-guest-access` v0.3 was the house's half of v1: it long-polled guestFlow for pending
@@ -280,7 +325,7 @@ times a week, and a file the owner can read after a power cut.
 
 ## 6. Test plan
 
-200 unit tests, `npm test`:
+207 unit tests, `npm test`:
 
 | Suite | Covers |
 |---|---|
@@ -297,6 +342,7 @@ times a week, and a file the owner can read after a power cut.
 | `public-api` (22) | The page, its CSP, its title and its escaping, enrolment statuses, the held answer, the gates listed, the press |
 | `guestflow` (13) | Pull, push, the pending push, the signature, the HTTP refusal |
 | `index` (8) | The core contract, the two orders, the data directory |
+| `panel` (7) | The owner's page in a DOM: tabs, the editor of a ranged access, the pickers' disabled values, « + portail », the arrival from an equipment, the styles that show a refusal and centre a dialog |
 | `url-guard` (5) | HTTPS or localhost, and the host that merely contains « localhost » |
 | `guest-url` (10) | The alias, the path it is served under, what is refused, the fragment |
 
