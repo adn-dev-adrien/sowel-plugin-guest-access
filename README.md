@@ -15,8 +15,21 @@ reste ce qui décide et actionne : ce plugin ne touche jamais lui-même au porta
 page d'ouverture porte le nom de l'équipement que la recette pilote — « Portail », « Porte du
 garage »… — et le suit si vous le renommez.
 
-> L'identifiant technique reste `guest-access`, et le device « Accès invités » : les changer
-> orphelinerait les réglages, les données et les équipements d'une installation existante.
+> L'identifiant technique reste `guest-access`, et le device du premier portail « Accès invités » :
+> les changer orphelinerait les réglages, les données et les équipements d'une installation existante.
+
+## Plusieurs portails, une liste chacun
+
+Un portail et une porte de garage n'ont pas les mêmes personnes autorisées. Chaque portail est
+**son propre device** dans Sowel, relié à son équipement par **sa propre instance de la recette** ; la
+page de gestion a un onglet par portail, et un accès coche les portails qu'il ouvre. Une personne
+qui ouvre les deux garde **un seul code et un seul lien** : son téléphone affiche une glissière par
+portail.
+
+Pour ajouter un portail : onglet **« + portail »** → un nom (le device s'appelle alors
+`Accès partagés · <nom>`) → créer son équipement → créer une instance de la recette qui le relie au
+vrai portail. Un séjour guestFlow ouvre le premier portail ; ajoutez-en d'autres à la main, une
+révision du séjour ne les reprend jamais.
 
 ## Ce qui a changé, et pourquoi
 
@@ -38,22 +51,24 @@ le journal se remplit.
 
 | Surface | Adresse | Qui |
 | --- | --- | --- |
-| La page de gestion | Sowel → Administration → **Accès invités** | L'administrateur, derrière la session Sowel |
+| La page de gestion | Sowel → **Accès partagés** (menu principal) | L'administrateur, derrière la session Sowel |
 | La page des clients | `https://<sowel>/p/guest-access/` | N'importe qui muni d'un code |
-| L'équipement | Device « Accès invités » | La recette, par ses deux ordres |
+| Les équipements | Un device par portail (« Accès invités », puis « Accès partagés · … ») | La recette, par ses ordres |
 
 ### La page de gestion
 
-La liste de tous les accès — ceux que guestFlow configure pour un séjour et ceux que vous créez à la
-main —, groupés par état (actifs, à venir, suspendus, révoqués, terminés), avec pour chacun : le code,
-la validité en toutes lettres, les heures, le nombre de téléphones, le dernier usage et le journal.
+Un onglet par portail (et « Tous » dès qu'il y en a deux) : la liste des accès — ceux que guestFlow
+configure pour un séjour et ceux que vous créez à la main —, groupés par état (actifs, à venir,
+suspendus, révoqués, terminés), avec pour chacun le code, la validité, les heures, le nombre de
+téléphones et le dernier usage.
 
-Chaque accès peut être **modifié, suspendu, révoqué ou supprimé**, et deux actions se distinguent :
+Chaque ligne porte des icônes plutôt qu'un mur de boutons : **copier le lien**, **modifier**,
+**suspendre / reprendre**, et **⋯** pour le reste — **changer le code** (en choisissant de couper ou non
+les téléphones déjà configurés : l'email perdu ou le téléphone perdu), le journal de l'accès, et
+**révoquer**. Un accès ne se **supprime** qu'une fois révoqué ou terminé.
 
-- **Nouvelle invitation** — le code et le lien changent, les téléphones déjà configurés continuent de
-  fonctionner. C'est pour le client qui a perdu son email.
-- **Régénérer l'accès** — le code change **et** tous les téléphones sont coupés. C'est pour le
-  téléphone perdu.
+La période se choisit dans l'ordre : « Jusqu'au » grise les jours et les heures qui précèdent
+« À partir du ».
 
 ### La page des clients
 
@@ -162,10 +177,14 @@ relie pas tout seul une donnée ajoutée, il faut un clic sur la fiche de l'équ
   portail derrière lui, et c'est un second geste délibéré.
 - **Personne ne répond ?** Le client est prévenu, au lieu d'attendre devant un portail immobile. La
   cause habituelle est une recette qui n'est pas liée à cet équipement, et la page de gestion le dit.
-- **Les plafonds sont comptés aux deux niveaux** : 12 ouvertures par heure et par accès, 30 pour le
-  portail — un accès compromis ne peut pas affamer l'autre logement.
-- **Cinq essais de code par adresse et par dix minutes**, et un code verrouillé une heure après dix
-  échecs, d'où qu'ils viennent.
+- **Les plafonds sont comptés aux deux niveaux** : 12 ouvertures par heure et par accès, 30 par
+  heure **et par portail** — un accès compromis ne peut pas affamer les autres.
+- **Un code juste n'est jamais refusé.** Les essais ratés sont comptés pour toute la maison (derrière
+  un proxy, l'adresse du visiteur n'est pas visible) : au-delà de dix en dix minutes, la réponse
+  d'échec est retenue 1 s, 2, 4… jusqu'à 10 s ; au-delà de vingt-cinq, vous êtes prévenu. Un code
+  essayé dix fois est verrouillé une heure.
+- **Un code n'ouvre que ses portails** : une glissière qui viserait un autre portail est refusée
+  avant même que la règle horaire soit lue.
 - **Rien n'est jeté sans raison** : le code d'un séjour reste lisible une semaine après la fin (pour
   le client qui rappelle le lendemain), le journal est gardé un an, et il **survit à la suppression de
   l'accès** — « qui est entré cette nuit-là » doit rester une question à laquelle on peut répondre.
@@ -184,9 +203,10 @@ Source personnelle (spec 136) : **Plugins → Store → Sources personnelles** �
 
 Puis, dans l'ordre :
 
-1. **Plugins → Accès invités → Accès public** : ouvrir la porte des clients.
+1. **Plugins → Accès partagés → Accès public** : ouvrir la porte des clients.
 2. **Réglages du plugin** : renseigner l'adresse publique de Sowel (et guestFlow, si vous l'utilisez).
-3. **Recette** « Accès invités au portail » : la lier à l'équipement de ce plugin et au portail.
+3. **Recette** « Accès partagés — ouverture » : la lier à l'équipement du device « Accès invités » et au
+   portail. Une instance par portail, si vous en ajoutez.
 
 Il faut Sowel **1.72.0 ou plus récent** : les pages de plugin et l'arbre public sont des capacités du
 cœur (spec 180).

@@ -3,29 +3,37 @@
  *
  * Plain DOM: this module is imported by Sowel's SPA and handed a container and
  * a context. It styles itself with Sowel's own design tokens, so it follows the
- * light and dark themes without knowing which one is on.
+ * light and dark themes without knowing which one is on, and it draws Sowel's
+ * own icons (Lucide), inlined, since a plugin page imports nothing from the app.
  *
  * It holds NO rule. Every state, every group and every refusal arrives shaped
  * from the plugin (`admin-api.ts`); what happens here is drawing, and the dates
- * are formatted with the viewer's own locale.
+ * are formatted with the viewer's own locale. The one thing it does enforce is
+ * the ORDER of two dates while they are being picked — and the server refuses
+ * the same mistake on its own (`end_before_start`), so the screen prevents the
+ * error without replacing the refusal.
  */
 
 const S = {
   fr: {
     title: "Accès partagés",
     subtitle: "Qui peut ouvrir, et jusqu'à quand.",
-    houseGate: "Ouverture",
+    allGates: "Tous",
+    addGate: "portail",
+    addGateTitle: "Nouveau portail",
+    addGateHelp: "Le plugin crée un device à ce nom. Créez ensuite son équipement, puis une instance de la recette « Accès partagés » qui le relie au vrai portail.",
+    gateName: "Nom",
+    removeGate: "Retirer ce portail",
+    confirmRemoveGate: "Retirer « {g} » ? Son device passe hors ligne ; les accès qui ouvraient aussi un autre portail le gardent.",
     gate_open: "ouvert",
     gate_closed: "fermé",
     gate_unknown: "état inconnu",
-    recipeMissing: "Aucune recette n'a encore répondu — vérifiez que la recette « Accès partagés » est liée à cet équipement.",
-    doorOpen: "Page d'ouverture en ligne",
+    recipeMissing: "« {g} » : aucune recette n'a encore répondu — vérifiez qu'une instance de la recette « Accès partagés » est liée à son équipement.",
     doorShut: "Page d'ouverture fermée",
     doorShutHelp: "Ouvrez « Accès public » dans Plugins → Accès partagés, sinon les liens répondent 404.",
     noGuestUrl: "Adresse publique de Sowel non renseignée : les liens d'accès ne peuvent pas être fabriqués (Réglages du plugin).",
     aliasNote: "Les liens pointent vers {link} — ce nom doit réécrire tout son arbre vers {tree}, pas seulement sa racine, sinon la page s'affiche sans style et les boutons ne répondent pas.",
-    guestflowOff: "Aucun guestFlow configuré — les accès sont créés à la main.",
-    guestflowOk: "guestFlow synchronisé",
+    guestflowOk: "guestFlow · {d}",
     guestflowKo: "guestFlow injoignable",
     pending: "{n} invitation(s) en attente d'envoi",
     sync: "Synchroniser",
@@ -38,90 +46,115 @@ const S = {
     group_suspended: "Suspendus",
     group_revoked: "Révoqués",
     group_ended: "Terminés",
-    empty: "Aucun accès.",
+    empty: "Personne ne peut encore ouvrir.",
+    emptyGate: "Personne ne peut encore ouvrir « {g} ».",
     tagGuestflow: "guestFlow",
-    tagMine: "créé par moi",
+    tagSuspended: "suspendu",
     always: "En permanence",
     from: "À partir du {d}",
     until: "Jusqu'au {d}",
-    between: "Du {a} au {b}",
-    hours: "Tous les jours {w}",
+    between: "{a} → {b}",
+    hours: "{w}",
     anyHour: "À toute heure",
-    devices: "{n} téléphone(s)",
-    neverUsed: "Jamais utilisé",
-    lastUse: "Dernier usage {d}",
-    code: "Code",
+    neverUsed: "jamais utilisé",
+    lastUse: "vu {d}",
+    phones: "{n} téléphone(s) configuré(s)",
     copyLink: "Copier le lien",
     copied: "Lien copié",
     edit: "Modifier",
     suspend: "Suspendre",
     resume: "Reprendre",
-    invitation: "Nouvelle invitation",
-    regenerate: "Régénérer l'accès",
+    more: "Plus d'actions",
+    changeCode: "Changer le code…",
+    changeCodeTitle: "Changer le code de « {n} »",
+    changeCodeHelp: "Le code et le lien changent. L'ancien n'ouvre plus rien.",
+    cutPhones: "Couper aussi les {n} téléphone(s) déjà configuré(s) — chacun devra être reconfiguré avec le nouveau lien.",
+    change: "Changer",
+    codeChanged: "Nouveau code",
     revoke: "Révoquer",
     remove: "Supprimer",
     journal: "Journal",
+    journalOf: "Journal de cet accès",
     close: "Fermer",
     save: "Enregistrer",
     cancel: "Annuler",
     label: "Pour qui",
-    validFrom: "Valable à partir du",
-    validUntil: "Jusqu'au",
+    gates: "Portails",
+    validity: "Valable",
     permanent: "En permanence",
     ranged: "Sur une période",
+    validFrom: "À partir du",
+    validUntil: "Jusqu'au",
+    shifted: "Fin décalée pour garder la même durée.",
+    pick: "Choisir…",
+    clear: "Effacer",
+    prevMonth: "Mois précédent",
+    nextMonth: "Mois suivant",
     addHours: "Ajouter une plage horaire",
+    removeHours: "Retirer cette plage",
     stayWindow: "Séjour",
     earlyOpen: "Ouvrir dès",
     extend: "Prolonger jusqu'au",
     stayReadOnly: "Le séjour vient de guestFlow — utilisez les deux champs ci-dessous pour élargir l'accès.",
-    confirmInvitation: "Le code et le lien changent. Les téléphones déjà configurés continuent de fonctionner.",
-    confirmRegenerate: "Le code change ET tous les téléphones sont coupés : chacun devra être reconfiguré.",
     confirmRevoke: "L'accès cesse immédiatement et les téléphones sont coupés.",
     confirmRemove: "L'accès disparaît de la liste. Le journal, lui, est conservé.",
     required: "Un nom est nécessaire.",
+    too_long: "Ce nom est trop long (40 caractères au plus).",
+    taken: "Un portail porte déjà ce nom.",
+    no_gate: "Cochez au moins un portail — un accès qui n'ouvre rien ne sert à rien.",
+    unknown_gate: "Ce portail n'existe plus. Rechargez la page.",
+    gate_in_use: "Des accès encore valables n'ouvrent que ce portail : modifiez-les ou révoquez-les d'abord.",
+    last_gate: "Il faut au moins un portail.",
+    still_live: "Révoquez l'accès avant de le supprimer.",
     bad_date: "Date incompréhensible.",
     end_before_start: "La fin doit venir après le début.",
     overlap: "Deux plages se chevauchent.",
     bad_time: "Heure incompréhensible (HH:MM).",
-    not_a_list: "Plages horaires invalides.",
+    not_a_list: "Liste invalide.",
     not_earlier: "« Ouvrir dès » doit précéder le début du séjour.",
     not_later: "« Prolonger » doit dépasser la fin du séjour — sinon, suspendez.",
-    failed: "L'opération a échoué.",
-    journalEmpty: "Rien encore.",
+    failed: "Ça n'a pas fonctionné.",
+    journalEmpty: "Rien pour l'instant.",
     kind_created: "créé",
     kind_edited: "modifié",
     kind_suspended: "suspendu",
     kind_resumed: "repris",
     kind_revoked: "révoqué",
     kind_deleted: "supprimé",
-    kind_invitation: "nouvelle invitation",
-    kind_regenerated: "régénéré",
+    kind_invitation: "nouveau code",
+    kind_regenerated: "nouveau code, téléphones coupés",
     kind_enrolled: "téléphone configuré",
-    kind_opened: "ouverture commandée",
+    kind_opened: "ouverture envoyée",
     kind_refused: "refusé",
     kind_failed: "échec",
-    kind_bad_code: "code incorrect",
+    kind_bad_code: "code erroné",
+    kind_guessing: "essais de codes en série",
     kind_stay_updated: "séjour mis à jour",
     kind_stay_cancelled: "séjour annulé",
+    weekdays: "L,M,M,J,V,S,D",
   },
   en: {
     title: "Shared access",
-    subtitle: "Who may open, and until when.",
-    houseGate: "Opening",
+    subtitle: "Who can open, and until when.",
+    allGates: "All",
+    addGate: "gate",
+    addGateTitle: "New gate",
+    addGateHelp: "The plugin creates a device by that name. Then create its equipment, and an instance of the « Shared access » recipe linking it to the real gate.",
+    gateName: "Name",
+    removeGate: "Remove this gate",
+    confirmRemoveGate: "Remove « {g} »? Its device goes offline; accesses that also open another gate keep that one.",
     gate_open: "open",
     gate_closed: "closed",
     gate_unknown: "state unknown",
-    recipeMissing: "No recipe has answered yet — check that the « Shared access » recipe is bound to this equipment.",
-    doorOpen: "Opening page is online",
-    doorShut: "Opening page is shut",
-    doorShutHelp: "Open « Public access » in Plugins → Shared access, or the links answer 404.",
+    recipeMissing: "« {g} »: no recipe has answered yet — check that an instance of the « Shared access » recipe is bound to its equipment.",
+    doorShut: "Opening page shut",
+    doorShutHelp: "Turn on « Public access » in Plugins → Shared access, or the links answer 404.",
     noGuestUrl: "Sowel's public address is not set: access links cannot be built (plugin settings).",
-    aliasNote: "Links point to {link} — that name must rewrite its whole tree onto {tree}, not just its root, or the page loads without its style and its buttons do nothing.",
-    guestflowOff: "No guestFlow configured — accesses are made by hand.",
-    guestflowOk: "guestFlow in step",
+    aliasNote: "Links point at {link} — that name must rewrite its whole tree to {tree}, not just its root, or the page loads unstyled and its buttons do nothing.",
+    guestflowOk: "guestFlow · {d}",
     guestflowKo: "guestFlow unreachable",
     pending: "{n} invitation(s) waiting to be sent",
-    sync: "Sync now",
+    sync: "Synchronise",
     newAccess: "New access",
     filterAll: "All",
     filterGuestflow: "guestFlow",
@@ -130,53 +163,72 @@ const S = {
     group_scheduled: "Upcoming",
     group_suspended: "On hold",
     group_revoked: "Revoked",
-    group_ended: "Finished",
-    empty: "No access yet.",
+    group_ended: "Ended",
+    empty: "Nobody can open yet.",
+    emptyGate: "Nobody can open « {g} » yet.",
     tagGuestflow: "guestFlow",
-    tagMine: "made by me",
+    tagSuspended: "on hold",
     always: "Always",
     from: "From {d}",
     until: "Until {d}",
-    between: "From {a} to {b}",
-    hours: "Every day {w}",
-    anyHour: "Any hour",
-    devices: "{n} phone(s)",
-    neverUsed: "Never used",
-    lastUse: "Last used {d}",
-    code: "Code",
+    between: "{a} → {b}",
+    hours: "{w}",
+    anyHour: "Any time",
+    neverUsed: "never used",
+    lastUse: "seen {d}",
+    phones: "{n} phone(s) set up",
     copyLink: "Copy the link",
     copied: "Link copied",
     edit: "Edit",
     suspend: "Hold",
     resume: "Resume",
-    invitation: "New invitation",
-    regenerate: "Regenerate access",
+    more: "More actions",
+    changeCode: "Change the code…",
+    changeCodeTitle: "Change the code of « {n} »",
+    changeCodeHelp: "The code and the link change. The old one opens nothing any more.",
+    cutPhones: "Also cut off the {n} phone(s) already set up — each will have to be set up again from the new link.",
+    change: "Change",
+    codeChanged: "New code",
     revoke: "Revoke",
     remove: "Delete",
     journal: "Journal",
+    journalOf: "This access's journal",
     close: "Close",
     save: "Save",
     cancel: "Cancel",
-    label: "Who it is for",
-    validFrom: "Valid from",
-    validUntil: "Until",
+    label: "For whom",
+    gates: "Gates",
+    validity: "Valid",
     permanent: "Always",
-    ranged: "Over a period",
+    ranged: "For a period",
+    validFrom: "From",
+    validUntil: "Until",
+    shifted: "End moved to keep the same length.",
+    pick: "Pick…",
+    clear: "Clear",
+    prevMonth: "Previous month",
+    nextMonth: "Next month",
     addHours: "Add a time window",
+    removeHours: "Remove this window",
     stayWindow: "Stay",
     earlyOpen: "Open from",
     extend: "Extend until",
     stayReadOnly: "The stay comes from guestFlow — use the two fields below to widen the access.",
-    confirmInvitation: "The code and the link change. Phones already set up keep working.",
-    confirmRegenerate: "The code changes AND every phone is cut off: each must be set up again.",
     confirmRevoke: "The access stops at once and the phones are cut off.",
     confirmRemove: "The access leaves the list. The journal is kept.",
     required: "A name is needed.",
+    too_long: "That name is too long (40 characters at most).",
+    taken: "A gate already has that name.",
+    no_gate: "Tick at least one gate — an access that opens nothing is no use.",
+    unknown_gate: "That gate no longer exists. Reload the page.",
+    gate_in_use: "Accesses still valid open only this gate: edit or revoke them first.",
+    last_gate: "At least one gate is needed.",
+    still_live: "Revoke the access before deleting it.",
     bad_date: "That date cannot be read.",
     end_before_start: "The end must come after the start.",
     overlap: "Two windows overlap.",
     bad_time: "That time cannot be read (HH:MM).",
-    not_a_list: "Invalid time windows.",
+    not_a_list: "Invalid list.",
     not_earlier: "« Open from » must precede the start of the stay.",
     not_later: "« Extend » must go past the end of the stay — otherwise, hold it.",
     failed: "That did not work.",
@@ -187,81 +239,210 @@ const S = {
     kind_resumed: "resumed",
     kind_revoked: "revoked",
     kind_deleted: "deleted",
-    kind_invitation: "new invitation",
-    kind_regenerated: "regenerated",
+    kind_invitation: "new code",
+    kind_regenerated: "new code, phones cut off",
     kind_enrolled: "phone set up",
     kind_opened: "opening sent",
     kind_refused: "refused",
     kind_failed: "failed",
     kind_bad_code: "wrong code",
+    kind_guessing: "codes tried in a row",
     kind_stay_updated: "stay updated",
     kind_stay_cancelled: "stay cancelled",
+    weekdays: "M,T,W,T,F,S,S",
   },
 };
 
+// Lucide, the icon set Sowel draws everywhere — inlined, same strokes.
+const ICONS = {
+  link: '<path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>',
+  pencil: '<path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"/><path d="m15 5 4 4"/>',
+  pause: '<rect x="14" y="4" width="4" height="16" rx="1"/><rect x="6" y="4" width="4" height="16" rx="1"/>',
+  play: '<polygon points="6 3 20 12 6 21 6 3"/>',
+  more: '<circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/>',
+  plus: '<path d="M5 12h14"/><path d="M12 5v14"/>',
+  refresh: '<path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/>',
+  history: '<path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/>',
+  key: '<path d="M2.586 17.414A2 2 0 0 0 2 18.828V21a1 1 0 0 0 1 1h3a1 1 0 0 0 1-1v-1a1 1 0 0 1 1-1h1a1 1 0 0 0 1-1v-1a1 1 0 0 1 1-1h.172a2 2 0 0 0 1.414-.586l.814-.814a6.5 6.5 0 1 0-4-4z"/><circle cx="16.5" cy="7.5" r=".5"/>',
+  ban: '<circle cx="12" cy="12" r="10"/><path d="m4.9 4.9 14.2 14.2"/>',
+  trash: '<path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/>',
+  calendar: '<path d="M8 2v4"/><path d="M16 2v4"/><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M3 10h18"/>',
+  clock: '<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>',
+  phone: '<rect width="14" height="20" x="5" y="2" rx="2" ry="2"/><path d="M12 18h.01"/>',
+  door: '<path d="M13 4h3a2 2 0 0 1 2 2v14"/><path d="M2 20h3"/><path d="M13 20h9"/><path d="M10 12v.01"/><path d="M13 4.562v16.157a1 1 0 0 1-1.242.97L5 20V5.562a2 2 0 0 1 1.515-1.94l4-1A2 2 0 0 1 13 4.561Z"/>',
+  x: '<path d="M18 6 6 18"/><path d="m6 6 12 12"/>',
+  left: '<path d="m15 18-6-6 6-6"/>',
+  right: '<path d="m9 18 6-6-6-6"/>',
+};
+
+function icon(name, size = 18) {
+  const span = document.createElement("span");
+  span.className = "ico";
+  span.innerHTML = `<svg viewBox="0 0 24 24" width="${size}" height="${size}" aria-hidden="true">${ICONS[name]}</svg>`;
+  return span;
+}
+
 const CSS = `
-.ga { display: grid; gap: 16px; font-size: 14px; color: var(--color-text, #16202a); }
+.ga { display: grid; gap: 14px; font-size: 14px; color: var(--color-text, #16202a); position: relative; }
+.ga [hidden] { display: none !important; }
 .ga h2 { font-size: 18px; font-weight: 600; margin: 0; }
 .ga .muted { color: var(--color-text-secondary, #5c6b79); }
 .ga .tiny { font-size: 12px; }
-.ga .card { background: var(--color-surface, #fff); border: 1px solid var(--color-border-light, #e5e9ed); border-radius: var(--radius-lg, 12px); padding: 14px 16px; }
-.ga .bar { display: flex; flex-wrap: wrap; gap: 10px 18px; align-items: center; justify-content: space-between; }
-.ga .chips { display: flex; flex-wrap: wrap; gap: 8px; }
-.ga .chip { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--color-border-light, #e5e9ed); border-radius: 999px; padding: 4px 12px; font-size: 12px; background: transparent; color: inherit; cursor: pointer; min-height: 32px; }
-.ga .chip[aria-pressed="true"] { background: var(--color-primary, #1A4F6E); border-color: var(--color-primary, #1A4F6E); color: #fff; }
-.ga .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--color-text-tertiary, #9aa8b4); }
-.ga .dot.ok { background: var(--color-success, #2e7d32); }
-.ga .dot.warn { background: var(--color-warning, #F2C035); }
+.ga .ico { display: inline-flex; }
+.ga .ico svg { fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+.ga .tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--color-border-light, #e5e9ed); overflow-x: auto; }
+.ga .tab { all: unset; box-sizing: border-box; display: inline-flex; align-items: center; gap: 6px; padding: 8px 12px; font-size: 13px; color: var(--color-text-secondary, #5c6b79); border-bottom: 2px solid transparent; cursor: pointer; white-space: nowrap; }
+.ga .tab[aria-selected="true"] { color: var(--color-primary, #1A4F6E); border-color: var(--color-primary, #1A4F6E); font-weight: 600; }
+.ga .tab:focus-visible { outline: 2px solid var(--color-primary, #1A4F6E); }
+.ga .tab .n { font-size: 11px; background: var(--color-border-light, #eef1f4); border-radius: 999px; padding: 0 7px; font-weight: 500; color: var(--color-text-secondary, #5c6b79); }
+.ga .toolbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.ga .grow { flex: 1; }
+.ga .chip { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--color-border-light, #e5e9ed); border-radius: 999px; padding: 3px 10px; font-size: 12px; min-height: 28px; background: var(--color-surface, #fff); color: var(--color-text-secondary, #5c6b79); }
+.ga .chip.filter { cursor: pointer; font: inherit; font-size: 12px; }
+.ga .chip.filter[aria-pressed="true"] { background: var(--color-primary, #1A4F6E); border-color: var(--color-primary, #1A4F6E); color: #fff; }
+.ga .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--color-text-tertiary, #9aa8b4); flex: none; }
+.ga .dot.ok { background: var(--color-success, #1FA260); }
 .ga .dot.ko { background: var(--color-error, #b3261e); }
-.ga button.action { min-height: 36px; padding: 0 14px; border-radius: var(--radius-md, 8px); border: 1px solid var(--color-border, #dfe4e9); background: transparent; color: inherit; cursor: pointer; font: inherit; font-size: 13px; }
-.ga button.action:hover { background: var(--color-border-light, #eef1f4); }
-.ga button.primary { background: var(--color-primary, #1A4F6E); border-color: var(--color-primary, #1A4F6E); color: #fff; }
-.ga button.danger { color: var(--color-error, #b3261e); border-color: var(--color-error, #b3261e); }
-.ga .group { display: grid; gap: 8px; }
-.ga .group h3 { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--color-text-tertiary, #9aa8b4); margin: 8px 0 0; font-weight: 600; }
-.ga .row { display: grid; grid-template-columns: 1fr auto; gap: 10px; align-items: start; }
-.ga .row .who { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px; }
-.ga .row .name { font-weight: 600; }
-.ga .tag { font-size: 11px; border-radius: 999px; padding: 2px 8px; background: var(--color-border-light, #eef1f4); color: var(--color-text-secondary, #5c6b79); }
-.ga .code { font-family: var(--font-mono, ui-monospace, monospace); font-size: 15px; letter-spacing: 1px; }
-.ga .row .acts { display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-end; }
-.ga .facts { display: flex; flex-wrap: wrap; gap: 4px 14px; margin-top: 4px; }
+.ga .ib { all: unset; box-sizing: border-box; width: 34px; height: 34px; border-radius: var(--radius-md, 8px); display: inline-flex; align-items: center; justify-content: center; color: var(--color-text-secondary, #5c6b79); cursor: pointer; flex: none; }
+.ga .ib:hover { background: var(--color-border-light, #eef1f4); color: var(--color-text, #16202a); }
+.ga .ib:focus-visible { outline: 2px solid var(--color-primary, #1A4F6E); }
+.ga .ib.small { width: 24px; height: 24px; }
+.ga .primary { all: unset; box-sizing: border-box; display: inline-flex; align-items: center; gap: 6px; height: 34px; padding: 0 12px; border-radius: var(--radius-md, 8px); background: var(--color-primary, #1A4F6E); color: #fff; font-size: 13px; cursor: pointer; }
+.ga .primary:focus-visible { outline: 2px solid var(--color-primary, #1A4F6E); outline-offset: 2px; }
+.ga .notes p { margin: 0 0 4px; }
+.ga .group { display: grid; gap: 6px; }
+.ga .group h3 { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--color-text-tertiary, #9aa8b4); margin: 6px 0 0; font-weight: 600; }
+.ga .row { display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: center; background: var(--color-surface, #fff); border: 1px solid var(--color-border-light, #e5e9ed); border-radius: var(--radius-lg, 12px); padding: 10px 8px 10px 14px; }
+.ga .row.dim .who, .ga .row.dim .facts { opacity: .6; }
+.ga .who { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px; }
+.ga .name { font-weight: 600; }
+.ga .code { font-family: var(--font-mono, ui-monospace, monospace); font-size: 13.5px; letter-spacing: 1px; color: var(--color-text-secondary, #5c6b79); }
+.ga .tag { font-size: 11px; border-radius: 999px; padding: 1px 8px; background: var(--color-border-light, #eef1f4); color: var(--color-text-secondary, #5c6b79); }
+.ga .facts { display: flex; flex-wrap: wrap; gap: 2px 12px; margin-top: 2px; font-size: 12px; color: var(--color-text-secondary, #5c6b79); }
+.ga .facts > span { display: inline-flex; align-items: center; gap: 4px; }
+.ga .acts { display: flex; align-items: center; }
+.ga .menu-anchor { position: relative; }
+.ga .menu { position: absolute; right: 0; top: calc(100% + 4px); background: var(--color-surface, #fff); border: 1px solid var(--color-border, #dfe4e9); border-radius: 10px; box-shadow: 0 8px 24px rgba(0,0,0,.14); padding: 4px; min-width: 220px; z-index: 20; }
+.ga .menu button { all: unset; box-sizing: border-box; display: flex; gap: 10px; align-items: center; width: 100%; padding: 8px 10px; border-radius: 6px; font-size: 13px; cursor: pointer; color: var(--color-text, #16202a); }
+.ga .menu button:hover, .ga .menu button:focus-visible { background: var(--color-border-light, #eef1f4); }
+.ga .menu button.danger { color: var(--color-error, #b3261e); }
+.ga .menu hr { border: 0; border-top: 1px solid var(--color-border-light, #e5e9ed); margin: 4px; }
 .ga dialog { border: 0; border-radius: var(--radius-lg, 12px); padding: 0; background: var(--color-surface, #fff); color: inherit; max-width: 520px; width: calc(100vw - 32px); }
 .ga dialog::backdrop { background: rgba(0,0,0,.4); }
 .ga .sheet { padding: 18px; display: grid; gap: 14px; }
 .ga .field { display: grid; gap: 6px; }
-.ga .field label { font-size: 12px; color: var(--color-text-secondary, #5c6b79); }
-.ga input, .ga select { font: inherit; padding: 9px 10px; border-radius: var(--radius-md, 8px); border: 1px solid var(--color-border, #dfe4e9); background: transparent; color: inherit; min-height: 40px; }
+.ga .field > .lbl { font-size: 12px; color: var(--color-text-secondary, #5c6b79); }
+.ga input, .ga select { font: inherit; padding: 8px 10px; border-radius: var(--radius-md, 8px); border: 1px solid var(--color-border, #dfe4e9); background: transparent; color: inherit; min-height: 40px; }
+.ga .checks { display: flex; flex-wrap: wrap; gap: 8px; }
+.ga .checks label { display: inline-flex; gap: 6px; align-items: center; border: 1px solid var(--color-border, #dfe4e9); border-radius: var(--radius-md, 8px); padding: 6px 10px; font-size: 13px; cursor: pointer; }
+.ga .checks input { min-height: 0; }
+.ga .cut { display: flex; gap: 8px; align-items: flex-start; font-size: 13px; }
+.ga .cut input { min-height: 0; margin-top: 3px; }
 .ga .windows { display: grid; gap: 8px; }
 .ga .window { display: flex; gap: 8px; align-items: center; }
-.ga .refusal { color: var(--color-error, #b3261e); font-size: 12px; }
-.ga .journal { display: grid; gap: 6px; max-height: 320px; overflow: auto; }
+.ga .refusal { color: var(--color-error, #b3261e); font-size: 12px; margin: 0; }
+.ga .foot { display: flex; gap: 8px; justify-content: flex-end; }
+.ga .btn { font: inherit; font-size: 13px; min-height: 36px; padding: 0 14px; border-radius: var(--radius-md, 8px); border: 1px solid var(--color-border, #dfe4e9); background: transparent; color: inherit; cursor: pointer; }
+.ga .btn.main { background: var(--color-primary, #1A4F6E); border-color: var(--color-primary, #1A4F6E); color: #fff; }
+.ga .btn.danger { color: var(--color-error, #b3261e); border-color: var(--color-error, #b3261e); }
+.ga .btn.link { border: 0; padding: 0 4px; color: var(--color-primary, #1A4F6E); }
+/* The date picker: days and half-hours before the lower bound are struck and
+   unclickable, so « until » can never be picked before « from ». */
+.ga .dt { display: grid; gap: 6px; }
+.ga .dt-row { display: flex; gap: 6px; align-items: center; }
+.ga .dt-trigger { all: unset; box-sizing: border-box; flex: 1; display: flex; align-items: center; gap: 8px; border: 1px solid var(--color-border, #dfe4e9); border-radius: var(--radius-md, 8px); padding: 0 10px; min-height: 40px; cursor: pointer; }
+.ga .dt-trigger:focus-visible { outline: 2px solid var(--color-primary, #1A4F6E); }
+.ga .dt-trigger .ph { color: var(--color-text-tertiary, #9aa8b4); }
+.ga .dt-pop { border: 1px solid var(--color-border, #dfe4e9); border-radius: 10px; padding: 10px; }
+.ga .dt-head { display: flex; justify-content: space-between; align-items: center; font-weight: 600; font-size: 13px; text-transform: capitalize; }
+.ga .dt-cal { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; text-align: center; font-size: 12px; margin-top: 4px; }
+.ga .dt-cal b { font-weight: 600; color: var(--color-text-tertiary, #9aa8b4); padding: 4px 0; }
+.ga .dt-cal button, .ga .dt-times button { all: unset; box-sizing: border-box; padding: 6px 0; border-radius: 6px; cursor: pointer; font-variant-numeric: tabular-nums; text-align: center; }
+.ga .dt-cal button:hover:not(:disabled), .ga .dt-times button:hover:not(:disabled) { background: var(--color-border-light, #eef1f4); }
+.ga .dt-cal button:focus-visible, .ga .dt-times button:focus-visible { outline: 2px solid var(--color-primary, #1A4F6E); }
+.ga .dt-cal button:disabled, .ga .dt-times button:disabled { color: var(--color-text-tertiary, #9aa8b4); opacity: .55; text-decoration: line-through; cursor: not-allowed; }
+.ga .dt-cal button.sel, .ga .dt-times button.sel { background: var(--color-primary, #1A4F6E); color: #fff; opacity: 1; }
+.ga .dt-cal button.bound { outline: 1px dashed var(--color-primary, #1A4F6E); }
+.ga .dt-times { display: grid; grid-template-columns: repeat(6, 1fr); gap: 4px; margin-top: 8px; max-height: 136px; overflow: auto; font-size: 12px; }
+.ga .dt-times button { border: 1px solid var(--color-border-light, #e5e9ed); padding: 5px 0; }
+.ga .dt-times button:disabled { border-color: transparent; }
+.ga .hint { font-size: 12px; color: var(--color-text-secondary, #5c6b79); }
+.ga .journal { display: grid; gap: 6px; max-height: 360px; overflow: auto; }
 .ga .journal .line { display: flex; gap: 10px; font-size: 12px; }
-.ga .journal .when { color: var(--color-text-tertiary, #9aa8b4); font-variant-numeric: tabular-nums; }
-.ga .toast { position: fixed; inset-inline: 0; bottom: 20px; margin: auto; width: max-content; background: var(--color-text, #16202a); color: var(--color-surface, #fff); padding: 8px 14px; border-radius: 999px; font-size: 13px; z-index: 50; }
+.ga .journal .when { color: var(--color-text-tertiary, #9aa8b4); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.ga .toast { position: fixed; inset-inline: 0; bottom: 20px; margin: auto; width: max-content; max-width: calc(100vw - 32px); background: var(--color-text, #16202a); color: var(--color-surface, #fff); padding: 8px 14px; border-radius: 999px; font-size: 13px; z-index: 50; }
 @media (max-width: 640px) {
   .ga .row { grid-template-columns: 1fr; }
-  .ga .row .acts { justify-content: flex-start; }
+  .ga .acts { justify-content: flex-end; margin-top: -4px; }
 }
 `;
+
+const TAB_KEY = "guest-access.tab";
+const GROUPS = ["active", "scheduled", "suspended", "revoked", "ended"];
+const STEP_MIN = 30;
+
+// ── Wall-clock values ──────────────────────────────────────
+//
+// Every date on this page is a Paris wall-clock string, `YYYY-MM-DDTHH:MM` —
+// what the server parses and what it hands back (`toLocal`). Kept as strings on
+// purpose: two of them compare correctly as text, and no Date ever silently
+// moves one by the viewer's own time zone.
+
+function toLocal(iso) {
+  if (!iso) return "";
+  return new Intl.DateTimeFormat("sv-SE", {
+    timeZone: "Europe/Paris",
+    year: "numeric", month: "2-digit", day: "2-digit",
+    hour: "2-digit", minute: "2-digit", hour12: false,
+  }).format(new Date(iso)).replace(" ", "T");
+}
+
+const pad = (n) => String(n).padStart(2, "0");
+function parts(wall) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/.exec(wall || "");
+  return m ? { y: +m[1], mo: +m[2], d: +m[3], h: +m[4], mi: +m[5] } : null;
+}
+const wallOf = (y, mo, d, h, mi) => `${y}-${pad(mo)}-${pad(d)}T${pad(h)}:${pad(mi)}`;
+const dayOf = (wall) => wall.slice(0, 10);
+/** Arithmetic on a wall clock, through UTC so no zone ever gets a say. */
+function addMinutes(wall, minutes) {
+  const p = parts(wall);
+  const t = new Date(Date.UTC(p.y, p.mo - 1, p.d, p.h, p.mi) + minutes * 60000);
+  return wallOf(t.getUTCFullYear(), t.getUTCMonth() + 1, t.getUTCDate(), t.getUTCHours(), t.getUTCMinutes());
+}
+function minutesBetween(a, b) {
+  const pa = parts(a), pb = parts(b);
+  return (Date.UTC(pb.y, pb.mo - 1, pb.d, pb.h, pb.mi) - Date.UTC(pa.y, pa.mo - 1, pa.d, pa.h, pa.mi)) / 60000;
+}
+/** Now, on the Paris clock, rounded up to the next half hour. */
+function nextSlot() {
+  const now = parts(toLocal(new Date().toISOString()));
+  const rounded = Math.ceil((now.h * 60 + now.mi + 1) / STEP_MIN) * STEP_MIN;
+  return addMinutes(wallOf(now.y, now.mo, now.d, 0, 0), rounded);
+}
 
 let cleanup = [];
 
 export async function mount(container, ctx) {
   const lang = (ctx.locale || "fr").startsWith("en") ? "en" : "fr";
+  const locale = lang === "en" ? "en-GB" : "fr-FR";
   const t = (key, vars) => {
     let text = S[lang][key] ?? S.fr[key] ?? key;
     for (const [k, v] of Object.entries(vars || {})) text = text.replace(`{${k}}`, v);
     return text;
   };
-  const dateFmt = new Intl.DateTimeFormat(lang === "en" ? "en-GB" : "fr-FR", {
-    day: "numeric",
-    month: "short",
-    hour: "2-digit",
-    minute: "2-digit",
-    timeZone: "Europe/Paris",
+  const dateFmt = new Intl.DateTimeFormat(locale, {
+    day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", timeZone: "Europe/Paris",
   });
   const fmt = (iso) => (iso ? dateFmt.format(new Date(iso)) : "");
+  const wallFmt = new Intl.DateTimeFormat(locale, {
+    weekday: "short", day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit", timeZone: "UTC",
+  });
+  const fmtWall = (wall) => {
+    const p = parts(wall);
+    return p ? wallFmt.format(new Date(Date.UTC(p.y, p.mo - 1, p.d, p.h, p.mi))) : "";
+  };
+  const monthFmt = new Intl.DateTimeFormat(locale, { month: "long", year: "numeric", timeZone: "UTC" });
 
   const style = document.createElement("style");
   style.textContent = CSS;
@@ -269,14 +450,35 @@ export async function mount(container, ctx) {
   root.className = "ga";
   container.replaceChildren(style, root);
 
-  const state = { data: null, kind: "all", error: null };
+  let savedTab = "all";
+  try { savedTab = localStorage.getItem(TAB_KEY) || "all"; } catch { /* private window */ }
+  const state = { data: null, tab: savedTab, kind: "all", error: null, menu: null };
+
+  const el = (tag, className, text) => {
+    const node = document.createElement(tag);
+    if (className) node.className = className;
+    if (text !== undefined) node.textContent = text;
+    return node;
+  };
+  const iconButton = (name, label, onClick, className = "ib") => {
+    const b = el("button", className);
+    b.type = "button";
+    b.title = label;
+    b.setAttribute("aria-label", label);
+    b.appendChild(icon(name, className.includes("small") ? 14 : 18));
+    b.onclick = onClick;
+    return b;
+  };
 
   const toast = (message) => {
-    const el = document.createElement("div");
-    el.className = "toast";
-    el.textContent = message;
-    document.body.appendChild(el);
-    setTimeout(() => el.remove(), 2200);
+    const node = el("div", "toast", message);
+    root.appendChild(node);
+    setTimeout(() => node.remove(), 2400);
+  };
+  // The server's refusal code, turned into the sentence the owner needs.
+  const refusalText = (err) => {
+    const code = ((err && err.message) || "").match(/[a-z_]+$/);
+    return t((code && S[lang][code[0]] && code[0]) || "failed");
   };
 
   async function load() {
@@ -284,32 +486,52 @@ export async function mount(container, ctx) {
       state.data = await ctx.api("/state");
       state.error = null;
     } catch (err) {
-      state.error = err && err.message ? err.message : String(err);
+      state.error = (err && err.message) || String(err);
     }
     render();
   }
 
-  async function act(path, options) {
+  async function act(path, options, done) {
     try {
       await ctx.api(path, options);
+      if (done) toast(done);
       await load();
       return true;
     } catch (err) {
-      toast((err && err.message) || t("failed"));
+      toast(refusalText(err));
       return false;
     }
+  }
+
+  // ── Gates ────────────────────────────────────────────────
+
+  const gates = () => state.data.gates;
+  const gateLabel = (id) => {
+    const gate = gates().find((g) => g.id === id);
+    return gate ? gate.openingLabel || gate.name : "?";
+  };
+  /** The tab actually shown — a remembered gate may have been removed since. */
+  function currentTab() {
+    const many = gates().length > 1;
+    if (state.tab === "all" && many) return "all";
+    if (gates().some((g) => g.id === state.tab)) return state.tab;
+    return many ? "all" : gates()[0].id;
+  }
+  function selectTab(tab) {
+    state.tab = tab;
+    state.menu = null;
+    try { localStorage.setItem(TAB_KEY, tab); } catch { /* private window */ }
+    render();
   }
 
   // ── Wording ──────────────────────────────────────────────
 
   function validityOf(row) {
     if (!row.validFrom && !row.validUntil) return t("always");
-    if (row.validFrom && row.validUntil)
-      return t("between", { a: fmt(row.validFrom), b: fmt(row.validUntil) });
+    if (row.validFrom && row.validUntil) return t("between", { a: fmt(row.validFrom), b: fmt(row.validUntil) });
     if (row.validFrom) return t("from", { d: fmt(row.validFrom) });
     return t("until", { d: fmt(row.validUntil) });
   }
-
   function hoursOf(row) {
     if (!row.timeWindows || !row.timeWindows.length) return t("anyHour");
     return t("hours", { w: row.timeWindows.map((w) => `${w.from}–${w.to}`).join(", ") });
@@ -317,487 +539,607 @@ export async function mount(container, ctx) {
 
   // ── Rendering ────────────────────────────────────────────
 
-  function header() {
+  function tabs(tab) {
+    const bar = el("div", "tabs");
+    bar.setAttribute("role", "tablist");
+    const add = (id, label, count, withIcon) => {
+      const b = el("button", "tab");
+      b.type = "button";
+      b.setAttribute("role", "tab");
+      b.setAttribute("aria-selected", String(tab === id));
+      if (withIcon) b.appendChild(icon("door", 15));
+      b.append(label);
+      b.appendChild(el("span", "n", String(count)));
+      b.onclick = () => selectTab(id);
+      bar.appendChild(b);
+    };
+    if (gates().length > 1) add("all", t("allGates"), state.data.accesses.length, false);
+    for (const gate of gates()) add(gate.id, gate.openingLabel || gate.name, gate.accesses, true);
+    const plus = el("button", "tab");
+    plus.type = "button";
+    plus.appendChild(icon("plus", 15));
+    plus.append(t("addGate"));
+    plus.onclick = openAddGate;
+    bar.appendChild(plus);
+    return bar;
+  }
+
+  function toolbar(tab) {
     const data = state.data;
-    const card = document.createElement("div");
-    card.className = "card bar";
-
-    const left = document.createElement("div");
-    left.style.display = "grid";
-    left.style.gap = "6px";
-
-    const houseLine = document.createElement("div");
-    houseLine.className = "chips";
-    const gate = document.createElement("span");
-    gate.className = "chip";
-    gate.setAttribute("aria-pressed", "false");
-    gate.innerHTML = `<span class="dot ${data.house.gateState === "unknown" ? "" : "ok"}"></span>`;
-    gate.append(`${data.house.openingLabel || t("houseGate")} · ${t(`gate_${data.house.gateState}`)}`);
-    houseLine.appendChild(gate);
-
-    const door = document.createElement("span");
-    door.className = "chip";
-    door.setAttribute("aria-pressed", "false");
-    door.innerHTML = `<span class="dot ${data.publicTree.open ? "ok" : "ko"}"></span>`;
-    door.append(data.publicTree.open ? t("doorOpen") : t("doorShut"));
-    houseLine.appendChild(door);
-
-    const gf = document.createElement("span");
-    gf.className = "chip";
-    gf.setAttribute("aria-pressed", "false");
-    const gfState = !data.guestflow.configured ? "" : data.guestflow.linked ? "ok" : "ko";
-    gf.innerHTML = `<span class="dot ${gfState}"></span>`;
-    gf.append(
-      !data.guestflow.configured
-        ? t("guestflowOff")
-        : data.guestflow.linked
-          ? `${t("guestflowOk")} · ${fmt(data.guestflow.lastSyncAt)}`
-          : t("guestflowKo"),
-    );
-    houseLine.appendChild(gf);
-    left.appendChild(houseLine);
-
-    const notes = [];
-    if (!data.publicTree.open) notes.push(t("doorShutHelp"));
-    if (!data.publicTree.guestBaseUrl) notes.push(t("noGuestUrl"));
-    if (data.publicTree.guestBaseUrl && data.publicTree.guestPath !== data.publicTree.path)
-      notes.push(
-        t("aliasNote", {
-          link: `${data.publicTree.guestBaseUrl}${data.publicTree.guestPath}`,
-          tree: data.publicTree.path,
-        }),
-      );
-    if (!data.house.recipeAnswering) notes.push(t("recipeMissing"));
-    if (data.guestflow.pendingPushes)
-      notes.push(t("pending", { n: data.guestflow.pendingPushes }));
-    for (const note of notes) {
-      const p = document.createElement("p");
-      p.className = "tiny muted";
-      p.style.margin = "0";
-      p.textContent = note;
-      left.appendChild(p);
+    const bar = el("div", "toolbar");
+    const shown = tab === "all" ? gates() : gates().filter((g) => g.id === tab);
+    for (const gate of shown) {
+      const chip = el("span", "chip");
+      chip.appendChild(el("span", `dot ${gate.gateState === "unknown" ? "" : "ok"}`));
+      chip.append(`${gate.openingLabel || gate.name} · ${t(`gate_${gate.gateState}`)}`);
+      bar.appendChild(chip);
     }
-    card.appendChild(left);
-
-    const acts = document.createElement("div");
-    acts.className = "acts";
-    acts.style.display = "flex";
-    acts.style.gap = "8px";
+    // Said only when it is wrong: an open door is the normal state.
+    if (!data.publicTree.open) {
+      const chip = el("span", "chip");
+      chip.appendChild(el("span", "dot ko"));
+      chip.append(t("doorShut"));
+      bar.appendChild(chip);
+    }
     if (data.guestflow.configured) {
-      const sync = document.createElement("button");
-      sync.className = "action";
-      sync.textContent = t("sync");
-      sync.onclick = () => act("/sync", { method: "POST", body: {} });
-      acts.appendChild(sync);
+      const chip = el("span", "chip");
+      chip.appendChild(el("span", `dot ${data.guestflow.linked ? "ok" : "ko"}`));
+      chip.append(data.guestflow.linked ? t("guestflowOk", { d: fmt(data.guestflow.lastSyncAt) }) : t("guestflowKo"));
+      chip.appendChild(iconButton("refresh", t("sync"), () => act("/sync", { method: "POST", body: {} }), "ib small"));
+      bar.appendChild(chip);
     }
-    const create = document.createElement("button");
-    create.className = "action primary";
-    create.textContent = t("newAccess");
-    create.onclick = () => openEditor(null);
-    acts.appendChild(create);
-    card.appendChild(acts);
-    return card;
+    bar.appendChild(el("span", "grow"));
+    if (tab !== "all" && gates().length > 1) {
+      bar.appendChild(iconButton("trash", t("removeGate"), () => {
+        if (confirm(t("confirmRemoveGate", { g: gateLabel(tab) }))) {
+          act(`/gates/${tab}`, { method: "DELETE" }).then((ok) => ok && selectTab("all"));
+        }
+      }));
+    }
+    bar.appendChild(iconButton("history", t("journal"), () => openJournal(null)));
+    const create = el("button", "primary");
+    create.type = "button";
+    create.appendChild(icon("plus", 16));
+    create.append(t("newAccess"));
+    create.onclick = () => openEditor(null, tab);
+    bar.appendChild(create);
+    return bar;
+  }
+
+  function notes(tab) {
+    const data = state.data;
+    const wrap = el("div", "notes tiny muted");
+    const lines = [];
+    if (!data.publicTree.open) lines.push(t("doorShutHelp"));
+    if (!data.publicTree.guestBaseUrl) lines.push(t("noGuestUrl"));
+    if (data.publicTree.guestBaseUrl && data.publicTree.guestPath !== data.publicTree.path) {
+      lines.push(t("aliasNote", { link: `${data.publicTree.guestBaseUrl}${data.publicTree.guestPath}`, tree: data.publicTree.path }));
+    }
+    for (const gate of gates()) {
+      if ((tab === "all" || tab === gate.id) && !gate.recipeAnswering) {
+        lines.push(t("recipeMissing", { g: gate.openingLabel || gate.name }));
+      }
+    }
+    if (data.guestflow.pendingPushes) lines.push(t("pending", { n: data.guestflow.pendingPushes }));
+    for (const line of lines) wrap.appendChild(el("p", "", line));
+    return lines.length ? wrap : null;
   }
 
   function filters() {
-    const wrap = document.createElement("div");
-    wrap.className = "chips";
-    for (const [value, key] of [
-      ["all", "filterAll"],
-      ["stay", "filterGuestflow"],
-      ["manual", "filterMine"],
-    ]) {
-      const chip = document.createElement("button");
-      chip.className = "chip";
+    const wrap = el("div", "toolbar");
+    for (const [value, key] of [["all", "filterAll"], ["stay", "filterGuestflow"], ["manual", "filterMine"]]) {
+      const chip = el("button", "chip filter", t(key));
       chip.type = "button";
-      chip.textContent = t(key);
       chip.setAttribute("aria-pressed", String(state.kind === value));
-      chip.onclick = () => {
-        state.kind = value;
-        render();
-      };
+      chip.onclick = () => { state.kind = value; render(); };
       wrap.appendChild(chip);
     }
-    const journal = document.createElement("button");
-    journal.className = "chip";
-    journal.type = "button";
-    journal.textContent = t("journal");
-    journal.setAttribute("aria-pressed", "false");
-    journal.onclick = () => openJournal(null);
-    wrap.appendChild(journal);
     return wrap;
   }
 
-  function rowOf(row) {
-    const card = document.createElement("div");
-    card.className = "card row";
+  function rowOf(row, tab) {
+    const live = row.state !== "ended" && row.state !== "revoked";
+    const card = el("div", `row${row.state === "suspended" || !live ? " dim" : ""}`);
 
-    const left = document.createElement("div");
-    const who = document.createElement("div");
-    who.className = "who";
-    const name = document.createElement("span");
-    name.className = "name";
-    name.textContent = row.label;
-    who.appendChild(name);
-
-    const tag = document.createElement("span");
-    tag.className = "tag";
-    tag.textContent = row.kind === "stay" ? t("tagGuestflow") : t("tagMine");
-    who.appendChild(tag);
-
-    if (row.code) {
-      const code = document.createElement("span");
-      code.className = "code";
-      code.textContent = row.code;
-      who.appendChild(code);
-    }
+    const left = el("div");
+    const who = el("div", "who");
+    who.appendChild(el("span", "name", row.label));
+    if (row.code) who.appendChild(el("span", "code", row.code));
+    if (row.kind === "stay") who.appendChild(el("span", "tag", t("tagGuestflow")));
+    // On « all », which gates this person opens is the one thing the row must add.
+    if (tab === "all") who.appendChild(el("span", "tag", row.gates.map(gateLabel).join(" · ")));
+    if (row.state === "suspended") who.appendChild(el("span", "tag", t("tagSuspended")));
     left.appendChild(who);
 
-    const facts = document.createElement("div");
-    facts.className = "facts tiny muted";
-    const bits = [
-      validityOf(row),
-      hoursOf(row),
-      t("devices", { n: row.devices }),
-      row.lastUsedAt ? t("lastUse", { d: fmt(row.lastUsedAt) }) : t("neverUsed"),
-    ];
-    if (row.source && row.source.property) {
-      bits.unshift([row.source.property, row.source.reservationNumber].filter(Boolean).join(" · "));
-    }
-    for (const bit of bits) {
-      const span = document.createElement("span");
-      span.textContent = bit;
+    const facts = el("div", "facts");
+    const fact = (name, text, title) => {
+      const span = el("span");
+      if (name) span.appendChild(icon(name, 13));
+      span.append(text);
+      if (title) span.title = title;
       facts.appendChild(span);
-    }
+    };
+    if (row.source && row.source.property) fact(null, [row.source.property, row.source.reservationNumber].filter(Boolean).join(" · "));
+    fact("calendar", validityOf(row));
+    fact("clock", hoursOf(row));
+    fact("phone", String(row.devices), t("phones", { n: row.devices }));
+    fact(null, row.lastUsedAt ? t("lastUse", { d: fmt(row.lastUsedAt) }) : t("neverUsed"));
     left.appendChild(facts);
     card.appendChild(left);
 
-    const acts = document.createElement("div");
-    acts.className = "acts";
-    const button = (label, handler, className) => {
-      const b = document.createElement("button");
-      b.className = `action ${className || ""}`;
-      b.type = "button";
-      b.textContent = label;
-      b.onclick = handler;
-      acts.appendChild(b);
-      return b;
-    };
+    const acts = el("div", "acts");
+    if (live) {
+      if (row.invitationUrl) {
+        acts.appendChild(iconButton("link", t("copyLink"), async () => {
+          try { await navigator.clipboard.writeText(row.invitationUrl); toast(t("copied")); }
+          catch { toast(row.invitationUrl); }
+        }));
+      }
+      acts.appendChild(iconButton("pencil", t("edit"), () => openEditor(row, tab)));
+      const held = row.state === "suspended";
+      acts.appendChild(iconButton(held ? "play" : "pause", held ? t("resume") : t("suspend"), () =>
+        act(`/accesses/${row.id}/${held ? "resume" : "suspend"}`, { method: "POST", body: {} })));
+    }
 
-    if (row.invitationUrl) {
-      button(t("copyLink"), async () => {
-        try {
-          await navigator.clipboard.writeText(row.invitationUrl);
-          toast(t("copied"));
-        } catch {
-          toast(row.invitationUrl);
-        }
-      });
+    const anchor = el("span", "menu-anchor");
+    const more = iconButton("more", t("more"), (event) => {
+      event.stopPropagation();
+      state.menu = state.menu === row.id ? null : row.id;
+      render();
+    });
+    more.setAttribute("aria-haspopup", "menu");
+    more.setAttribute("aria-expanded", String(state.menu === row.id));
+    anchor.appendChild(more);
+    if (state.menu === row.id) {
+      const menu = el("div", "menu");
+      menu.setAttribute("role", "menu");
+      const item = (name, label, onClick, danger) => {
+        const b = el("button", danger ? "danger" : "");
+        b.type = "button";
+        b.setAttribute("role", "menuitem");
+        b.appendChild(icon(name, 16));
+        b.append(label);
+        b.onclick = () => { state.menu = null; render(); onClick(); };
+        menu.appendChild(b);
+      };
+      if (live) item("key", t("changeCode"), () => openChangeCode(row));
+      item("history", t("journalOf"), () => openJournal(row));
+      menu.appendChild(el("hr"));
+      // A live access is revoked; only one that can no longer open is deleted.
+      if (live) {
+        item("ban", t("revoke"), () => {
+          if (confirm(t("confirmRevoke"))) act(`/accesses/${row.id}/revoke`, { method: "POST", body: {} });
+        }, true);
+      } else {
+        item("trash", t("remove"), () => {
+          if (confirm(t("confirmRemove"))) act(`/accesses/${row.id}`, { method: "DELETE" });
+        }, true);
+      }
+      anchor.appendChild(menu);
+      queueMicrotask(() => menu.querySelector("button")?.focus());
     }
-    // A finished access shows no action: there is nothing left to decide.
-    if (row.state !== "ended" && row.state !== "revoked") {
-      button(t("edit"), () => openEditor(row));
-      button(
-        row.state === "suspended" ? t("resume") : t("suspend"),
-        () => act(`/accesses/${row.id}/${row.state === "suspended" ? "resume" : "suspend"}`, { method: "POST", body: {} }),
-      );
-      button(t("invitation"), () => {
-        if (confirm(t("confirmInvitation")))
-          act(`/accesses/${row.id}/invitation`, { method: "POST", body: {} });
-      });
-      button(t("regenerate"), () => {
-        if (confirm(t("confirmRegenerate")))
-          act(`/accesses/${row.id}/regenerate`, { method: "POST", body: {} });
-      });
-      button(
-        t("revoke"),
-        () => {
-          if (confirm(t("confirmRevoke")))
-            act(`/accesses/${row.id}/revoke`, { method: "POST", body: {} });
-        },
-        "danger",
-      );
-    }
-    button(t("journal"), () => openJournal(row));
-    button(
-      t("remove"),
-      () => {
-        if (confirm(t("confirmRemove"))) act(`/accesses/${row.id}`, { method: "DELETE" });
-      },
-      "danger",
-    );
+    acts.appendChild(anchor);
     card.appendChild(acts);
     return card;
   }
 
   function render() {
-    root.replaceChildren();
+    root.querySelectorAll(":scope > :not(dialog):not(.toast)").forEach((n) => n.remove());
     if (state.error) {
-      const p = document.createElement("p");
-      p.className = "muted";
-      p.textContent = state.error;
-      root.appendChild(p);
+      root.prepend(el("p", "muted", state.error));
       return;
     }
     if (!state.data) return;
+    const tab = currentTab();
+    const blocks = [];
 
-    const title = document.createElement("div");
-    title.innerHTML = `<h2>${t("title")}</h2><p class="muted tiny" style="margin:2px 0 0">${t("subtitle")}</p>`;
-    root.appendChild(title);
-    root.appendChild(header());
-    root.appendChild(filters());
+    const title = el("div");
+    title.appendChild(el("h2", "", t("title")));
+    const sub = el("p", "muted tiny", t("subtitle"));
+    sub.style.margin = "2px 0 0";
+    title.appendChild(sub);
+    blocks.push(title, tabs(tab), toolbar(tab));
+    const n = notes(tab);
+    if (n) blocks.push(n);
+    // Without guestFlow, all three filters would show the same list.
+    if (state.data.guestflow.configured) blocks.push(filters());
 
-    const rows = state.data.accesses.filter((r) => state.kind === "all" || r.kind === state.kind);
+    const rows = state.data.accesses.filter(
+      (r) => (tab === "all" || r.gates.includes(tab)) && (state.kind === "all" || r.kind === state.kind),
+    );
     if (!rows.length) {
-      const p = document.createElement("p");
-      p.className = "muted";
-      p.textContent = t("empty");
-      root.appendChild(p);
-      return;
+      blocks.push(el("p", "muted", tab === "all" ? t("empty") : t("emptyGate", { g: gateLabel(tab) })));
     }
-
-    for (const group of ["active", "scheduled", "suspended", "revoked", "ended"]) {
+    for (const group of GROUPS) {
       const inGroup = rows.filter((r) => r.state === group);
       if (!inGroup.length) continue;
-      const section = document.createElement("section");
-      section.className = "group";
-      const heading = document.createElement("h3");
-      heading.textContent = t(`group_${group}`);
-      section.appendChild(heading);
-      for (const row of inGroup) section.appendChild(rowOf(row));
-      root.appendChild(section);
+      const section = el("section", "group");
+      section.appendChild(el("h3", "", t(`group_${group}`)));
+      for (const row of inGroup) section.appendChild(rowOf(row, tab));
+      blocks.push(section);
     }
+    root.prepend(...blocks);
   }
 
-  // ── The editor ───────────────────────────────────────────
+  // A menu closes on a click anywhere else, and on Escape.
+  const closeMenu = (event) => {
+    if (state.menu === null) return;
+    if (event.type === "keydown" && event.key !== "Escape") return;
+    if (event.type === "click" && event.target.closest && event.target.closest(".menu")) return;
+    state.menu = null;
+    render();
+  };
+  document.addEventListener("click", closeMenu);
+  document.addEventListener("keydown", closeMenu);
+  cleanup.push(() => {
+    document.removeEventListener("click", closeMenu);
+    document.removeEventListener("keydown", closeMenu);
+  });
 
-  function openEditor(row) {
+  // ── Dialogs ──────────────────────────────────────────────
+
+  function openDialog(build) {
     const dialog = document.createElement("dialog");
-    const form = document.createElement("form");
-    form.className = "sheet";
-    form.method = "dialog";
+    const sheet = el("form", "sheet");
+    sheet.method = "dialog";
+    sheet.addEventListener("submit", (e) => e.preventDefault());
+    dialog.appendChild(sheet);
+    root.appendChild(dialog);
+    build(sheet, () => dialog.close());
+    dialog.addEventListener("close", () => dialog.remove());
+    dialog.showModal();
+    return dialog;
+  }
+  const field = (label, control) => {
+    const wrap = el("div", "field");
+    const lbl = el("span", "lbl", label);
+    wrap.append(lbl, control);
+    return wrap;
+  };
+  const footer = (close, saveLabel, onSave, className = "btn main") => {
+    const foot = el("div", "foot");
+    const cancel = el("button", "btn", t("cancel"));
+    cancel.type = "button";
+    cancel.onclick = close;
+    const save = el("button", className, saveLabel);
+    save.type = "button";
+    save.onclick = onSave;
+    foot.append(cancel, save);
+    return foot;
+  };
 
-    const heading = document.createElement("h2");
-    heading.textContent = row ? row.label : t("newAccess");
-    form.appendChild(heading);
+  function openAddGate() {
+    openDialog((sheet, close) => {
+      sheet.appendChild(el("h2", "", t("addGateTitle")));
+      sheet.appendChild(el("p", "hint", t("addGateHelp")));
+      const input = el("input");
+      input.maxLength = 40;
+      input.required = true;
+      sheet.appendChild(field(t("gateName"), input));
+      const refusal = el("p", "refusal");
+      refusal.hidden = true;
+      sheet.appendChild(refusal);
+      sheet.appendChild(footer(close, t("save"), async () => {
+        try {
+          const { gate } = await ctx.api("/gates", { method: "POST", body: { name: input.value } });
+          close();
+          state.tab = gate.id;
+          try { localStorage.setItem(TAB_KEY, gate.id); } catch { /* private window */ }
+          await load();
+        } catch (err) {
+          refusal.textContent = refusalText(err);
+          refusal.hidden = false;
+        }
+      }));
+      queueMicrotask(() => input.focus());
+    });
+  }
 
-    const refusal = document.createElement("p");
-    refusal.className = "refusal";
-    refusal.hidden = true;
+  function openChangeCode(row) {
+    openDialog((sheet, close) => {
+      sheet.appendChild(el("h2", "", t("changeCodeTitle", { n: row.label })));
+      sheet.appendChild(el("p", "hint", t("changeCodeHelp")));
+      const label = el("label", "cut");
+      const box = el("input");
+      box.type = "checkbox";
+      label.append(box, t("cutPhones", { n: row.devices }));
+      // Nothing to cut when no phone was ever set up — the choice would be noise.
+      if (row.devices) sheet.appendChild(label);
+      sheet.appendChild(footer(close, t("change"), async () => {
+        close();
+        await act(`/accesses/${row.id}/code`, { method: "POST", body: { cutPhones: box.checked } }, t("codeChanged"));
+      }));
+    });
+  }
 
-    const field = (labelText, input) => {
-      const wrap = document.createElement("div");
-      wrap.className = "field";
-      const label = document.createElement("label");
-      label.textContent = labelText;
-      label.htmlFor = input.id;
-      wrap.append(label, input);
-      return wrap;
-    };
+  /**
+   * A date and a half-hour, picked in one place.
+   *
+   * `lower` and `upper` are bounds read when the calendar is drawn, so moving
+   * « from » re-greys « until » the next time it opens. `strict`: the bound
+   * itself is excluded — « until » cannot equal « from ».
+   */
+  function dateTimePicker({ value, lower, upper, optional, onChange }) {
+    let current = value || "";
+    let view = null;
+    const wrap = el("div", "dt");
+    const rowEl = el("div", "dt-row");
+    const trigger = el("button", "dt-trigger");
+    trigger.type = "button";
+    const clear = iconButton("x", t("clear"), () => { current = ""; pop.hidden = true; paint(); onChange && onChange(current); });
+    rowEl.append(trigger);
+    if (optional) rowEl.append(clear);
+    const pop = el("div", "dt-pop");
+    pop.hidden = true;
+    wrap.append(rowEl, pop);
 
-    const labelInput = document.createElement("input");
-    labelInput.id = "ga-label";
-    labelInput.value = row ? row.label : "";
-    labelInput.required = true;
-    form.appendChild(field(t("label"), labelInput));
+    const lo = () => (lower ? lower() : "");
+    const hi = () => (upper ? upper() : "");
+    const allowed = (wall) => (!lo() || wall > lo()) && (!hi() || wall < hi());
+    const dayAllowed = (day) => (!lo() || day >= dayOf(lo())) && (!hi() || day <= dayOf(hi()));
 
-    const isStay = row && row.kind === "stay";
-    let fromInput = null;
-    let toInput = null;
-    let earlyInput = null;
-    let extendInput = null;
-
-    const toLocal = (iso) => {
-      if (!iso) return "";
-      const parts = new Intl.DateTimeFormat("sv-SE", {
-        timeZone: "Europe/Paris",
-        year: "numeric",
-        month: "2-digit",
-        day: "2-digit",
-        hour: "2-digit",
-        minute: "2-digit",
-        hour12: false,
-      }).format(new Date(iso));
-      return parts.replace(" ", "T");
-    };
-
-    if (isStay) {
-      const stay = document.createElement("p");
-      stay.className = "tiny muted";
-      stay.textContent = `${t("stayWindow")} : ${fmt(row.stayWindow && row.stayWindow.from)} → ${fmt(row.stayWindow && row.stayWindow.to)}. ${t("stayReadOnly")}`;
-      form.appendChild(stay);
-
-      earlyInput = document.createElement("input");
-      earlyInput.type = "datetime-local";
-      earlyInput.id = "ga-early";
-      earlyInput.value = toLocal(row.earlyOpenedAt);
-      form.appendChild(field(t("earlyOpen"), earlyInput));
-
-      extendInput = document.createElement("input");
-      extendInput.type = "datetime-local";
-      extendInput.id = "ga-extend";
-      extendInput.value = toLocal(row.extendedUntil);
-      form.appendChild(field(t("extend"), extendInput));
-    } else {
-      const mode = document.createElement("select");
-      mode.id = "ga-mode";
-      for (const [value, key] of [
-        ["permanent", "permanent"],
-        ["ranged", "ranged"],
-      ]) {
-        const option = document.createElement("option");
-        option.value = value;
-        option.textContent = t(key);
-        mode.appendChild(option);
-      }
-      mode.value = row && (row.validFrom || row.validUntil) ? "ranged" : "permanent";
-      form.appendChild(field(t("validFrom"), mode));
-
-      fromInput = document.createElement("input");
-      fromInput.type = "datetime-local";
-      fromInput.id = "ga-from";
-      fromInput.value = toLocal(row && row.validFrom);
-      const fromField = field(t("validFrom"), fromInput);
-
-      toInput = document.createElement("input");
-      toInput.type = "datetime-local";
-      toInput.id = "ga-to";
-      toInput.value = toLocal(row && row.validUntil);
-      const toField = field(t("validUntil"), toInput);
-
-      const sync = () => {
-        const ranged = mode.value === "ranged";
-        fromField.hidden = !ranged;
-        toField.hidden = !ranged;
-      };
-      mode.onchange = sync;
-      form.append(fromField, toField);
-      sync();
+    function paint() {
+      trigger.replaceChildren(icon("calendar", 16));
+      if (current) trigger.append(fmtWall(current));
+      else trigger.appendChild(el("span", "ph", t("pick")));
+      clear.hidden = !current;
     }
 
-    const windows = document.createElement("div");
-    windows.className = "windows";
-    const addWindow = (window) => {
-      const line = document.createElement("div");
-      line.className = "window";
-      const from = document.createElement("input");
-      from.type = "time";
-      from.value = (window && window.from) || "08:00";
-      const to = document.createElement("input");
-      to.type = "time";
-      to.value = (window && window.to) || "20:00";
-      const drop = document.createElement("button");
-      drop.type = "button";
-      drop.className = "action";
-      drop.textContent = "×";
-      drop.onclick = () => line.remove();
-      line.append(from, document.createTextNode("→"), to, drop);
-      windows.appendChild(line);
+    function set(wall) {
+      current = wall;
+      paint();
+      drawPop();
+      onChange && onChange(current);
+    }
+
+    function drawPop() {
+      if (pop.hidden) return;
+      const base = parts(current || lo() || nextSlot());
+      if (!view) view = { y: base.y, mo: base.mo };
+      pop.replaceChildren();
+
+      const head = el("div", "dt-head");
+      const prev = iconButton("left", t("prevMonth"), () => { view = view.mo === 1 ? { y: view.y - 1, mo: 12 } : { y: view.y, mo: view.mo - 1 }; drawPop(); });
+      const next = iconButton("right", t("nextMonth"), () => { view = view.mo === 12 ? { y: view.y + 1, mo: 1 } : { y: view.y, mo: view.mo + 1 }; drawPop(); });
+      head.append(prev, el("span", "", monthFmt.format(new Date(Date.UTC(view.y, view.mo - 1, 1)))), next);
+      pop.appendChild(head);
+
+      const cal = el("div", "dt-cal");
+      for (const d of t("weekdays").split(",")) cal.appendChild(el("b", "", d));
+      const lead = (new Date(Date.UTC(view.y, view.mo - 1, 1)).getUTCDay() + 6) % 7;
+      for (let i = 0; i < lead; i++) cal.appendChild(el("span"));
+      const days = new Date(Date.UTC(view.y, view.mo, 0)).getUTCDate();
+      for (let d = 1; d <= days; d++) {
+        const day = `${view.y}-${pad(view.mo)}-${pad(d)}`;
+        const b = el("button", "", String(d));
+        b.type = "button";
+        b.disabled = !dayAllowed(day);
+        if (current && dayOf(current) === day) b.classList.add("sel");
+        if (lo() && dayOf(lo()) === day) b.classList.add("bound");
+        b.onclick = () => {
+          const time = current ? current.slice(11) : (lo() ? lo().slice(11) : "08:00");
+          let wall = `${day}T${time}`;
+          // The same day as the bound, at an hour before it: the first free
+          // half hour rather than a value the next click would have to fix.
+          if (!allowed(wall) && lo() && wall <= lo()) wall = addMinutes(lo(), STEP_MIN);
+          if (!allowed(wall) && hi() && wall >= hi()) wall = addMinutes(hi(), -STEP_MIN);
+          set(wall);
+        };
+        cal.appendChild(b);
+      }
+      pop.appendChild(cal);
+
+      const times = el("div", "dt-times");
+      const day = current ? dayOf(current) : null;
+      for (let m = 0; m < 24 * 60; m += STEP_MIN) {
+        const hhmm = `${pad(Math.floor(m / 60))}:${pad(m % 60)}`;
+        const b = el("button", "", hhmm);
+        b.type = "button";
+        b.disabled = !day || !allowed(`${day}T${hhmm}`);
+        if (current && current.slice(11) === hhmm) b.classList.add("sel");
+        b.onclick = () => set(`${day}T${hhmm}`);
+        times.appendChild(b);
+      }
+      pop.appendChild(times);
+      queueMicrotask(() => times.querySelector(".sel, button:not(:disabled)")?.scrollIntoView({ block: "nearest" }));
+    }
+
+    trigger.onclick = () => {
+      // One open at a time, so the sheet never grows two calendars.
+      for (const other of wrap.closest("form").querySelectorAll(".dt-pop")) if (other !== pop) other.hidden = true;
+      pop.hidden = !pop.hidden;
+      view = null;
+      drawPop();
     };
-    for (const window of (row && row.timeWindows) || []) addWindow(window);
-    const addButton = document.createElement("button");
-    addButton.type = "button";
-    addButton.className = "action";
-    addButton.textContent = t("addHours");
-    addButton.onclick = () => addWindow(null);
-    form.append(windows, addButton, refusal);
+    paint();
+    return {
+      el: wrap,
+      get: () => current,
+      set: (wall) => { current = wall; paint(); drawPop(); },
+    };
+  }
 
-    const buttons = document.createElement("div");
-    buttons.style.display = "flex";
-    buttons.style.gap = "8px";
-    buttons.style.justifyContent = "flex-end";
-    const cancel = document.createElement("button");
-    cancel.type = "button";
-    cancel.className = "action";
-    cancel.textContent = t("cancel");
-    cancel.onclick = () => dialog.close();
-    const save = document.createElement("button");
-    save.type = "button";
-    save.className = "action primary";
-    save.textContent = t("save");
-    buttons.append(cancel, save);
-    form.appendChild(buttons);
+  function openEditor(row, tab) {
+    openDialog((form, close) => {
+      form.appendChild(el("h2", "", row ? row.label : t("newAccess")));
 
-    const collectWindows = () =>
-      [...windows.querySelectorAll(".window")].map((line) => {
-        const [from, to] = line.querySelectorAll("input");
-        return { from: from.value, to: to.value };
-      });
+      const labelInput = el("input");
+      labelInput.value = row ? row.label : "";
+      labelInput.required = true;
+      form.appendChild(field(t("label"), labelInput));
 
-    save.onclick = async () => {
-      const payload = { label: labelInput.value, timeWindows: collectWindows() };
+      // With one gate there is nothing to choose, and the access opens it.
+      let gateBoxes = [];
+      if (gates().length > 1) {
+        const checks = el("div", "checks");
+        const ticked = row ? row.gates : [tab === "all" ? gates()[0].id : tab];
+        gateBoxes = gates().map((gate) => {
+          const label = el("label");
+          const box = el("input");
+          box.type = "checkbox";
+          box.value = gate.id;
+          box.checked = ticked.includes(gate.id);
+          label.append(box, gate.openingLabel || gate.name);
+          checks.appendChild(label);
+          return box;
+        });
+        form.appendChild(field(t("gates"), checks));
+      }
+
+      const isStay = row && row.kind === "stay";
+      let collect;
+
       if (isStay) {
-        payload.earlyOpenedAt = earlyInput.value || null;
-        payload.extendedUntil = extendInput.value || null;
+        const stayFrom = toLocal(row.stayWindow && row.stayWindow.from);
+        const stayTo = toLocal(row.stayWindow && row.stayWindow.to);
+        form.appendChild(el("p", "hint", `${t("stayWindow")} : ${fmtWall(stayFrom)} → ${fmtWall(stayTo)}. ${t("stayReadOnly")}`));
+        // « Open from » only ever earlier than the arrival, « extend » only
+        // ever later than the departure — the two widen, never shorten.
+        const early = dateTimePicker({ value: toLocal(row.earlyOpenedAt), upper: () => stayFrom, optional: true });
+        const extend = dateTimePicker({ value: toLocal(row.extendedUntil), lower: () => stayTo, optional: true });
+        form.appendChild(field(t("earlyOpen"), early.el));
+        form.appendChild(field(t("extend"), extend.el));
+        collect = () => ({ earlyOpenedAt: early.get() || null, extendedUntil: extend.get() || null });
       } else {
-        const ranged = form.querySelector("#ga-mode").value === "ranged";
-        payload.validFrom = ranged ? fromInput.value || null : null;
-        payload.validUntil = ranged ? toInput.value || null : null;
-      }
-      try {
-        if (row) await ctx.api(`/accesses/${row.id}`, { method: "PATCH", body: payload });
-        else await ctx.api("/accesses", { method: "POST", body: payload });
-        dialog.close();
-        await load();
-      } catch (err) {
-        // The server's refusal code, turned into the sentence the owner needs.
-        const code = (err && err.message ? err.message : "").match(/[a-z_]+$/);
-        refusal.textContent = t((code && S[lang][code[0]] && code[0]) || "failed");
-        refusal.hidden = false;
-      }
-    };
+        const mode = el("select");
+        for (const [value, key] of [["permanent", "permanent"], ["ranged", "ranged"]]) {
+          const option = el("option", "", t(key));
+          option.value = value;
+          mode.appendChild(option);
+        }
+        mode.value = row && (row.validFrom || row.validUntil) ? "ranged" : "permanent";
+        form.appendChild(field(t("validity"), mode));
 
-    dialog.appendChild(form);
-    root.appendChild(dialog);
-    dialog.showModal();
-    dialog.addEventListener("close", () => dialog.remove());
+        const shiftNote = el("p", "hint", t("shifted"));
+        shiftNote.hidden = true;
+        let fromValue = toLocal(row && row.validFrom);
+        let toValue = toLocal(row && row.validUntil);
+        const toPicker = dateTimePicker({
+          value: toValue,
+          lower: () => fromPicker.get(),
+          onChange: (v) => { toValue = v; shiftNote.hidden = true; },
+        });
+        const fromPicker = dateTimePicker({
+          value: fromValue,
+          onChange: (v) => {
+            // Moving the start past the end carries the end along, keeping the
+            // length — never leaving the two the wrong way round.
+            if (fromValue && toValue && v >= toValue) {
+              toValue = addMinutes(v, Math.max(STEP_MIN, minutesBetween(fromValue, toValue)));
+              toPicker.set(toValue);
+              shiftNote.hidden = false;
+            } else if (!fromValue && toValue && v >= toValue) {
+              toValue = addMinutes(v, 24 * 60);
+              toPicker.set(toValue);
+              shiftNote.hidden = false;
+            }
+            fromValue = v;
+          },
+        });
+        const fromField = field(t("validFrom"), fromPicker.el);
+        const toField = field(t("validUntil"), toPicker.el);
+        toField.appendChild(shiftNote);
+        form.append(fromField, toField);
+
+        const sync = () => {
+          const ranged = mode.value === "ranged";
+          fromField.hidden = !ranged;
+          toField.hidden = !ranged;
+          // A period starts somewhere: now, and for a day, until said otherwise.
+          if (ranged && !fromPicker.get()) {
+            fromValue = nextSlot();
+            fromPicker.set(fromValue);
+          }
+          if (ranged && !toPicker.get()) {
+            toValue = addMinutes(fromPicker.get(), 24 * 60);
+            toPicker.set(toValue);
+          }
+        };
+        mode.onchange = sync;
+        sync();
+        collect = () => {
+          const ranged = mode.value === "ranged";
+          return { validFrom: ranged ? fromPicker.get() || null : null, validUntil: ranged ? toPicker.get() || null : null };
+        };
+      }
+
+      const windows = el("div", "windows");
+      const addWindow = (window) => {
+        const line = el("div", "window");
+        const from = el("input");
+        from.type = "time";
+        from.value = (window && window.from) || "08:00";
+        const to = el("input");
+        to.type = "time";
+        to.value = (window && window.to) || "20:00";
+        line.append(from, document.createTextNode("→"), to, iconButton("x", t("removeHours"), () => line.remove()));
+        windows.appendChild(line);
+      };
+      for (const window of (row && row.timeWindows) || []) addWindow(window);
+      const addButton = el("button", "btn link");
+      addButton.type = "button";
+      addButton.appendChild(icon("plus", 14));
+      addButton.append(` ${t("addHours")}`);
+      addButton.onclick = () => addWindow(null);
+      form.append(windows, addButton);
+
+      const refusal = el("p", "refusal");
+      refusal.hidden = true;
+      form.appendChild(refusal);
+
+      form.appendChild(footer(close, t("save"), async () => {
+        const payload = {
+          label: labelInput.value,
+          timeWindows: [...windows.querySelectorAll(".window")].map((line) => {
+            const [from, to] = line.querySelectorAll("input");
+            return { from: from.value, to: to.value };
+          }),
+          ...collect(),
+        };
+        if (gateBoxes.length) payload.gates = gateBoxes.filter((b) => b.checked).map((b) => b.value);
+        try {
+          if (row) await ctx.api(`/accesses/${row.id}`, { method: "PATCH", body: payload });
+          else await ctx.api("/accesses", { method: "POST", body: payload });
+          close();
+          await load();
+        } catch (err) {
+          refusal.textContent = refusalText(err);
+          refusal.hidden = false;
+        }
+      }));
+    });
   }
 
   // ── The journal ──────────────────────────────────────────
 
   async function openJournal(row) {
-    const dialog = document.createElement("dialog");
-    const sheet = document.createElement("div");
-    sheet.className = "sheet";
-    const heading = document.createElement("h2");
-    heading.textContent = row ? `${t("journal")} · ${row.label}` : t("journal");
-    sheet.appendChild(heading);
-
-    const list = document.createElement("div");
-    list.className = "journal";
-    sheet.appendChild(list);
-
-    const close = document.createElement("button");
-    close.className = "action";
-    close.type = "button";
-    close.textContent = t("close");
-    close.onclick = () => dialog.close();
-    sheet.appendChild(close);
-
-    dialog.appendChild(sheet);
-    root.appendChild(dialog);
-    dialog.showModal();
-    dialog.addEventListener("close", () => dialog.remove());
-
+    let list;
+    openDialog((sheet, close) => {
+      sheet.appendChild(el("h2", "", row ? `${t("journal")} · ${row.label}` : t("journal")));
+      list = el("div", "journal");
+      sheet.appendChild(list);
+      const foot = el("div", "foot");
+      const b = el("button", "btn", t("close"));
+      b.type = "button";
+      b.onclick = close;
+      foot.appendChild(b);
+      sheet.appendChild(foot);
+    });
     try {
       const query = row ? `?accessId=${encodeURIComponent(row.id)}` : "";
       const { entries } = await ctx.api(`/journal${query}`);
-      if (!entries.length) {
-        list.textContent = t("journalEmpty");
-        return;
-      }
+      if (!entries.length) { list.textContent = t("journalEmpty"); return; }
+      const many = gates().length > 1;
       for (const entry of entries) {
-        const line = document.createElement("div");
-        line.className = "line";
-        const when = document.createElement("span");
-        when.className = "when";
-        when.textContent = fmt(entry.at);
-        const what = document.createElement("span");
-        const kind = t(`kind_${entry.kind}`);
-        what.textContent = [entry.label, kind, entry.reason, entry.actor ? `(${entry.actor})` : ""]
-          .filter(Boolean)
-          .join(" · ");
-        line.append(when, what);
+        const line = el("div", "line");
+        line.appendChild(el("span", "when", fmt(entry.at)));
+        line.appendChild(el("span", "", [
+          entry.label,
+          t(`kind_${entry.kind}`),
+          many && entry.gate ? gateLabel(entry.gate) : "",
+          entry.reason,
+          entry.actor ? `(${entry.actor})` : "",
+        ].filter(Boolean).join(" · ")));
         list.appendChild(line);
       }
     } catch (err) {

@@ -72,9 +72,9 @@ const MAX_QUEUE = 3;
  * a gate at 23 h is not an upgrade path. The two new readings are additive, and
  * an equipment that never rebinds simply does not show them.
  */
-export function describeDevice(): Record<string, unknown> {
+export function describeDevice(deviceId: string = DEVICE_ID): Record<string, unknown> {
   return {
-    friendlyName: DEVICE_ID,
+    friendlyName: deviceId,
     manufacturer: "Sowel",
     model: "Guest gate access",
     data: [
@@ -130,11 +130,18 @@ export interface GateOptions {
   deviceManager: DeviceManagerLike;
   logger: Logger;
   answerMs?: number;
+  /**
+   * Which device this gate publishes under — its `friendlyName`, so the id the
+   * core files it by (see DEVICE_ID). The first gate keeps the historical name,
+   * so an installation that bound it before gates were plural keeps working.
+   */
+  deviceId?: string;
 }
 
 export class Gate {
   private readonly opts: GateOptions;
   private readonly answerMs: number;
+  readonly deviceId: string;
   private requestCount = 0;
   private inFlight: InFlight | null = null;
   private queue = 0;
@@ -146,6 +153,7 @@ export class Gate {
   constructor(options: GateOptions) {
     this.opts = options;
     this.answerMs = options.answerMs ?? DEFAULT_ANSWER_MS;
+    this.deviceId = options.deviceId ?? DEVICE_ID;
   }
 
   start(): void {
@@ -153,12 +161,12 @@ export class Gate {
     this.opts.deviceManager.upsertFromDiscovery(
       this.opts.integrationId,
       this.opts.integrationId,
-      describeDevice(),
+      describeDevice(this.deviceId),
     );
     // The service is up the moment the plugin starts: unlike v0.3, nothing has
     // to be reached for a guest to be served. What may be missing is the link
     // to guestFlow, which is its own reading.
-    this.opts.deviceManager.updateDeviceStatus(this.opts.integrationId, DEVICE_ID, "online");
+    this.opts.deviceManager.updateDeviceStatus(this.opts.integrationId, this.deviceId, "online");
 
     // The counter at rest, published before anyone can press.
     //
@@ -178,7 +186,7 @@ export class Gate {
   stop(): void {
     this.started = false;
     if (this.inFlight) this.settle("gate_error");
-    this.opts.deviceManager.updateDeviceStatus(this.opts.integrationId, DEVICE_ID, "offline");
+    this.opts.deviceManager.updateDeviceStatus(this.opts.integrationId, this.deviceId, "offline");
   }
 
   isStarted(): boolean {
@@ -315,7 +323,7 @@ export class Gate {
 
   private publish(payload: Record<string, unknown>): void {
     if (!Object.keys(payload).length) return;
-    this.opts.deviceManager.updateDeviceData(this.opts.integrationId, DEVICE_ID, payload);
+    this.opts.deviceManager.updateDeviceData(this.opts.integrationId, this.deviceId, payload);
   }
 
   /** For the owner's page: what the house last said. */

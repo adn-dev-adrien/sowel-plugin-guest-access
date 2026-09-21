@@ -13,8 +13,8 @@
 
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
-import type { Access, JournalEntry, JournalKind } from "./model.js";
-import { CODE_RETENTION_DAYS, JOURNAL_RETENTION_DAYS } from "./model.js";
+import type { Access, GateRecord, JournalEntry, JournalKind } from "./model.js";
+import { CODE_RETENTION_DAYS, JOURNAL_RETENTION_DAYS, PRIMARY_GATE_ID } from "./model.js";
 import { normalizeCode, codeMatches, tokenMatches, randomId } from "./codes.js";
 import { effectiveWindow } from "./validity.js";
 
@@ -30,8 +30,13 @@ const JOURNAL_FILE = "journal.json";
 const JOURNAL_MAX_ENTRIES = 5000;
 const DAY_MS = 24 * 60 * 60 * 1000;
 
+/**
+ * Version 2 added the gates. A version 1 file is read as what it was — one
+ * gate, which every access opens — and rewritten as 2 on the next change.
+ */
 interface AccessesFile {
-  version: 1;
+  version: 1 | 2;
+  gates?: GateRecord[];
   accesses: Access[];
 }
 interface JournalFile {
@@ -43,14 +48,39 @@ export class AccessStore {
   private readonly dir: string;
   private readonly logger: StoreLogger;
   private accesses: Access[] = [];
+  private gateRecords: GateRecord[] = [];
   private entries: JournalEntry[] = [];
 
   constructor(dataDir: string, logger: StoreLogger) {
     this.dir = dataDir;
     this.logger = logger;
     if (!existsSync(this.dir)) mkdirSync(this.dir, { recursive: true });
-    this.accesses = this.read<AccessesFile>(ACCESSES_FILE, { version: 1, accesses: [] }).accesses;
+    const file = this.read<AccessesFile>(ACCESSES_FILE, { version: 2, gates: [], accesses: [] });
+    this.gateRecords = Array.isArray(file.gates) ? file.gates : [];
+    this.accesses = (file.accesses ?? []).map((a) => ({
+      ...a,
+      gates: Array.isArray(a.gates) ? a.gates : [PRIMARY_GATE_ID],
+    }));
     this.entries = this.read<JournalFile>(JOURNAL_FILE, { version: 1, entries: [] }).entries;
+  }
+
+  // ── The gates ──────────────────────────────────────────────
+
+  gates(): GateRecord[] {
+    return this.gateRecords.map((g) => ({ ...g }));
+  }
+
+  saveGates(gates: GateRecord[]): void {
+    this.gateRecords = gates.map((g) => ({ ...g }));
+    this.persistAccesses();
+  }
+
+  /** A gate going away: no access keeps listing it. */
+  forgetGate(gateId: string): void {
+    for (const access of this.accesses) {
+      if (access.gates.includes(gateId)) access.gates = access.gates.filter((g) => g !== gateId);
+    }
+    this.persistAccesses();
   }
 
   // ── Reading ────────────────────────────────────────────────
@@ -148,13 +178,15 @@ export class AccessStore {
   }
 
   /** Opens counted from the journal itself — no second bookkeeping to drift. */
-  countOpens(since: Date, accessId?: string): number {
+  countOpens(since: Date, accessId?: string, gateId?: string): number {
     const from = since.getTime();
     return this.entries.filter(
       (e) =>
         e.kind === "opened" &&
         new Date(e.at).getTime() >= from &&
-        (!accessId || e.accessId === accessId),
+        (!accessId || e.accessId === accessId) &&
+        // A line from before gates were plural was, necessarily, the first one.
+        (!gateId || (e.gate ?? PRIMARY_GATE_ID) === gateId),
     ).length;
   }
 
@@ -240,7 +272,11 @@ export class AccessStore {
   }
 
   private persistAccesses(): void {
-    this.write(ACCESSES_FILE, { version: 1, accesses: this.accesses } satisfies AccessesFile);
+    this.write(ACCESSES_FILE, {
+      version: 2,
+      gates: this.gateRecords,
+      accesses: this.accesses,
+    } satisfies AccessesFile);
   }
 
   private persistJournal(): void {

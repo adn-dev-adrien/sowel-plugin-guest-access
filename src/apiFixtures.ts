@@ -5,7 +5,8 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { AccessStore } from "./store.js";
-import { Gate } from "./gate.js";
+import type { Gate } from "./gate.js";
+import { Gates } from "./gates.js";
 import { GuestAccessService } from "./service.js";
 import { GuestFlowConnector } from "./guestflow.js";
 import { createAdminApi } from "./admin-api.js";
@@ -19,6 +20,7 @@ export interface ApiHarness {
   dir: string;
   service: GuestAccessService;
   gate: Gate;
+  gates: Gates;
   connector: GuestFlowConnector;
   admin(
     method: string,
@@ -44,7 +46,7 @@ export function makeApiHarness(
   const guestPath = (): string => opts.guestPath ?? DEFAULT_GUEST_PATH;
   const dir = mkdtempSync(resolve(tmpdir(), "guest-access-api-"));
   const store = new AccessStore(dir, silent);
-  const gate = new Gate({
+  const gates = new Gates({
     integrationId: "guest-access",
     deviceManager: {
       upsertFromDiscovery: () => {},
@@ -52,10 +54,13 @@ export function makeApiHarness(
       updateDeviceStatus: () => {},
     },
     logger: silent,
+    store,
     answerMs: 40,
   });
-  gate.start();
-  const service = new GuestAccessService({ store, gate, logger: silent });
+  gates.start();
+  // The first gate — every installation's, and the only one most tests need.
+  const gate = gates.primary().gate;
+  const service = new GuestAccessService({ store, gates, logger: silent });
   const connector = new GuestFlowConnector({
     service,
     logger: silent,
@@ -71,13 +76,14 @@ export function makeApiHarness(
     dir,
     service,
     gate,
+    gates,
     connector,
     publicOpen: opts.publicOpen ?? true,
     async admin(method, path, options = {}) {
       const handle = createAdminApi({
         service,
         connector,
-        gate,
+        gates,
         guestBaseUrl,
         guestPath,
         publicTreeOpen: () => harness.publicOpen,
@@ -90,7 +96,11 @@ export function makeApiHarness(
         service,
         guestBaseUrl,
         guestPath,
-        openingLabel: () => gate.getOpeningLabel(),
+        openingLabel: () => {
+          const all = gates.list();
+          return all.length === 1 ? all[0].gate.getOpeningLabel() : null;
+        },
+        gateLabel: (id) => gates.label(id),
       });
       return handle(
         request(method, path, {

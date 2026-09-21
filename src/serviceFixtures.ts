@@ -5,7 +5,8 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { AccessStore } from "./store.js";
-import { Gate } from "./gate.js";
+import type { Gate } from "./gate.js";
+import { Gates } from "./gates.js";
 import { GuestAccessService, type Notifier } from "./service.js";
 import type { Access } from "./model.js";
 
@@ -15,6 +16,7 @@ export interface Harness {
   service: GuestAccessService;
   store: AccessStore;
   gate: Gate;
+  gates: Gates;
   dir: string;
   notified: Access[];
   /** Failure counts the owner was alerted with (spec §4 — the guessing alert). */
@@ -26,7 +28,7 @@ export interface Harness {
 export function makeHarness(opts: { answerMs?: number } = {}): Harness {
   const dir = mkdtempSync(resolve(tmpdir(), "guest-access-service-"));
   const store = new AccessStore(dir, silent);
-  const gate = new Gate({
+  const gates = new Gates({
     integrationId: "guest-access",
     deviceManager: {
       upsertFromDiscovery: () => {},
@@ -34,21 +36,25 @@ export function makeHarness(opts: { answerMs?: number } = {}): Harness {
       updateDeviceStatus: () => {},
     },
     logger: silent,
+    store,
     answerMs: opts.answerMs ?? 40,
   });
-  gate.start();
+  gates.start();
+  // The first gate — every installation's, and the only one most tests need.
+  const gate = gates.primary().gate;
   const notified: Access[] = [];
   const guessing: number[] = [];
   const notifier: Notifier = {
     devicesOverNotice: (a) => notified.push(a),
     guessingDetected: (failures) => guessing.push(failures),
   };
-  const service = new GuestAccessService({ store, gate, logger: silent, notifier });
+  const service = new GuestAccessService({ store, gates, logger: silent, notifier });
 
   return {
     service,
     store,
     gate,
+    gates,
     dir,
     notified,
     guessing,

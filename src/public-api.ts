@@ -29,8 +29,14 @@ export interface PublicDeps {
   service: GuestAccessService;
   guestBaseUrl(): string | null;
   guestPath(): string;
-  /** The name of what opens, as the recipe last pushed it (null until then). */
+  /**
+   * The page's title before anyone has typed a code: the name of what opens
+   * when the house has ONE gate, null otherwise — a page that anyone can load
+   * does not list the house's doors.
+   */
   openingLabel?(): string | null;
+  /** What to call a gate on the phone of someone allowed to open it. */
+  gateLabel?(gateId: string): string | null;
 }
 
 const NO_STORE = { "cache-control": "no-store" };
@@ -66,6 +72,8 @@ export function createPublicApi(deps: PublicDeps) {
       label: access.label,
       until: window.to ? window.to.toISOString() : null,
       invitationUrl: service.invitation(access, deps.guestBaseUrl(), deps.guestPath()).url,
+      // Only the gates THIS access opens — one slide each.
+      gates: service.gatesOf(access).map((id) => ({ id, label: deps.gateLabel?.(id) ?? null })),
       decision: decision.ok ? { ok: true } : { ...decision, reason: decision.reason },
     };
   };
@@ -145,7 +153,8 @@ export function createPublicApi(deps: PublicDeps) {
     if (method === "POST" && path === "/open") {
       const token = bearer(request);
       if (!token) return json(401, { reason: "revoked" });
-      const result = await service.open(token);
+      const gate = (request.body as { gate?: unknown } | undefined)?.gate;
+      const result = await service.open(token, new Date(), typeof gate === "string" ? gate : undefined);
       if (result.outcome === "opened") return json(200, { outcome: "opened" });
       if (!result.access) return json(401, { reason: "revoked" });
       const decision = result.decision;

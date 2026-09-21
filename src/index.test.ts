@@ -126,8 +126,8 @@ describe("the plugin Sowel loads", () => {
     const state = (await plugin.handlePageRequest({
       method: "GET", path: "/state", query: {}, headers: {}, body: undefined,
       user: { id: "u", username: "adrien", role: "admin" },
-    } as never)) as { body: { house: { openingLabel: string | null } } };
-    expect(state.body.house.openingLabel).toBe("Portail d'entrée");
+    } as never)) as { body: { gates: Array<{ openingLabel: string | null }> } };
+    expect(state.body.gates[0].openingLabel).toBe("Portail d'entrée");
     // An outcome with nothing in flight is dropped, not an error.
     await expect(plugin.executeOrder(device, "result", "opened")).resolves.toBeUndefined();
 
@@ -137,6 +137,26 @@ describe("the plugin Sowel loads", () => {
     await expect(
       plugin.executeOrder({ ...device, sourceDeviceId: "other" }, "result", "opened"),
     ).rejects.toThrow(/Unknown device/);
+    await plugin.stop();
+  });
+
+  it("routes a recipe's order to the gate whose device it names", async () => {
+    const { plugin } = makePlugin();
+    await plugin.start();
+    const page = (method: string, path: string, body?: unknown) =>
+      plugin.handlePageRequest({
+        method, path, query: {}, headers: {}, body,
+        user: { id: "u", username: "adrien", role: "admin" },
+      } as never) as Promise<{ status: number; body: any }>;
+    const added = await page("POST", "/gates", { name: "Garage" });
+    const garage = added.body.gate;
+    await plugin.executeOrder(
+      { id: "d2", integrationId: "guest-access", sourceDeviceId: garage.deviceId, name: garage.deviceId },
+      "opening_label",
+      "Porte du garage",
+    );
+    const state = await page("GET", "/state");
+    expect(state.body.gates.map((g: any) => g.openingLabel)).toEqual([null, "Porte du garage"]);
     await plugin.stop();
   });
 

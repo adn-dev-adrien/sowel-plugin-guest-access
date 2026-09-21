@@ -13,7 +13,7 @@ import type { PluginHttpRequest, PluginHttpResponse } from "./plugin-contract.js
 import type { GuestAccessService } from "./service.js";
 import type { GuestFlowConnector } from "./guestflow.js";
 import { stateOf } from "./guestflow.js";
-import type { Gate } from "./gate.js";
+import type { Gates } from "./gates.js";
 import { effectiveWindow } from "./validity.js";
 import { formatCode } from "./codes.js";
 import { DEFAULT_GUEST_PATH } from "./guest-url.js";
@@ -21,7 +21,7 @@ import { DEFAULT_GUEST_PATH } from "./guest-url.js";
 export interface AdminDeps {
   service: GuestAccessService;
   connector: GuestFlowConnector;
-  gate: Gate;
+  gates: Gates;
   guestBaseUrl(): string | null;
   /** Where the guests' page answers under that address (see guest-url.ts). */
   guestPath(): string;
@@ -34,6 +34,7 @@ export interface AccessRow {
   id: string;
   kind: Access["kind"];
   label: string;
+  gates: string[];
   state: string;
   code: string | null;
   invitationUrl: string | null;
@@ -67,6 +68,7 @@ export function shapeAccess(
     id: access.id,
     kind: access.kind,
     label: access.label,
+    gates: service.gatesOf(access),
     state: stateOf(access, now),
     code: access.code ? formatCode(access.code) : null,
     invitationUrl: invitation.url,
@@ -97,7 +99,7 @@ function refuse(refusal: { field: string; code: string }): PluginHttpResponse {
 const notFound: PluginHttpResponse = { status: 404, body: { error: "not_found" } };
 
 export function createAdminApi(deps: AdminDeps) {
-  const { service, connector, gate } = deps;
+  const { service, connector, gates } = deps;
 
   const stateBody = (now = new Date()) => {
     const guestBaseUrl = deps.guestBaseUrl();
@@ -112,16 +114,21 @@ export function createAdminApi(deps: AdminDeps) {
       groups: Object.fromEntries(
         GROUPS.map((group) => [group, rows.filter((r) => r.state === group).map((r) => r.id)]),
       ),
-      house: {
+      // One entry per gate, in the owner's order — the page's tabs.
+      gates: gates.list().map(({ record, gate }) => ({
+        id: record.id,
+        name: record.name,
+        deviceId: record.deviceId,
+        // What opens, by the equipment's own name — null until the recipe says.
+        openingLabel: gate.getOpeningLabel(),
         // The contact the recipe pushes down. The guest never sees it — the
         // label of a button that names a direction is a state display wearing
         // a verb — but the owner does.
         gateState: gate.getGateState(),
-        // What opens, by the equipment's own name — null until the recipe says.
-        openingLabel: gate.getOpeningLabel(),
         lastResult: gate.getLastResult(),
         recipeAnswering: gate.getLastResult() !== null,
-      },
+        accesses: rows.filter((r) => r.gates.includes(record.id)).length,
+      })),
       guestflow: connector.state(),
       publicTree: {
         open: deps.publicTreeOpen(),
@@ -156,6 +163,21 @@ export function createAdminApi(deps: AdminDeps) {
       return { status: 201, body: { access: shapeAccess(result.access!, deps.guestBaseUrl(), new Date(), service, deps.guestPath()) } };
     }
 
+    if (method === "POST" && path === "/gates") {
+      const result = gates.add(body.name);
+      if (result.refusal) return refuse(result.refusal);
+      service.publishSummary();
+      return { status: 201, body: { gate: result.record } };
+    }
+
+    const gateMatch = /^\/gates\/([A-Za-z0-9_-]+)$/.exec(path);
+    if (gateMatch && method === "DELETE") {
+      const result = gates.remove(gateMatch[1], service.liveAccessGates());
+      if (result.missing) return notFound;
+      if (result.refusal) return refuse(result.refusal);
+      return ok({ deleted: true });
+    }
+
     if (method === "POST" && path === "/sync") {
       const state = await connector.syncNow();
       return ok({ guestflow: state });
@@ -176,6 +198,13 @@ export function createAdminApi(deps: AdminDeps) {
 
       if (method === "DELETE" && !action) {
         const access = service.get(id);
+        if (!access) return notFound;
+        // Deleting a live access was revoking it and erasing the line in one
+        // click. Revoke first; the line can go once nothing can open with it.
+        const state = stateOf(access, new Date());
+        if (state !== "revoked" && state !== "ended") {
+          return refuse({ field: "access", code: "still_live" });
+        }
         if (!service.delete(id, actor)) return notFound;
         deps.onChanged(access);
         return ok({ deleted: true });
@@ -186,8 +215,9 @@ export function createAdminApi(deps: AdminDeps) {
           "/suspend": () => service.suspend(id, actor),
           "/resume": () => service.resume(id, actor),
           "/revoke": () => service.revoke(id, actor),
-          "/invitation": () => service.newInvitation(id, actor),
-          "/regenerate": () => service.regenerate(id, actor),
+          // One route for a new code; whether the phones go with the old one
+          // is the owner's choice, said in the body.
+          "/code": () => service.changeCode(id, actor, body.cutPhones === true),
         };
         const run = act[action];
         if (!run) return notFound;

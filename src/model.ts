@@ -39,9 +39,36 @@ export interface TimeWindow {
   to: string;
 }
 
+/**
+ * One thing that opens — a gate, a garage door — as the plugin knows it.
+ *
+ * Each is its own Sowel device, bound to its own equipment and driven by its
+ * own instance of the recipe: the plugin still never touches what opens. The
+ * id is the plugin's own and is what an access lists; the device id is what
+ * the core files the device under (see `gate.ts`, DEVICE_ID).
+ */
+export interface GateRecord {
+  id: string;
+  deviceId: string;
+  /** The owner's word for it, until the recipe pushes the equipment's name. */
+  name: string;
+  createdAt: string;
+}
+
+/** The gate every installation had before there could be several. */
+export const PRIMARY_GATE_ID = "main";
+/** A gate's name ends up in a device name and a tab, not a paragraph. */
+export const GATE_NAME_MAX = 40;
+
 export interface Access {
   id: string;
   kind: AccessKind;
+  /**
+   * What this access opens, by gate id — never empty on a live access. One
+   * code for all of them: a person who may open two gates carries one link,
+   * and their phone shows one slide per gate.
+   */
+  gates: string[];
   /** Who it is for. Required — an access named « — » is one nobody dares delete. */
   label: string;
   /**
@@ -107,6 +134,8 @@ export interface JournalEntry {
   reason?: string;
   /** `guestflow`, a Sowel username, or `guest`. */
   actor?: string;
+  /** Which gate a press was for. Absent on lines written before gates were plural. */
+  gate?: string;
 }
 
 /** Why a press was refused. The guest app turns these into sentences. */
@@ -120,7 +149,8 @@ export type RefusalReason =
   | "gate_busy"
   | "no_answer"
   | "refused_by_house"
-  | "gate_error";
+  | "gate_error"
+  | "not_this_gate";
 
 export const CODE_ALPHABET = "ABCDEFGHJKMNPQRSTVWXYZ0123456789";
 export const CODE_LENGTH = 8;

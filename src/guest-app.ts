@@ -52,6 +52,7 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     no_answer: "La maison n'a pas répondu. Réessayez, ou prévenez la personne qui vous a donné l'accès.",
     refused_by_house: "Commande refusée depuis la maison.",
     gate_error: "L'ouverture n'a pas pu être commandée.",
+    not_this_gate: "Cet accès n'ouvre pas cette entrée.",
     offline: "Vous semblez hors ligne.",
     unknown: "Quelque chose n'a pas fonctionné.",
   },
@@ -78,6 +79,7 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     no_answer: "The house did not answer. Try again, or let the person who gave you access know.",
     refused_by_house: "The command was refused from the house.",
     gate_error: "The opening could not be sent.",
+    not_this_gate: "This access does not open that entrance.",
     offline: "You seem to be offline.",
     unknown: "Something did not work.",
   },
@@ -138,16 +140,23 @@ export function guestHtml(lang: Lang, openingLabel: string | null = null): strin
 
   <section id="act" hidden>
     <p class="caption">${t.caption}</p>
-    <div class="track" id="track">
-      <div class="track-fill" id="track-fill"></div>
-      <span class="track-label" id="track-label">${t.action}<svg class="chevrons" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M6 17l5-5-5-5M13 17l5-5-5-5"/></svg></span>
-      <div class="knob" id="knob" role="button" tabindex="0" aria-label="${t.action}">
-        <svg class="i-go" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M6 17l5-5-5-5M13 17l5-5-5-5"/></svg>
-        <svg class="i-done" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M20 6L9 17l-5-5"/></svg>
-      </div>
-    </div>
+    <div id="slides"></div>
     <button id="share" class="ghost" hidden>${t.share}</button>
   </section>
+
+  <template id="slide">
+    <div class="slide">
+      <h2 class="gate-name"></h2>
+      <div class="track">
+        <div class="track-fill"></div>
+        <span class="track-label">${t.action}<svg class="chevrons" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M6 17l5-5-5-5M13 17l5-5-5-5"/></svg></span>
+        <div class="knob" role="button" tabindex="0" aria-label="${t.action}">
+          <svg class="i-go" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M6 17l5-5-5-5M13 17l5-5-5-5"/></svg>
+          <svg class="i-done" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M20 6L9 17l-5-5"/></svg>
+        </div>
+      </div>
+    </div>
+  </template>
 
   <p id="note" class="note" role="status" aria-live="polite" hidden></p>
 </main>
@@ -207,6 +216,11 @@ button {
 }
 button.ghost { background: transparent; color: var(--muted); border: 1px solid var(--line); width: 100%; margin-top: 16px; }
 .caption { text-align: center; color: var(--muted); font-size: 13px; margin: 0 0 10px; }
+#slides { display: grid; gap: 22px; }
+/* Named only when there is more than one: with a single gate the page title
+   already says what opens. */
+.gate-name { text-align: center; font-size: 15px; font-weight: 600; margin: 0 0 8px; }
+.gate-name:empty { display: none; }
 /* 260px and centred: tuned by hand on a phone. Full width puts the start of
    the gesture in the corner furthest from the thumb of the hand holding it. */
 /* Spec 146 — the very control Sowel already uses to confirm a gate or a garage
@@ -331,6 +345,7 @@ function showAccess(session) {
   $("act").hidden = false;
   $("who").textContent = session.label || T.title;
   $("sub").textContent = session.until ? when(session.until) : "";
+  drawSlides(session.gates && session.gates.length ? session.gates : [{ id: undefined, label: null }]);
   $("share").hidden = !session.invitationUrl;
   $("share").dataset.url = session.invitationUrl || "";
   if (session.decision && session.decision.ok === false) {
@@ -364,13 +379,13 @@ async function enrol(code) {
   showAccess(payload);
 }
 
-async function operate() {
+async function operate(gateId) {
   // The previous answer goes first. Nothing is said on success, so a refusal
   // left on screen would still be there after the press that worked — the page
   // would be telling a guest the house did not answer while the gate moves in
   // front of them.
   say("");
-  const { ok, payload } = await call("open", {});
+  const { ok, payload } = await call("open", { gate: gateId });
   // Nothing is said on success — the gate is moving and the guest is driving in.
   if (!ok || payload.outcome !== "opened") say(reason(payload));
 }
@@ -388,78 +403,91 @@ async function operate() {
 //     success says nothing on this page and never has;
 //   · it returns to rest after two seconds instead of staying confirmed, since
 //     the same gesture is what closes the gate behind you.
+//
+// One slide per gate the access opens, each carrying its own gate id: a slide
+// that could reach a gate it was not drawn for would be one slide too many.
 const KNOB = 50;
 const PAD = 4;
 const KNOB_SPAN = KNOB + PAD * 2;
 
-const track = $("track");
-const fill = $("track-fill");
-const knob = $("knob");
-const label = $("track-label");
-let drag = null;
-let x = 0;
-let done = false;
+function makeSlide(gate, named) {
+  const node = $("slide").content.firstElementChild.cloneNode(true);
+  node.querySelector(".gate-name").textContent = named ? (gate.label || "") : "";
+  const track = node.querySelector(".track");
+  const fill = node.querySelector(".track-fill");
+  const knob = node.querySelector(".knob");
+  let drag = null;
+  let x = 0;
+  let done = false;
 
-function maxOffset() { return Math.max(0, track.clientWidth - KNOB_SPAN); }
-function place(next) {
-  x = next;
-  knob.style.left = (PAD + x) + "px";
-  fill.style.width = (KNOB + x) + "px";
-}
-function rest() {
-  done = false;
-  drag = null;
-  knob.classList.remove("dragging");
-  track.classList.remove("done");
-  place(0);
-}
-
-function fire() {
-  if (done) return;
-  done = true;
-  drag = null;
-  knob.classList.remove("dragging");
-  track.classList.add("done");
-  place(maxOffset());
-  void operate();
-  // A rest, never a lock: a guest may command again to close the gate behind
-  // them, and a locked control would contradict that.
-  setTimeout(rest, 2000);
-}
-
-knob.addEventListener("pointerdown", (event) => {
-  if (done) return;
-  knob.setPointerCapture(event.pointerId);
-  drag = { startX: event.clientX - x, max: maxOffset() };
-  knob.classList.add("dragging");
-});
-
-knob.addEventListener("pointermove", (event) => {
-  if (!drag) return;
-  const next = Math.max(0, Math.min(drag.max, event.clientX - drag.startX));
-  place(next);
-  // A positive max, so a track too narrow to have a sweep cannot confirm on the
-  // first move — the core's guard, and the reason it is here too.
-  if (drag.max > 0 && next >= drag.max - 1) fire();
-});
-
-function release() {
-  if (!drag || done) return;
-  const max = drag.max;
-  drag = null;
-  knob.classList.remove("dragging");
-  if (x < max - 1) place(0);
-}
-knob.addEventListener("pointerup", release);
-knob.addEventListener("pointercancel", () => { drag = null; rest(); });
-
-// A deliberate key press on a focused control is as much an intent as a drag.
-knob.addEventListener("keydown", (event) => {
-  if (["Enter", " ", "ArrowRight", "End"].includes(event.key)) {
-    event.preventDefault();
-    fire();
+  function maxOffset() { return Math.max(0, track.clientWidth - KNOB_SPAN); }
+  function place(next) {
+    x = next;
+    knob.style.left = (PAD + x) + "px";
+    fill.style.width = (KNOB + x) + "px";
   }
-});
+  function rest() {
+    done = false;
+    drag = null;
+    knob.classList.remove("dragging");
+    track.classList.remove("done");
+    place(0);
+  }
+  function fire() {
+    if (done) return;
+    done = true;
+    drag = null;
+    knob.classList.remove("dragging");
+    track.classList.add("done");
+    place(maxOffset());
+    void operate(gate.id);
+    // A rest, never a lock: a guest may command again to close the gate behind
+    // them, and a locked control would contradict that.
+    setTimeout(rest, 2000);
+  }
+
+  knob.addEventListener("pointerdown", (event) => {
+    if (done) return;
+    knob.setPointerCapture(event.pointerId);
+    drag = { startX: event.clientX - x, max: maxOffset() };
+    knob.classList.add("dragging");
+  });
+  knob.addEventListener("pointermove", (event) => {
+    if (!drag) return;
+    const next = Math.max(0, Math.min(drag.max, event.clientX - drag.startX));
+    place(next);
+    // A positive max, so a track too narrow to have a sweep cannot confirm on
+    // the first move — the core's guard, and the reason it is here too.
+    if (drag.max > 0 && next >= drag.max - 1) fire();
+  });
+  knob.addEventListener("pointerup", () => {
+    if (!drag || done) return;
+    const max = drag.max;
+    drag = null;
+    knob.classList.remove("dragging");
+    if (x < max - 1) place(0);
+  });
+  knob.addEventListener("pointercancel", () => { drag = null; rest(); });
+  // A deliberate key press on a focused control is as much an intent as a drag.
+  knob.addEventListener("keydown", (event) => {
+    if (["Enter", " ", "ArrowRight", "End"].includes(event.key)) {
+      event.preventDefault();
+      fire();
+    }
+  });
+  return node;
+}
+
+let drawn = "";
+function drawSlides(gates) {
+  // Redrawn only when the gates change: a refresh on coming back to the page
+  // must not reset a slide the guest is holding.
+  const key = JSON.stringify(gates);
+  if (key === drawn) return;
+  drawn = key;
+  const named = gates.length > 1;
+  $("slides").replaceChildren(...gates.map((gate) => makeSlide(gate, named)));
+}
 
 $("enrol-form").addEventListener("submit", (event) => {
   event.preventDefault();

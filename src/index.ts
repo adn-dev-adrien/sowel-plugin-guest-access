@@ -16,7 +16,8 @@
  */
 
 import { AccessStore } from "./store.js";
-import { Gate, DEVICE_ID, type GateState, type RecipeOutcome } from "./gate.js";
+import type { GateState, RecipeOutcome } from "./gate.js";
+import { Gates } from "./gates.js";
 import { GuestAccessService } from "./service.js";
 import { GuestFlowConnector, type ConnectorConfig } from "./guestflow.js";
 import { createAdminApi } from "./admin-api.js";
@@ -98,7 +99,7 @@ class GuestAccessPlugin {
 
   private readonly deps: PluginDeps;
   private readonly store: AccessStore;
-  private readonly gate: Gate;
+  private readonly gates: Gates;
   private readonly service: GuestAccessService;
   private readonly connector: GuestFlowConnector;
   private readonly admin: (r: PluginHttpRequest) => Promise<PluginHttpResponse>;
@@ -109,14 +110,15 @@ class GuestAccessPlugin {
   constructor(deps: PluginDeps) {
     this.deps = deps;
     this.store = new AccessStore(deps.dataDir, deps.logger);
-    this.gate = new Gate({
+    this.gates = new Gates({
       integrationId: INTEGRATION_ID,
       deviceManager: deps.deviceManager,
       logger: deps.logger,
+      store: this.store,
     });
     this.service = new GuestAccessService({
       store: this.store,
-      gate: this.gate,
+      gates: this.gates,
       logger: deps.logger,
       notifier: {
         // Information, never a block: a cap would lock a legitimate
@@ -143,7 +145,7 @@ class GuestAccessPlugin {
     this.admin = createAdminApi({
       service: this.service,
       connector: this.connector,
-      gate: this.gate,
+      gates: this.gates,
       guestBaseUrl: () => this.guestBaseUrl(),
       guestPath: () => this.guestPath(),
       publicTreeOpen: () => deps.settingsManager.get(PUBLIC_FLAG_KEY) === "true",
@@ -156,7 +158,11 @@ class GuestAccessPlugin {
       service: this.service,
       guestBaseUrl: () => this.guestBaseUrl(),
       guestPath: () => this.guestPath(),
-      openingLabel: () => this.gate.getOpeningLabel(),
+      openingLabel: () => {
+        const all = this.gates.list();
+        return all.length === 1 ? all[0].gate.getOpeningLabel() : null;
+      },
+      gateLabel: (id) => this.gates.label(id),
     });
   }
 
@@ -216,7 +222,7 @@ class GuestAccessPlugin {
   }
 
   async start(): Promise<void> {
-    this.gate.start();
+    this.gates.start();
     this.started = true;
     this.connector.start(this.connectorConfig());
     this.service.publishSummary();
@@ -247,7 +253,7 @@ class GuestAccessPlugin {
 
   async stop(): Promise<void> {
     this.connector.stop();
-    this.gate.stop();
+    this.gates.stop();
     if (this.purgeTimer) clearInterval(this.purgeTimer);
     this.purgeTimer = null;
     this.started = false;
@@ -269,24 +275,28 @@ class GuestAccessPlugin {
     orderKeyOrDispatchConfig: string | Record<string, unknown>,
     value: unknown,
   ): Promise<void> {
-    if (device && device.sourceDeviceId && device.sourceDeviceId !== DEVICE_ID) {
-      throw new Error(`Unknown device: ${device.sourceDeviceId}`);
-    }
+    // Each gate is its own device, so the device the core names is the gate
+    // the order is for. No device at all is the first gate, as it always was.
+    const gate =
+      device && device.sourceDeviceId
+        ? this.gates.byDevice(device.sourceDeviceId)
+        : this.gates.primary().gate;
+    if (!gate) throw new Error(`Unknown device: ${device.sourceDeviceId}`);
     const key = orderKeyOf(orderKeyOrDispatchConfig);
     const text = typeof value === "string" ? value : String(value ?? "");
 
     if (key === "result") {
       if (!OUTCOMES.includes(text as RecipeOutcome)) throw new Error(`Unknown outcome: ${text}`);
-      this.gate.reportResult(text as RecipeOutcome);
+      gate.reportResult(text as RecipeOutcome);
       return;
     }
     if (key === "gate_state") {
       if (!GATE_STATES.includes(text as GateState)) throw new Error(`Unknown gate state: ${text}`);
-      this.gate.setGateState(text as GateState);
+      gate.setGateState(text as GateState);
       return;
     }
     if (key === "opening_label") {
-      this.gate.setOpeningLabel(text);
+      gate.setOpeningLabel(text);
       return;
     }
     throw new Error(`Unsupported order: ${key || "(none)"}`);

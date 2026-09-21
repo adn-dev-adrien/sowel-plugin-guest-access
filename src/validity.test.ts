@@ -18,6 +18,7 @@ function access(over: Partial<Access> = {}): Access {
     id: "a1",
     kind: "stay",
     label: "Camille",
+    gates: ["main"],
     code: "4K7M9QT2",
     source: {
       system: "guestflow",

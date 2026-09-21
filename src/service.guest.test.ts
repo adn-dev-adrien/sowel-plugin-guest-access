@@ -198,6 +198,64 @@ describe("pressing", () => {
   });
 });
 
+describe("pressing, when the house has more than one gate", () => {
+  async function twoGates() {
+    const h = start();
+    const garage = h.gates.add("Garage").record!;
+    const access = h.service.createManual({ label: "Léa", gates: ["main", garage.id] }, "adrien").access!;
+    const { token } = h.service.enrol(access.code!, "ip", "iPhone");
+    return { h, garage, access, token: token! };
+  }
+
+  it("presses the gate the phone named, and only that one", async () => {
+    const { h, garage, token } = await twoGates();
+    const pending = h.service.open(token, new Date(), garage.id);
+    await new Promise((r) => setTimeout(r, 1));
+    h.gates.get(garage.id)!.reportResult("opened");
+    expect((await pending).outcome).toBe("opened");
+    expect(h.service.journal()[0]).toMatchObject({ kind: "opened", gate: garage.id });
+  });
+
+  it("refuses a gate the access does not list, before any counter moves", async () => {
+    const h = start();
+    const garage = h.gates.add("Garage").record!;
+    const access = h.service.createManual({ label: "Plombier", gates: [garage.id] }, "adrien").access!;
+    const { token } = h.service.enrol(access.code!, "ip", "iPhone");
+    const result = await h.service.open(token!, new Date(), "main");
+    expect(result.outcome).toBe("not_this_gate");
+    expect(h.service.journal()[0]).toMatchObject({ kind: "refused", reason: "not_this_gate" });
+  });
+
+  it("will not guess which gate a phone meant when the access opens two", async () => {
+    const { h, token } = await twoGates();
+    expect((await h.service.open(token, new Date())).outcome).toBe("not_this_gate");
+  });
+
+  it("counts each gate's ceiling on that gate alone", async () => {
+    const { h, garage, access } = await twoGates();
+    const now = new Date();
+    // The first gate at its ceiling, from other people's presses.
+    for (let i = 0; i < 30; i++) {
+      h.store.record({ at: now.toISOString(), accessId: "someone-else", label: "X", kind: "opened", gate: "main" });
+    }
+    const fresh = h.service.get(access.id)!;
+    expect(h.service.decideFor(fresh, now, "main")).toMatchObject({ ok: false, reason: "too_many_opens" });
+    expect(h.service.decideFor(fresh, now, garage.id)).toEqual({ ok: true });
+    // Asked without a gate, the phone is not told it is refused: the garage would open.
+    expect(h.service.decideFor(fresh, now)).toEqual({ ok: true });
+  });
+
+  it("gives a stay the first gate, and a later revision never takes the others back", () => {
+    const h = start();
+    const garage = h.gates.add("Garage").record!;
+    const stay = h.service.applyStay(STAY, DURING).access!;
+    expect(stay.gates).toEqual(["main"]);
+    h.service.edit(stay.id, { gates: ["main", garage.id] }, "adrien");
+    h.service.applyStay({ ...STAY, revision: 2, guestName: "Camille D." }, DURING);
+    expect(h.service.get(stay.id)!.gates).toEqual(["main", garage.id]);
+  });
+});
+
 describe("the invitation", () => {
   it("carries the code in the fragment, which never reaches a server log", () => {
     const { service } = start();

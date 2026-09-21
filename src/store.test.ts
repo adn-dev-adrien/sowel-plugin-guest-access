@@ -13,6 +13,7 @@ function access(over: Partial<Access> = {}): Access {
     id: "a1",
     kind: "stay",
     label: "Camille",
+    gates: ["main"],
     code: "4K7M9QT2",
     source: {
       system: "guestflow",
@@ -122,6 +123,37 @@ describe("the store", () => {
     expect(store.countOpens(hourAgo, "a1")).toBe(1);
   });
 
+  it("counts a gate's opens apart, lines from before gates counting for the first", () => {
+    const store = new AccessStore(dir, silent);
+    store.record({ at: "2026-09-06T11:30:00.000Z", accessId: "a1", label: "C", kind: "opened" });
+    store.record({ at: "2026-09-06T11:35:00.000Z", accessId: "a1", label: "C", kind: "opened", gate: "main" });
+    store.record({ at: "2026-09-06T11:40:00.000Z", accessId: "a1", label: "C", kind: "opened", gate: "g2" });
+    const hourAgo = new Date("2026-09-06T11:00:00Z");
+    expect(store.countOpens(hourAgo, undefined, "main")).toBe(2);
+    expect(store.countOpens(hourAgo, undefined, "g2")).toBe(1);
+    expect(store.countOpens(hourAgo)).toBe(3);
+  });
+
+  it("reads a file from before gates were plural as one gate every access opens", () => {
+    const { gates: _dropped, ...old } = access();
+    writeFileSync(resolve(dir, "accesses.json"), JSON.stringify({ version: 1, accesses: [old] }));
+    const store = new AccessStore(dir, silent);
+    expect(store.get("a1")?.gates).toEqual(["main"]);
+    expect(store.gates()).toEqual([]);
+
+    // Rewritten as version 2 on the next change, gates included.
+    store.saveGates([{ id: "main", deviceId: "Accès invités", name: "Accès invités", createdAt: "x" }]);
+    const raw = JSON.parse(readFileSync(resolve(dir, "accesses.json"), "utf-8"));
+    expect(raw).toMatchObject({ version: 2, gates: [{ id: "main" }], accesses: [{ gates: ["main"] }] });
+  });
+
+  it("forgets a gate on every access that listed it", () => {
+    const store = new AccessStore(dir, silent);
+    store.insert(access({ gates: ["main", "g2"] }));
+    store.forgetGate("g2");
+    expect(new AccessStore(dir, silent).get("a1")?.gates).toEqual(["main"]);
+  });
+
   it("nulls a code a week after the stay ended, and keeps the row", () => {
     const store = new AccessStore(dir, silent);
     store.insert(access());
@@ -158,6 +190,6 @@ describe("the store", () => {
     store.insert(access());
     const raw = readFileSync(resolve(dir, "accesses.json"), "utf-8");
     expect(() => JSON.parse(raw)).not.toThrow();
-    expect(JSON.parse(raw)).toMatchObject({ version: 1 });
+    expect(JSON.parse(raw)).toMatchObject({ version: 2 });
   });
 });

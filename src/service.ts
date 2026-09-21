@@ -24,7 +24,8 @@ import {
 import { formatCode, generateCode, generateDeviceToken, hashToken, normalizeCode, randomId } from "./codes.js";
 import { AccessStore } from "./store.js";
 import { DEFAULT_GUEST_PATH, invitationUrl } from "./guest-url.js";
-import type { Gate, PressOutcome } from "./gate.js";
+import type { PressOutcome } from "./gate.js";
+import type { Gates } from "./gates.js";
 import {
   decide,
   effectiveWindow,
@@ -81,7 +82,7 @@ export interface Notifier {
 
 export class GuestAccessService {
   private readonly store: AccessStore;
-  private readonly gate: Gate;
+  private readonly gates: Gates;
   private readonly logger: ServiceLogger;
   private readonly notifier: Notifier | null;
   /** Failed enrolments: all of them, and per submitted code. In memory — a
@@ -94,12 +95,12 @@ export class GuestAccessService {
 
   constructor(opts: {
     store: AccessStore;
-    gate: Gate;
+    gates: Gates;
     logger: ServiceLogger;
     notifier?: Notifier;
   }) {
     this.store = opts.store;
-    this.gate = opts.gate;
+    this.gates = opts.gates;
     this.logger = opts.logger;
     this.notifier = opts.notifier ?? null;
   }
@@ -119,7 +120,13 @@ export class GuestAccessService {
   }
 
   createManual(
-    input: { label?: unknown; validFrom?: unknown; validUntil?: unknown; timeWindows?: unknown },
+    input: {
+      label?: unknown;
+      validFrom?: unknown;
+      validUntil?: unknown;
+      timeWindows?: unknown;
+      gates?: unknown;
+    },
     actor: string,
     now = new Date(),
   ): { access?: Access; refusal?: Refusal } {
@@ -140,10 +147,16 @@ export class GuestAccessService {
     const windowRefusal = validateTimeWindows(windows);
     if (windowRefusal) return { refusal: windowRefusal };
 
+    // Unsaid means the first gate — what a caller from before gates were
+    // plural meant, and what a house with one gate always means.
+    const gates = input.gates === undefined ? [this.gates.primary().record.id] : this.checkGates(input.gates);
+    if (!Array.isArray(gates)) return { refusal: gates };
+
     const access: Access = {
       id: randomId(),
       kind: "manual",
       label,
+      gates,
       code: this.mintCode(now),
       source: null,
       stayWindow: null,
@@ -181,6 +194,12 @@ export class GuestAccessService {
       const label = input.label.trim();
       if (!label) return { refusal: { field: "label", code: "required" } };
       patch.label = label;
+    }
+
+    if ("gates" in input) {
+      const gates = this.checkGates(input.gates);
+      if (!Array.isArray(gates)) return { refusal: gates };
+      patch.gates = gates;
     }
 
     if ("timeWindows" in input) {
@@ -291,6 +310,15 @@ export class GuestAccessService {
     return updated;
   }
 
+  /**
+   * A new code and link — the one gesture behind what used to be two buttons.
+   * `cutPhones` is what told them apart: a lost email keeps the phones, a lost
+   * phone does not.
+   */
+  changeCode(id: string, actor: string, cutPhones: boolean, now = new Date()): Access | undefined {
+    return cutPhones ? this.regenerate(id, actor, now) : this.newInvitation(id, actor, now);
+  }
+
   // ── guestFlow ──────────────────────────────────────────────
 
   /**
@@ -334,6 +362,9 @@ export class GuestAccessService {
         id: randomId(),
         kind: "stay",
         label,
+        // A stay opens the first gate; the owner adds the others by hand, and
+        // a later revision of the stay never takes them back.
+        gates: [this.gates.primary().record.id],
         code: this.mintCode(now),
         source,
         stayWindow,
@@ -444,18 +475,29 @@ export class GuestAccessService {
   async open(
     token: string,
     now = new Date(),
+    gateId?: string,
   ): Promise<{ outcome: PressOutcome; access?: Access; decision?: ReturnType<typeof decide> }> {
     const found = this.store.findByDeviceToken(token);
     if (!found) return { outcome: "revoked" };
 
     const access = found.access;
-    const decision = this.decideFor(access, now);
+    // Unsaid is only unambiguous when the access opens one gate. A gate that
+    // is not on the access is refused before anything else is looked at: the
+    // code is a key to THESE gates, not to the house.
+    const target = gateId ?? (access.gates.length === 1 ? access.gates[0] : undefined);
+    const gate = target && access.gates.includes(target) ? this.gates.get(target) : undefined;
+    if (!target || !gate) {
+      this.record(access, "refused", { actor: "guest", reason: "not_this_gate", gate: target });
+      return { outcome: "not_this_gate", access };
+    }
+
+    const decision = this.decideFor(access, now, target);
     if (!decision.ok) {
-      this.record(access, "refused", { actor: "guest", reason: decision.reason });
+      this.record(access, "refused", { actor: "guest", reason: decision.reason, gate: target });
       return { outcome: decision.reason, access, decision };
     }
 
-    const outcome = await this.gate.press({
+    const outcome = await gate.press({
       accessId: access.id,
       label: access.label,
       stay: [access.source?.property, access.source?.reservationNumber].filter(Boolean).join(" · "),
@@ -471,23 +513,37 @@ export class GuestAccessService {
         lastUsedAt: now.toISOString(),
         useCount: access.useCount + 1,
       });
-      this.record(access, "opened", { actor: "guest" });
+      this.record(access, "opened", { actor: "guest", gate: target });
     } else {
       this.store.update(access.id, { devices });
       this.record(access, outcome === "no_answer" || outcome === "gate_error" ? "failed" : "refused", {
         actor: "guest",
         reason: outcome,
+        gate: target,
       });
     }
     return { outcome, access, decision };
   }
 
-  decideFor(access: Access, now: Date) {
+  /**
+   * The rules for this access, and — when a gate is named — that gate's own
+   * ceiling. Without a gate (the phone asking what it may do) the quietest
+   * of its gates stands in: the page must not announce a refusal that one of
+   * the gates would not make. Each press is judged again on its own gate.
+   */
+  decideFor(access: Access, now: Date, gateId?: string) {
     const hourAgo = new Date(now.getTime() - 3600_000);
+    const gateIds = gateId ? [gateId] : access.gates;
+    const gateOpens = gateIds.map((g) => this.store.countOpens(hourAgo, undefined, g));
     return decide(access, now, {
       accessOpensLastHour: this.store.countOpens(hourAgo, access.id),
-      gateOpensLastHour: this.store.countOpens(hourAgo),
+      gateOpensLastHour: gateOpens.length ? Math.min(...gateOpens) : 0,
     });
+  }
+
+  /** The gates an access opens that still exist, in the owner's order. */
+  gatesOf(access: Access): string[] {
+    return this.gates.ids().filter((id) => access.gates.includes(id));
   }
 
   // ── Housekeeping and summary ───────────────────────────────
@@ -496,15 +552,29 @@ export class GuestAccessService {
     return this.store.purge(now);
   }
 
-  activeCount(now = new Date()): number {
-    return this.store.list().filter((a) => this.decideForCount(a, now)).length;
+  activeCount(now = new Date(), gateId?: string): number {
+    return this.store
+      .list()
+      .filter((a) => (!gateId || a.gates.includes(gateId)) && this.decideForCount(a, now)).length;
   }
 
+  /** Each gate's device counts the accesses that open IT. */
   publishSummary(guestflowLinked?: boolean): void {
-    this.gate.publishSummary({
-      activeAccesses: this.activeCount(),
-      guestflowLinked: guestflowLinked ?? this.lastGuestflowLinked,
-    });
+    const now = new Date();
+    for (const { record, gate } of this.gates.list()) {
+      gate.publishSummary({
+        activeAccesses: this.activeCount(now, record.id),
+        guestflowLinked: guestflowLinked ?? this.lastGuestflowLinked,
+      });
+    }
+  }
+
+  /** Accesses still able to open something, by the gates they list. */
+  liveAccessGates(now = new Date()): string[][] {
+    return this.store
+      .list()
+      .filter((a) => !a.revokedAt && !hasEnded(a, now))
+      .map((a) => a.gates);
   }
 
   /** Remembered so a summary published from anywhere does not reset the link. */
@@ -538,9 +608,22 @@ export class GuestAccessService {
   private record(
     access: Access,
     kind: JournalEntry["kind"],
-    extra: { actor?: string; reason?: string } = {},
+    extra: { actor?: string; reason?: string; gate?: string } = {},
   ): void {
     this.store.record({ accessId: access.id, label: access.label, kind, ...extra });
+  }
+
+  /** At least one gate, every one of them known, each once. */
+  private checkGates(raw: unknown): string[] | NonNullable<Refusal> {
+    if (!Array.isArray(raw) || raw.some((g) => typeof g !== "string")) {
+      return { field: "gates", code: "not_a_list" };
+    }
+    const known = this.gates.ids();
+    if (raw.some((g) => !known.includes(g))) return { field: "gates", code: "unknown_gate" };
+    const gates = known.filter((id) => raw.includes(id));
+    // An access that opens nothing is an access nobody can tell is broken.
+    if (!gates.length) return { field: "gates", code: "no_gate" };
+    return gates;
   }
 
   /**

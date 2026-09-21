@@ -13,12 +13,21 @@ afterEach(() => {
 });
 
 describe("the state the page draws", () => {
-  it("names the house, the door and the connector without being asked twice", async () => {
+  it("names the gates, the door and the connector without being asked twice", async () => {
     const h = start();
     const response = await h.admin("GET", "/state");
     expect(response.status).toBe(200);
     const body = response.body as Record<string, any>;
-    expect(body.house).toMatchObject({ gateState: "unknown", recipeAnswering: false });
+    expect(body.gates).toEqual([
+      expect.objectContaining({
+        id: "main",
+        deviceId: "Accès invités",
+        gateState: "unknown",
+        openingLabel: null,
+        recipeAnswering: false,
+        accesses: 0,
+      }),
+    ]);
     expect(body.guestflow).toMatchObject({ configured: false, linked: false });
     expect(body.publicTree).toMatchObject({ open: true, path: "/p/guest-access/" });
   });
@@ -88,10 +97,10 @@ describe("what the page may do", () => {
     expect(refused.body).toMatchObject({ code: "not_later" });
   });
 
-  it("runs the five actions, and 404s on anything else", async () => {
+  it("runs the four actions, and 404s on anything else", async () => {
     const h = start();
     const access = h.service.createManual({ label: "Voisin" }, "adrien").access!;
-    for (const action of ["suspend", "resume", "invitation", "regenerate", "revoke"]) {
+    for (const action of ["suspend", "resume", "code", "revoke"]) {
       const response = await h.admin("POST", `/accesses/${access.id}/${action}`, { body: {} });
       expect(response.status, action).toBe(200);
     }
@@ -99,9 +108,33 @@ describe("what the page may do", () => {
     expect((await h.admin("POST", "/accesses/nope/suspend", { body: {} })).status).toBe(404);
   });
 
-  it("deletes, and says so once", async () => {
+  it("changes the code, and cuts the phones only when asked", async () => {
     const h = start();
     const access = h.service.createManual({ label: "Voisin" }, "adrien").access!;
+    const phone = h.service.enrol(access.code!, "ip", "ua");
+    expect(phone.ok).toBe(true);
+
+    const kept = await h.admin("POST", `/accesses/${access.id}/code`, { body: {} });
+    const keptRow = (kept.body as { access: { code: string; devices: number } }).access;
+    expect(keptRow.code.replace("-", "")).not.toBe(access.code);
+    expect(keptRow.devices).toBe(1);
+
+    const cut = await h.admin("POST", `/accesses/${access.id}/code`, { body: { cutPhones: true } });
+    expect((cut.body as { access: { devices: number } }).access.devices).toBe(0);
+    expect(h.service.journal({ accessId: access.id }).map((e) => e.kind)).toEqual(
+      expect.arrayContaining(["invitation", "regenerated"]),
+    );
+  });
+
+  it("refuses to delete a live access — revoke first — then deletes it once", async () => {
+    const h = start();
+    const access = h.service.createManual({ label: "Voisin" }, "adrien").access!;
+    const live = await h.admin("DELETE", `/accesses/${access.id}`);
+    expect(live.status).toBe(422);
+    expect(live.body).toMatchObject({ code: "still_live" });
+    expect(h.service.get(access.id)).toBeDefined();
+
+    await h.admin("POST", `/accesses/${access.id}/revoke`, { body: {} });
     expect((await h.admin("DELETE", `/accesses/${access.id}`)).status).toBe(200);
     expect((await h.admin("DELETE", `/accesses/${access.id}`)).status).toBe(404);
   });
@@ -125,5 +158,53 @@ describe("what the page may do", () => {
     const h = start();
     expect((await h.admin("GET", "/elsewhere")).status).toBe(404);
     expect((await h.admin("POST", "/accesses/../etc/passwd", { body: {} })).status).toBe(404);
+  });
+});
+
+describe("the gates", () => {
+  it("adds a gate, lists it, and refuses a nameless or duplicate one", async () => {
+    const h = start();
+    const added = await h.admin("POST", "/gates", { body: { name: "Porte du garage" } });
+    expect(added.status).toBe(201);
+    const gate = (added.body as { gate: { id: string; deviceId: string } }).gate;
+    expect(gate.deviceId).toBe("Accès partagés · Porte du garage");
+
+    const body = (await h.admin("GET", "/state")).body as Record<string, any>;
+    expect(body.gates.map((g: any) => g.id)).toEqual(["main", gate.id]);
+
+    expect((await h.admin("POST", "/gates", { body: { name: "  " } })).body).toMatchObject({ code: "required" });
+    expect((await h.admin("POST", "/gates", { body: { name: "Porte du garage" } })).body).toMatchObject({ code: "taken" });
+  });
+
+  it("creates an access for the gates ticked, and refuses one that opens nothing", async () => {
+    const h = start();
+    const garage = h.gates.add("Garage").record!;
+    const both = await h.admin("POST", "/accesses", { body: { label: "Léa", gates: [garage.id, "main"] } });
+    // Stored in the house's order, whatever order the page sent.
+    expect((both.body as { access: { gates: string[] } }).access.gates).toEqual(["main", garage.id]);
+
+    const none = await h.admin("POST", "/accesses", { body: { label: "Personne", gates: [] } });
+    expect(none.status).toBe(422);
+    expect(none.body).toMatchObject({ field: "gates", code: "no_gate" });
+    const ghost = await h.admin("POST", "/accesses", { body: { label: "X", gates: ["nope"] } });
+    expect(ghost.body).toMatchObject({ code: "unknown_gate" });
+
+    const body = (await h.admin("GET", "/state")).body as Record<string, any>;
+    expect(body.gates.map((g: any) => g.accesses)).toEqual([1, 1]);
+  });
+
+  it("will not remove the last gate, nor the only gate of someone still able to open", async () => {
+    const h = start();
+    expect((await h.admin("DELETE", "/gates/main")).body).toMatchObject({ code: "last_gate" });
+
+    const garage = h.gates.add("Garage").record!;
+    const plumber = h.service.createManual({ label: "Plombier", gates: [garage.id] }, "adrien").access!;
+    expect((await h.admin("DELETE", `/gates/${garage.id}`)).body).toMatchObject({ code: "gate_in_use" });
+
+    // Once that access can no longer open, the gate may go — and nobody lists it.
+    h.service.revoke(plumber.id, "adrien");
+    expect((await h.admin("DELETE", `/gates/${garage.id}`)).status).toBe(200);
+    expect(h.service.get(plumber.id)!.gates).toEqual([]);
+    expect((await h.admin("DELETE", `/gates/${garage.id}`)).status).toBe(404);
   });
 });

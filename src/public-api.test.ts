@@ -183,6 +183,27 @@ describe("the session", () => {
     expect(body).not.toContain('"open"');
   });
 
+  it("lists the gates this access opens, by their equipment's names — and no others", async () => {
+    const h = start();
+    const garage = h.gates.add("Garage").record!;
+    h.gates.get(garage.id)!.setOpeningLabel("Porte du garage");
+    h.gates.add("Cave");
+    const access = h.service.createManual({ label: "Léa", gates: ["main", garage.id] }, "adrien").access!;
+    const token = ((await h.guest("POST", "/enrol", { body: { code: access.code } })).body as { token: string }).token;
+    const body = (await h.guest("GET", "/session", { token })).body as { gates: unknown };
+    expect(body.gates).toEqual([
+      { id: "main", label: "Accès invités" },
+      { id: garage.id, label: "Porte du garage" },
+    ]);
+  });
+
+  it("does not name any door on the page before a code, once there are several", async () => {
+    const h = start();
+    h.gate.setOpeningLabel("Portail d'entrée");
+    h.gates.add("Garage");
+    expect(String((await h.guest("GET", "/")).body)).toContain("<title>Accès</title>");
+  });
+
   it("answers 401 to a token nobody holds any more", async () => {
     const h = start();
     expect((await h.guest("GET", "/session", { token: "nonsense" })).status).toBe(401);
@@ -222,6 +243,17 @@ describe("pressing", () => {
     const pending = h.guest("POST", "/open", { token, body: {} });
     await h.answer("refused");
     expect((await pending).body).toMatchObject({ outcome: "refused_by_house" });
+  });
+
+  it("presses the gate named in the body", async () => {
+    const h = start();
+    const garage = h.gates.add("Garage").record!;
+    const access = h.service.createManual({ label: "Léa", gates: ["main", garage.id] }, "adrien").access!;
+    const token = ((await h.guest("POST", "/enrol", { body: { code: access.code } })).body as { token: string }).token;
+    const pending = h.guest("POST", "/open", { token, body: { gate: garage.id } });
+    await new Promise((r) => setTimeout(r, 1));
+    h.gates.get(garage.id)!.reportResult("opened");
+    expect((await pending).body).toEqual({ outcome: "opened" });
   });
 
   it("answers 401 without a token", async () => {

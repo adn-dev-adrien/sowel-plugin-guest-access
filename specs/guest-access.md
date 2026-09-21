@@ -73,9 +73,27 @@ Sowel and the guests a page of their own, and treats guestFlow as one optional s
    (§3.4), which nobody ever dictates.
 5. **A code is unique among everything that can still open the gate** — it identifies the access on
    its own, with no lodging picker anywhere.
-6. Two regenerations, because they answer two different accidents: **« Nouvelle invitation »** mints a
-   new code and leaves the phones alone (the lost email); **« Régénérer l'accès »** mints a new code
-   *and* cuts every phone off (the lost phone).
+6. **One « Changer le code »**, with a choice, because it answers two accidents: a new code that leaves
+   the phones alone (the lost email), or a new code that *also* cuts every phone off (the lost phone).
+   These used to be two buttons with names nobody could tell apart; the journal still records them as
+   `invitation` and `regenerated`.
+
+### 3.1.bis The gates
+
+6.bis **One list of people per thing that opens.** A house may have a gate and a garage door, and who
+   may open one is not who may open the other. Each gate is its **own Sowel device**, bound to its own
+   equipment and driven by its own instance of the recipe — the plugin still never touches what opens.
+   A new gate's device is named `Accès partagés · <name>`.
+6.ter **An access lists the gates it opens — at least one, all known.** One code and one link for all
+   of them: a person who may open two gates carries one link, and their phone shows one slide per gate
+   (§3.4). An access that opens nothing is refused (`no_gate`), since nobody could tell it is broken.
+6.quater **The first gate is the device every installation already had**, « Accès invités », under that
+   name, so nothing bound to it has to be bound again. A file from before gates were plural is read as
+   one gate that every access opens. A stay from guestFlow opens the first gate; the owner adds others
+   by hand, and a later revision of the stay never takes them back.
+6.quinquies **A gate goes away only if nobody still able to open depends on it alone** (`gate_in_use`),
+   and never the last one (`last_gate`). Its device is marked offline rather than deleted — the plugin
+   cannot remove a device — and every access forgets it.
 
 ### 3.2 When it may open the gate
 
@@ -89,7 +107,9 @@ Sowel and the guests a page of their own, and treats guestFlow as one optional s
    moves without shortening an access behind the owner's back. Cutting one short is « Suspendre ».
 10. **Time windows apply every day**, may not cross midnight and may not overlap — two overlapping
     rules make the effective one unguessable. A press outside them is told **when the next one opens**.
-11. **Ceilings at both levels**: 12 opens per hour per access, 30 per hour for the gate.
+11. **Ceilings at both levels**: 12 opens per hour per access, 30 per hour **per gate** — a busy gate
+    does not starve the garage. Asked without a gate (the phone checking what it may do), the
+    quietest of the access's gates stands in; every press is judged again on its own gate.
 11.bis **A correct code is never refused by the anti-guessing budget.** Enrolment looks the code up
     *first* and only ever counts failures. The budget is **global** — ten failures in ten minutes,
     then every *failing* answer is held back 1 s, 2 s, 4 s, 8 s, capped at 10 s — and past 25
@@ -104,6 +124,9 @@ Sowel and the guests a page of their own, and treats guestFlow as one optional s
 ### 3.3 The press
 
 12. The decision comes first and the counter second: a refused press never reaches the recipe.
+12.bis **A press names its gate.** A gate the access does not list is refused (`not_this_gate`) before
+    anything else is looked at: the code is a key to *these* gates, not to the house. Unsaid is only
+    accepted when the access opens exactly one gate.
 13. **Two presses of the same access within two seconds are one press.** Two seconds and not ten: a
     guest is allowed to close the gate behind them, and that is a second, deliberate press.
 14. Presses queue rather than race; the fourth caller is told to wait.
@@ -147,22 +170,39 @@ Sowel and the guests a page of their own, and treats guestFlow as one optional s
     where a guestFlow connector supplies it. The technical id stays `guest-access` and the device
     stays « Accès invités » — renaming either would orphan an installation's settings, data and
     bound equipments.
+20.bis **One slide per gate**, each carrying its gate's id and, when there are several, titled by its
+    equipment's name. With a single gate the page looks exactly as it did.
 23.ter **The page is titled after what opens**, by the name of the equipment the recipe drives —
     « Portail », « Porte du garage ». The recipe pushes it through an `opening_label` order at start
     and on every rename; the plugin learns a string and nothing about equipments. Until it has said,
     the page reads « Accès ». The name is escaped wherever it is printed: it comes from an admin's
-    keyboard and lands on a page anyone can load.
+    keyboard and lands on a page anyone can load. Before a code is typed, the title names a door only
+    when the house has **one** gate: a page anyone can load does not list the house's doors.
 
 ### 3.5 The owner's page
 
-24. One page inside Sowel, under Administration, admin-only by construction: the core refuses anyone
-    else before the plugin is reached.
-25. The list carries both kinds side by side, grouped by state (actifs, à venir, suspendus, révoqués,
-    terminés), each line showing the code, the validity in words, the hours, the phones, the last use.
+24. One page inside Sowel, **in the main navigation** (`ui.placement: "main"`, core spec 180 R1.6.bis):
+    who may open the gate this week is used day to day, not configured once. Still admin-only by
+    construction: the core refuses anyone else before the plugin is reached.
+25. **One tab per gate**, plus « Tous » once there are two, plus « + portail » to add one. On « Tous »
+    each line says which gates it opens. The list carries both kinds side by side, grouped by state
+    (actifs, à venir, suspendus, révoqués, terminés), each line showing the code, the validity in
+    words, the hours, the phones, the last use.
+25.bis **A line carries icons, not a wall of buttons** — Sowel's own (Lucide): copy the link, edit,
+    hold / resume, and « ⋯ » for the rest (change the code, this access's journal, revoke). **Deleting
+    is offered only once an access is revoked or ended**, and the server refuses it before
+    (`still_live`): deleting a live access used to be revoking and erasing the line in one click.
+    The guestFlow filters appear only when guestFlow is configured; the sync is an icon on its chip.
+25.ter **The period is picked in order.** The first choice is « Valable » (en permanence / sur une
+    période). « Jusqu'au » greys out and refuses every day, then every half hour of the same day, up
+    to « À partir du »; moving the start past the end carries the end along, keeping the length. A
+    stay's « Ouvrir dès » greys everything from the arrival on, « Prolonger jusqu'au » everything up
+    to the departure. The browser's own date field is not used: it greys days but not hours, and not
+    everywhere. The server keeps its own refusal (`end_before_start`, `not_earlier`, `not_later`).
 26. **The page shapes nothing.** Groups, states and refusals arrive computed; the page draws them and
     formats dates in the viewer's own locale.
-27. A header line says what the owner cannot otherwise know: the gate contact, whether a recipe has
-    ever answered, whether the guests' door is open, and where guestFlow stands.
+27. A header line says what the owner cannot otherwise know: each gate's contact, whether a recipe has
+    ever answered for it, whether the guests' door is shut, and where guestFlow stands.
 28. It reads when it is shown and when it comes back to the foreground. **No timer.**
 
 ### 3.6 The guestFlow connector
@@ -195,7 +235,8 @@ Sowel and the guests a page of their own, and treats guestFlow as one optional s
 | `guest-url.ts` | The address the guest is given: the alias, its path, the fragment |
 | `validity.ts` | The window in force, the decision, and what the owner may write |
 | `store.ts` | Two JSON files in `dataDir`, written atomically, corrupt ones kept aside |
-| `gate.ts` | The device, the counter, and waiting for the recipe's answer |
+| `gate.ts` | One gate's device, its counter, and waiting for the recipe's answer |
+| `gates.ts` | The list of gates: the first one kept, adding, removing, the label shown |
 | `service.ts` | Every rule, applied once, for both surfaces |
 | `admin-api.ts` | The owner's page, shaped server-side |
 | `public-api.ts` | The guests' surface, on the anonymous tree |
@@ -206,7 +247,7 @@ Sowel and the guests a page of their own, and treats guestFlow as one optional s
 
 ### The device's identity
 
-The device is declared — and addressed — as **« Accès invités »**. Sowel keys a discovered device by
+Each gate is a device, declared and addressed by its own name; the first one is **« Accès invités »**. Sowel keys a discovered device by
 its `friendlyName`: that string becomes `source_device_id`, and every later data update, status
 change and order is matched against it. A lookup that misses is not an error anywhere, the core
 simply returns. So a plugin whose declared name and published id differ publishes into a void: the
@@ -222,28 +263,29 @@ begins again at zero.
 
 ## 5. Data
 
-`data/plugins/guest-access/accesses.json` and `journal.json` (core spec 180 — the directory survives
+`data/plugins/guest-access/accesses.json` (version 2: the gates, then the accesses) and `journal.json` (core spec 180 — the directory survives
 plugin updates and rides inside Sowel's backup). No database: a few dozen rows changed a handful of
 times a week, and a file the owner can read after a power cut.
 
 ## 6. Test plan
 
-170 unit tests, `npm test`:
+192 unit tests, `npm test`:
 
 | Suite | Covers |
 |---|---|
 | `paris` (9) | Both DST transitions, the hour that does not exist, wall clock ↔ instant |
 | `codes` (8) | The alphabet, the foldings a guest actually types, the hashed token |
 | `validity` (22) | The window in force, every refusal, what the owner may write |
-| `store` (11) | Persistence, the corrupt file kept aside, the purge, the counters |
-| `gate` (11) | The counter published last, the double tap, the queue, nothing answering |
-| `service.owner` (14) | Creation, editing, the two regenerations, suspension, deletion |
-| `service.guest` (17) | Enrolment, the anti-guessing budget, the owner's alert, the press, the ceilings |
+| `store` (14) | Persistence, the corrupt file kept aside, the purge, the counters per gate, the version 1 file |
+| `gate` (14) | The counter published last, the double tap, the queue, nothing answering |
+| `gates` (6) | The first gate kept, a gate added as its own device, persistence, refusals, removal |
+| `service.owner` (14) | Creation, editing, the new code, suspension, deletion |
+| `service.guest` (22) | Enrolment, the anti-guessing budget, the owner's alert, the press on its gate, the per-gate ceiling |
 | `service.stays` (10) | Stays applied, replayed, cancelled, reinstated |
-| `admin-api` (10) | The state the page draws, the actions, the refusals |
-| `public-api` (19) | The page, its CSP, its title and its escaping, enrolment statuses, the held answer, the press |
+| `admin-api` (14) | The state the page draws, the gates, the actions, the new code, deleting only once revoked |
+| `public-api` (22) | The page, its CSP, its title and its escaping, enrolment statuses, the held answer, the gates listed, the press |
 | `guestflow` (13) | Pull, push, the pending push, the signature, the HTTP refusal |
-| `index` (8) | The core contract, the three orders, the data directory |
+| `index` (9) | The core contract, the three orders, an order routed to its gate, the data directory |
 | `url-guard` (5) | HTTPS or localhost, and the host that merely contains « localhost » |
 | `guest-url` (10) | The alias, the path it is served under, what is refused, the fragment |
 
