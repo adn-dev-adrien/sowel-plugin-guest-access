@@ -1,0 +1,432 @@
+<!doctype html>
+<html lang="fr">
+<meta charset="utf-8">
+<title>Accès invités — quatre arbitrages</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+:root{
+  color-scheme: light dark;
+  --paper:#F5F0E6; --card:#FFFDF8; --ink:#1F241D; --muted:#5F665A; --line:#DDD5C4;
+  --sapin:#2E3B2A; --lichen:#5A6B48; --ocre:#B87B2A; --ok:#2F6B3A; --ko:#A33A2A;
+  --vert:#E1EBD3; --ambre:#F3E1C1; --gris:#ECE6D8;
+  --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  --serif:"Iowan Old Style","Palatino Linotype",Palatino,Georgia,serif;
+  --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+  /* la page des clients, ses vraies couleurs */
+  --g-bg:#f6f7f8; --g-fg:#16202a; --g-muted:#5c6b79; --g-card:#ffffff; --g-line:#dfe4e9;
+  --g-primary:#1A4F6E; --g-error:#b3261e; --g-ok:#2F7D46;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --paper:#161C16; --card:#1F261E; --ink:#EDE8DC; --muted:#A8AE9F; --line:#39433A;
+    --sapin:#C9D8BC; --lichen:#9DB286; --ocre:#E0A956; --ok:#7CC48A; --ko:#EE8A7A;
+    --vert:#2B3A26; --ambre:#443520; --gris:#2C2A22;
+    --g-bg:#10161c; --g-fg:#e9eef2; --g-muted:#9aa8b4; --g-card:#182028; --g-line:#2a353f;
+    --g-primary:#7FB8D4; --g-error:#e8827a; --g-ok:#7CC48A;
+  }
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--paper);color:var(--ink);font:15px/1.55 var(--sans)}
+.wrap{max-width:1060px;margin:0 auto;padding:28px 16px 90px}
+h1{font:600 31px/1.2 var(--serif);color:var(--sapin);margin:0 0 4px}
+h2{font:600 22px/1.25 var(--serif);color:var(--sapin);margin:48px 0 10px;padding-top:8px;border-top:1px solid var(--line)}
+h3{font:600 13px/1.3 var(--sans);margin:0 0 8px;text-transform:uppercase;letter-spacing:.07em;color:var(--lichen)}
+p{margin:0 0 10px}
+.meta{color:var(--muted);font-size:13.5px;margin-bottom:18px}
+.lead{color:var(--muted);max-width:830px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:16px}
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:14px}
+.pill{display:inline-block;padding:1px 9px;border-radius:99px;font-size:12.5px;border:1px solid var(--line);white-space:nowrap}
+.v{background:var(--vert)} .a{background:var(--ambre)} .g{background:var(--gris)}
+ul.tight{margin:6px 0 0;padding-left:18px} ul.tight li{margin:5px 0}
+.alert{border-left:4px solid var(--ko);background:var(--card);padding:12px 14px;border-radius:6px;margin:12px 0}
+.note{border-left:4px solid var(--ocre);background:var(--card);padding:12px 14px;border-radius:6px;margin:12px 0}
+.good{border-left:4px solid var(--ok);background:var(--card);padding:12px 14px;border-radius:6px;margin:12px 0}
+.tblwrap{overflow-x:auto;-webkit-overflow-scrolling:touch}
+table.plain{border-collapse:collapse;width:100%;font-size:14px;min-width:560px}
+table.plain th,table.plain td{border-bottom:1px solid var(--line);padding:9px 8px;text-align:left;vertical-align:top}
+table.plain th{font-size:12.5px;color:var(--muted);font-weight:600}
+code{font-family:var(--mono);font-size:12.5px}
+pre{font-family:var(--mono);font-size:12.5px;background:var(--card);border:1px solid var(--line);border-radius:8px;padding:12px;overflow-x:auto}
+button.seg,button.act{font:inherit;border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:8px;padding:9px 13px;min-height:44px;cursor:pointer}
+button.seg[aria-pressed=true]{background:var(--sapin);color:var(--paper);border-color:var(--sapin)}
+.segrow{display:flex;gap:8px;flex-wrap:wrap;margin:6px 0 16px}
+.ask{background:var(--ambre);border:1px solid var(--line);border-radius:10px;padding:14px 16px;margin:14px 0}
+.ask b{display:block;margin-bottom:4px}
+
+/* ── le téléphone ─────────────────────────────── */
+.phones{display:grid;grid-template-columns:repeat(auto-fit,minmax(270px,1fr));gap:18px;margin-top:14px}
+.phone{background:var(--g-bg);color:var(--g-fg);border:1px solid var(--g-line);border-radius:22px;padding:26px 18px 22px;
+       font:16px/1.45 var(--sans);min-height:300px;display:flex;flex-direction:column;align-items:center;justify-content:center}
+.phone h4{font-size:22px;margin:0 0 4px;font-weight:600;text-align:center}
+.phone .caption{color:var(--g-muted);font-size:13px;margin:0 0 10px;text-align:center}
+.track{position:relative;width:min(260px,100%);height:58px;border-radius:999px;background:var(--g-card);
+       border:1px solid var(--g-line);display:grid;place-items:center;overflow:hidden;touch-action:none;
+       transition:background .18s ease,border-color .18s ease}
+.track-label{color:var(--g-muted);font-size:14px;pointer-events:none;padding-left:40px;transition:opacity .15s ease}
+.knob{position:absolute;left:4px;top:4px;width:50px;height:50px;border-radius:50%;background:var(--g-primary);
+      color:#fff;display:grid;place-items:center;cursor:grab;transition:left .18s ease,background .18s ease}
+.knob.dragging{transition:background .18s ease;cursor:grabbing}
+.knob svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:2.4;stroke-linecap:round;stroke-linejoin:round}
+/* variante A — la piste entière passe au vert */
+.track.doneA{background:var(--g-ok);border-color:var(--g-ok)}
+.track.doneA .track-label{opacity:0}
+.track.doneA .knob{background:#fff;color:var(--g-ok)}
+/* variante B — seul le bouton passe au vert */
+.track.doneB{border-color:var(--g-ok)}
+.track.doneB .track-label{opacity:0}
+.track.doneB .knob{background:var(--g-ok)}
+/* variante actuelle */
+.track.doneNow{border-color:var(--g-primary)}
+.phone .ghost{font:inherit;font-weight:600;min-height:48px;padding:0 18px;border-radius:8px;background:transparent;
+  color:var(--g-muted);border:1px solid var(--g-line);width:100%;margin-top:16px;cursor:pointer}
+/* la maquette reprend le style de la VRAIE page des clients, pas celui du document */
+.phone .note{border:0;background:none;padding:0;border-radius:0;margin:18px 0 0;text-align:center;
+  font-size:14px;color:var(--g-error);min-height:20px}
+.phone .note.calm{color:var(--g-muted)}
+.variant-name{font-size:12.5px;color:var(--muted);text-align:center;margin:8px 0 0}
+
+/* ── le simulateur ────────────────────────────── */
+.sim{display:grid;grid-template-columns:320px 1fr;gap:18px;align-items:start}
+@media (max-width:860px){.sim{grid-template-columns:1fr}}
+.sim>*{min-width:0}
+.sim input{font:inherit;font-family:var(--mono);width:100%;padding:11px;border:1px solid var(--line);border-radius:8px;
+  background:var(--paper);color:var(--ink);text-transform:uppercase;min-height:46px}
+.log{font-family:var(--mono);font-size:12.5px;background:var(--card);border:1px solid var(--line);border-radius:8px;
+  padding:10px;max-height:290px;overflow:auto}
+.log div{padding:3px 0;border-bottom:1px solid var(--line)}
+.log div:last-child{border-bottom:0}
+.log .ko{color:var(--ko)} .log .ok{color:var(--ok)} .log .wait{color:var(--ocre)}
+.counters{display:flex;gap:10px;flex-wrap:wrap;margin:10px 0}
+.counters span{font-size:12.5px;padding:3px 9px;border-radius:99px;border:1px solid var(--line);background:var(--card)}
+</style>
+<div class="wrap">
+
+<h1>Accès invités — quatre arbitrages</h1>
+<p class="meta">Tes quatre retours du 20 septembre, chacun avec ce qu'on peut manipuler pour trancher.</p>
+<div class="good"><b>Tranché le 21 septembre, et implémenté (plugin 1.2.0, recette 0.3.0) :</b>
+<ul class="tight">
+<li><b>Glissière</b> — ni A ni B : on reprend <i>la</i> glissière de Sowel, celle qui confirme un portail ou un garage (spec 146). Orange au repos, verte avec une coche à l'arrivée, sans texte.</li>
+<li><b>Force brute</b> — les trois pièces, sans le lien à 128 bits.</li>
+<li><b>Nom</b> — « Accès partagés ».</li>
+<li><b>Titre de la page</b> — repris de l'équipement que la recette pilote, et il suit un renommage.</li>
+</ul>Les maquettes ci-dessous restent comme trace de l'arbitrage.</div>
+
+<!-- ══════════ 1. LA GLISSIÈRE ══════════ -->
+<h2>1 · La glissière : vert, et plus de texte</h2>
+<p class="lead">Aujourd'hui, arrivée au bout, la piste garde sa bordure bleue et le texte devient « Commande envoyée ».
+Tu demandes du vert et plus de texte. Deux lectures de « le bouton » — <b>tire les trois</b>, jusqu'au bout.</p>
+
+<div class="phones">
+  <div>
+    <div class="phone">
+      <h4>Camille</h4>
+      <p class="caption">Le même geste ouvre et ferme</p>
+      <div class="track" data-mode="now"><span class="track-label">Glisser pour actionner</span>
+        <div class="knob" tabindex="0"><svg viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></div></div>
+      <p class="note"></p>
+    </div>
+    <p class="variant-name">Aujourd'hui — bordure bleue, « Commande envoyée »</p>
+  </div>
+  <div>
+    <div class="phone">
+      <h4>Camille</h4>
+      <p class="caption">Le même geste ouvre et ferme</p>
+      <div class="track" data-mode="A"><span class="track-label">Glisser pour actionner</span>
+        <div class="knob" tabindex="0"><svg viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></div></div>
+      <p class="note"></p>
+    </div>
+    <p class="variant-name"><b>A</b> — toute la piste passe au vert, plus de texte</p>
+  </div>
+  <div>
+    <div class="phone">
+      <h4>Camille</h4>
+      <p class="caption">Le même geste ouvre et ferme</p>
+      <div class="track" data-mode="B"><span class="track-label">Glisser pour actionner</span>
+        <div class="knob" tabindex="0"><svg viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></div></div>
+      <p class="note"></p>
+    </div>
+    <p class="variant-name"><b>B</b> — seul le bouton passe au vert, plus de texte</p>
+  </div>
+</div>
+
+<div class="note"><b>Ce qui ne change pas :</b> le retour au repos après 2 secondes (un repos, jamais un verrou — tu dois pouvoir refermer derrière toi), et le silence en cas de succès. Le vert dit « c'est parti », pas « le portail est ouvert » : la maison ne renvoie pas l'état au client, décision du 14/09.</p></div>
+
+<div class="ask"><b>À trancher</b> A ou B — et faut-il garder la légende « Le même geste ouvre et ferme » au-dessus, ou la retirer aussi ?</div>
+
+<!-- ══════════ 2. LA SÉCURITÉ ══════════ -->
+<h2>2 · La force brute : le vrai trou n'est pas celui qu'on croit</h2>
+
+<div class="alert">
+<b>Prouvé sur la pile d'essai à l'instant.</b> Cinq requêtes avec un mauvais code, depuis n'importe où,
+et <b>le client suivant qui présente le BON code est refusé</b> — pendant dix minutes, pour tout le monde.
+<pre>essai 1..5 (mauvais code)      -> 401
+puis le bon code, autre IP     -> {"reason":"too_many_attempts"}</pre>
+Deux causes qui se cumulent : le plugin ne voit pas l'IP du client mais celle du reverse proxy
+(le cœur ne configure pas <code>trustProxy</code>), donc « 5 essais par IP » veut dire
+<b>5 essais pour la Terre entière</b> ; et le compteur est consulté <b>avant</b> de regarder le code,
+donc un code juste tombe dans le même seau qu'une devinette. Cinq POST suffisent à fermer l'accès à tous tes clients.
+</div>
+
+<div class="good">
+<b>Et la devinette, elle, ne tient pas debout.</b> 8 caractères sur un alphabet de 32 =
+<b>1 099 511 627 776</b> combinaisons. Avec 20 accès vivants, une tentative a une chance sur 55 milliards.
+À 100 essais par seconde tenus jour et nuit — un débit qu'aucun proxy ne laisse passer en silence —
+il faudrait <b>une douzaine d'années</b> pour une chance sur deux. Le code n'est pas le maillon faible :
+le maillon faible est que le garde-fou puisse être retourné contre tes clients, et que personne ne soit prévenu.
+</div>
+
+<h3>L'astuce proposée — trois pièces, aucune ne gêne un invité</h3>
+<div class="grid2">
+  <div class="card"><h3>1 · Un bon code n'est jamais refusé</h3>
+    <p>On cherche le code d'abord, on ne compte que les <b>échecs</b>. Pour profiter du contournement il faudrait
+    déjà connaître un code valable — c'est-à-dire ne pas être en train de deviner. Cela supprime le déni de service
+    en entier, et ne coûte rien en sécurité.</p></div>
+  <div class="card"><h3>2 · Un budget d'échecs global, qui double l'attente</h3>
+    <p>Puisque l'IP n'est pas disponible, on ne compte plus par IP mais globalement, et seulement les échecs.
+    Au-delà de 10 échecs en 10 minutes, chaque réponse <b>en échec</b> attend 1 s, puis 2, 4, 8, plafonné à 10 s.
+    Un attaquant passe de 1000 essais/s à quelques essais par minute. Celui qui se trompe une fois attend une seconde.
+    Celui qui a le bon code n'attend jamais (pièce 1).</p></div>
+  <div class="card"><h3>3 · Tu es prévenu</h3>
+    <p>Aujourd'hui les mauvais codes partent au journal et <b>rien ne remonte</b>. Au-delà du budget : une entrée
+    dans l'Activité et une notification — « 40 codes erronés en 10 minutes ». C'est ce qui transforme une attaque
+    invisible en attaque vue.</p></div>
+  <div class="card"><h3>En option — un lien plus fort que le code</h3>
+    <p>Le lien peut porter un secret de 128 bits dans son fragment, le code à 8 caractères ne servant plus qu'à la
+    dictée au téléphone. Le chemin normal — on clique le lien — devient hors de portée de toute devinette.
+    Coût : un lien plus long et un QR plus dense.</p></div>
+</div>
+
+<div class="note"><b>Ce qu'on ne fera pas :</b> activer <code>trustProxy</code> dans le cœur pour récupérer la vraie IP.
+Ce serait faire confiance à un en-tête que n'importe qui peut écrire s'il joint Sowel directement, et cela changerait
+le journal d'audit de tous les plugins. Si on veut l'IP réelle un jour, c'est une spec du cœur à part, avec une liste
+de proxys de confiance.</div>
+
+<h3>Essaie les deux comportements</h3>
+<p class="lead">Le bon code est <code>YJJV-656N</code>. Tape n'importe quoi d'autre cinq fois, puis le bon.</p>
+<div class="segrow">
+  <button class="seg" data-sim="now" aria-pressed="true">Comportement actuel</button>
+  <button class="seg" data-sim="new" aria-pressed="false">Comportement proposé</button>
+  <button class="act" id="sim-reset">Réinitialiser</button>
+</div>
+<div class="sim">
+  <div class="card">
+    <label for="sim-code" style="font-size:13px;color:var(--muted)">Code saisi par le visiteur</label>
+    <input id="sim-code" value="ABCD-1234" maxlength="12" spellcheck="false">
+    <div class="counters">
+      <span>échecs récents : <b id="c-fail">0</b></span>
+      <span>attente : <b id="c-wait">0 s</b></span>
+    </div>
+    <button class="act" id="sim-go" style="width:100%">Envoyer</button>
+    <button class="act" id="sim-good" style="width:100%;margin-top:8px">Envoyer le BON code</button>
+  </div>
+  <div class="log" id="sim-log"><div class="calm">Rien encore.</div></div>
+</div>
+
+<div class="ask"><b>À trancher</b> Les trois pièces, oui ? Et le lien à 128 bits : maintenant, plus tard, ou jamais ?</div>
+
+<!-- ══════════ 3. LE VOCABULAIRE ══════════ -->
+<h2>3 · Le vocabulaire : sortir du gîte</h2>
+<p class="lead">Tu t'en sers pour le gîte ; quelqu'un d'autre s'en servira pour son enfant qui rentre du collège,
+ou pour l'artisan qui vient mardi. La règle qui rend ça possible sans tout réécrire :</p>
+
+<div class="good"><b>Le plugin ne parle que d'un <i>accès</i> et de <i>la chose qui s'ouvre</i>.</b>
+Tout ce qui est séjour, logement, client vient du connecteur guestFlow — et disparaît quand il n'y en a pas,
+c'est-à-dire chez presque tout le monde.</div>
+
+<div class="segrow">
+  <button class="seg" data-use="gite" aria-pressed="true">Le gîte</button>
+  <button class="seg" data-use="enfant" aria-pressed="false">L'enfant</button>
+  <button class="seg" data-use="artisan" aria-pressed="false">L'artisan</button>
+</div>
+
+<div class="phones" style="grid-template-columns:repeat(auto-fit,minmax(280px,1fr))">
+  <div>
+    <div class="phone" style="min-height:250px">
+      <h4 id="u-title">Portail</h4>
+      <p class="caption" id="u-intro">Entrez le code reçu par email.</p>
+      <div style="background:var(--g-card);border:1px solid var(--g-line);border-radius:12px;padding:16px;width:100%">
+        <div style="font-size:13px;color:var(--g-muted);margin-bottom:6px">Code d'accès</div>
+        <div style="font-family:var(--mono);font-size:21px;letter-spacing:3px;text-align:center">XXXX-XXXX</div>
+      </div>
+      <p class="note calm" id="u-refus" style="margin-top:14px">Cet accès est suspendu. Contactez votre hôte.</p>
+    </div>
+    <p class="variant-name">Aujourd'hui — le gîte transparaît partout</p>
+  </div>
+  <div>
+    <div class="phone" style="min-height:250px">
+      <h4 id="n-title">Portail</h4>
+      <p class="caption" id="n-intro">Entrez le code qu'on vous a communiqué.</p>
+      <div style="background:var(--g-card);border:1px solid var(--g-line);border-radius:12px;padding:16px;width:100%">
+        <div style="font-size:13px;color:var(--g-muted);margin-bottom:6px">Code d'accès</div>
+        <div style="font-family:var(--mono);font-size:21px;letter-spacing:3px;text-align:center">XXXX-XXXX</div>
+      </div>
+      <p class="note calm" id="n-refus" style="margin-top:14px">Cet accès est suspendu. Contactez la personne qui vous l'a donné.</p>
+    </div>
+    <p class="variant-name"><b>Proposé</b> — le titre est un réglage, le reste ne suppose rien</p>
+  </div>
+</div>
+
+<h3>Ce qui change, mot par mot</h3>
+<div class="tblwrap">
+<table class="plain">
+<tr><th>Où</th><th>Aujourd'hui</th><th>Proposé</th></tr>
+<tr><td>Titre de la page du visiteur</td><td>« Portail », en dur</td><td>Un réglage <code>opening_label</code> — « Portail », « Porte d'entrée », « Garage », « Barrière »…</td></tr>
+<tr><td>Invite du code</td><td>« Entrez le code reçu par email. »</td><td>« Entrez le code qu'on vous a communiqué. » — il peut être dicté au téléphone</td></tr>
+<tr><td>Vers qui se tourner</td><td>« Contactez votre hôte. »</td><td>« Contactez la personne qui vous l'a donné. »</td></tr>
+<tr><td>Description du plugin</td><td>« …des clients du gîte et de la lodge »</td><td>« Donner à quelqu'un le droit d'ouvrir quelque chose, pour un temps donné. »</td></tr>
+<tr><td>Page de gestion</td><td>« Qui peut ouvrir le portail, et jusqu'à quand. »</td><td>Déjà générique — le mot « portail » suit le réglage</td></tr>
+<tr><td>Séjour, logement, client</td><td>Mélangés au reste</td><td>N'apparaissent que si un connecteur guestFlow est branché</td></tr>
+<tr><td>Nom du plugin</td><td>« Accès invités »</td><td>à trancher — voir ci-dessous</td></tr>
+</table>
+</div>
+
+<div class="ask"><b>À trancher</b> Le nom du plugin : « Accès invités » (on garde), « Accès temporaires », « Accès partagés » — ou autre chose.
+Et : un seul réglage <code>opening_label</code> suffit-il, ou veux-tu que le nom vienne automatiquement de l'équipement que la recette actionne ?</div>
+
+<!-- ══════════ 4. LA PAGE DE GESTION ══════════ -->
+<h2>4 · La page des accès : elle existe, voilà où</h2>
+<p class="lead">Elle est déjà là et elle fonctionne — c'est la capture que je t'ai envoyée. Elle n'apparaît que
+sur la pile d'essai, pas sur ton instance : ton Sowel de production n'a ni la spec 180 du cœur, ni le plugin installé.</p>
+
+<div class="card">
+<p style="margin:0"><b>Chemin</b> — <code>http://localhost:3000</code>, connecté en <code>Claude</code>, puis
+menu <b>ADMINISTRATION → Accès invités</b> (tout en bas de la colonne de gauche, sous « Sauvegarde »).
+Lien direct : <code>http://localhost:3000/plugins/guest-access/page</code></p>
+</div>
+
+<ul class="tight">
+  <li><b>Voir les accès actifs</b> — la section ACTIFS, avec le code, la fenêtre, le nombre de téléphones et le dernier usage.</li>
+  <li><b>En créer un à la main</b> — le bouton <b>« Nouvel accès »</b>, en haut du bandeau. Un libellé suffit ; les dates et les plages horaires sont facultatives.</li>
+  <li><b>Sur chaque ligne</b> — Copier le lien, Modifier, Suspendre, Nouvelle invitation (le code change, les téléphones déjà posés continuent), Régénérer l'accès (tout s'arrête), Révoquer, Journal, Supprimer.</li>
+  <li><b>Les onglets</b> — Tous / guestFlow / Créés par moi / Journal.</li>
+</ul>
+
+<div class="note">Si le menu ne montre pas « Accès invités » : c'est que tu regardes <code>192.168.0.26</code> et pas la pile d'essai.
+La tuile n'apparaît que là où le plugin est installé <i>et</i> où le cœur porte la spec 180 — c'est-à-dire, pour l'instant, nulle part ailleurs que sur ton Mac.</div>
+
+</div>
+
+<script>
+// ── 1. les glissières ───────────────────────────
+document.querySelectorAll('.track').forEach((track) => {
+  const knob = track.querySelector('.knob');
+  const label = track.querySelector('.track-label');
+  const note = track.parentElement.querySelector('.note');
+  const mode = track.dataset.mode;
+  const doneClass = mode === 'A' ? 'doneA' : mode === 'B' ? 'doneB' : 'doneNow';
+  let dragging = false, startX = 0, travel = 0;
+  const limit = () => track.clientWidth - knob.clientWidth - 8;
+  const place = (x) => { knob.style.left = Math.max(4, Math.min(limit(), x)) + 'px'; };
+  const rest = () => { knob.classList.remove('dragging'); knob.style.left = '4px'; track.classList.remove(doneClass); };
+  function fire() {
+    track.classList.add(doneClass);
+    knob.style.left = limit() + 'px';
+    if (mode === 'now') label.textContent = 'Commande envoyée';
+    if (note) { note.textContent = ''; note.className = 'note calm'; }
+    setTimeout(() => { rest(); label.textContent = 'Glisser pour actionner'; }, 2000);
+  }
+  knob.addEventListener('pointerdown', (e) => {
+    dragging = true; startX = e.clientX; travel = parseFloat(knob.style.left || '4');
+    knob.classList.add('dragging'); knob.setPointerCapture(e.pointerId);
+  });
+  knob.addEventListener('pointermove', (e) => { if (dragging) place(travel + (e.clientX - startX)); });
+  const release = () => {
+    if (!dragging) return;
+    dragging = false; knob.classList.remove('dragging');
+    if (parseFloat(knob.style.left || '4') >= limit() - 6) fire(); else rest();
+  };
+  knob.addEventListener('pointerup', release);
+  knob.addEventListener('pointercancel', () => { dragging = false; rest(); });
+  knob.addEventListener('keydown', (e) => {
+    if (['Enter', ' ', 'ArrowRight', 'End'].includes(e.key)) { e.preventDefault(); fire(); }
+  });
+});
+
+// ── 2. le simulateur de verrouillage ────────────
+const GOOD = 'YJJV656N';
+let simMode = 'now';
+let fails = [];          // horodatages des échecs
+let attempts = [];       // horodatages de TOUTE tentative (comportement actuel)
+const logEl = document.getElementById('sim-log');
+const cFail = document.getElementById('c-fail');
+const cWait = document.getElementById('c-wait');
+
+function norm(v) { return (v || '').toUpperCase().replace(/[^A-Z0-9]/g, '').replace(/O/g,'0').replace(/[IL]/g,'1').replace(/U/g,'V'); }
+function prune() {
+  const from = Date.now() - 10 * 60 * 1000;
+  fails = fails.filter((t) => t >= from);
+  attempts = attempts.filter((t) => t >= from);
+}
+function waitFor() { const over = Math.max(0, fails.length - 10); return over === 0 ? 0 : Math.min(10, Math.pow(2, over - 1)); }
+function paint() {
+  prune();
+  cFail.textContent = simMode === 'now' ? attempts.length : fails.length;
+  cWait.textContent = simMode === 'now' ? '—' : waitFor() + ' s';
+}
+function say(text, cls) {
+  if (logEl.firstElementChild && logEl.firstElementChild.classList.contains('calm')) logEl.textContent = '';
+  const d = document.createElement('div');
+  d.className = cls || '';
+  d.textContent = new Date().toLocaleTimeString('fr-FR') + '  ' + text;
+  logEl.prepend(d);
+}
+function send(raw) {
+  prune();
+  const code = norm(raw);
+  const right = code === GOOD;
+  if (simMode === 'now') {
+    // l'ordre d'aujourd'hui : le seau d'abord, le code ensuite
+    if (attempts.length >= 5) { say('REFUSÉ  too_many_attempts  (même avec le bon code)', 'ko'); paint(); return; }
+    attempts.push(Date.now());
+    if (right) { say('OK  le téléphone est enrôlé', 'ok'); }
+    else { say('401  code incorrect', 'ko'); }
+  } else {
+    // l'ordre proposé : le code d'abord, on ne compte que les échecs
+    if (right) { say('OK  le téléphone est enrôlé — aucun délai, jamais', 'ok'); paint(); return; }
+    const w = waitFor();
+    fails.push(Date.now());
+    if (w > 0) say('401  code incorrect — réponse retardée de ' + w + ' s' + (fails.length > 10 ? '  ·  le propriétaire est prévenu' : ''), 'wait');
+    else say('401  code incorrect', 'ko');
+  }
+  paint();
+}
+document.getElementById('sim-go').addEventListener('click', () => send(document.getElementById('sim-code').value));
+document.getElementById('sim-good').addEventListener('click', () => { document.getElementById('sim-code').value = 'YJJV-656N'; send(GOOD); });
+document.getElementById('sim-reset').addEventListener('click', () => {
+  fails = []; attempts = [];
+  // le champ aussi : sinon « Envoyer » rejoue le bon code laissé par le bouton d'à côté
+  document.getElementById('sim-code').value = 'ABCD-1234';
+  logEl.innerHTML = '<div class="calm">Rien encore.</div>'; paint();
+});
+document.querySelectorAll('[data-sim]').forEach((b) => b.addEventListener('click', () => {
+  document.querySelectorAll('[data-sim]').forEach((o) => o.setAttribute('aria-pressed', String(o === b)));
+  simMode = b.dataset.sim;
+  fails = []; attempts = [];
+  document.getElementById('sim-code').value = 'ABCD-1234';
+  say('— comportement ' + (simMode === 'now' ? 'ACTUEL' : 'PROPOSÉ') + ', compteurs remis à zéro —');
+  paint();
+}));
+paint();
+
+// ── 3. le vocabulaire ───────────────────────────
+const USES = {
+  gite:    { title: 'Portail',       old: 'Entrez le code reçu par email.', oldRef: 'Cet accès est suspendu. Contactez votre hôte.',
+             nTitle: 'Portail',      nRef: "Cet accès est suspendu. Contactez la personne qui vous l'a donné." },
+  enfant:  { title: 'Portail',       old: 'Entrez le code reçu par email.', oldRef: 'Cet accès est suspendu. Contactez votre hôte.',
+             nTitle: "Porte d'entrée", nRef: "Cet accès est suspendu. Contactez la personne qui vous l'a donné." },
+  artisan: { title: 'Portail',       old: 'Entrez le code reçu par email.', oldRef: 'Cet accès est suspendu. Contactez votre hôte.',
+             nTitle: 'Portail de service', nRef: "Cet accès est suspendu. Contactez la personne qui vous l'a donné." },
+};
+document.querySelectorAll('[data-use]').forEach((b) => b.addEventListener('click', () => {
+  document.querySelectorAll('[data-use]').forEach((o) => o.setAttribute('aria-pressed', String(o === b)));
+  const u = USES[b.dataset.use];
+  document.getElementById('u-title').textContent = u.title;
+  document.getElementById('u-intro').textContent = u.old;
+  document.getElementById('u-refus').textContent = u.oldRef;
+  document.getElementById('n-title').textContent = u.nTitle;
+  document.getElementById('n-intro').textContent = "Entrez le code qu'on vous a communiqué.";
+  document.getElementById('n-refus').textContent = u.nRef;
+}));
+</script>
+</html>
