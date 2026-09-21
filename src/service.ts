@@ -24,7 +24,7 @@ import {
 import { formatCode, generateCode, generateDeviceToken, hashToken, normalizeCode, randomId } from "./codes.js";
 import { AccessStore } from "./store.js";
 import { DEFAULT_GUEST_PATH, invitationUrl } from "./guest-url.js";
-import type { PressOutcome } from "./gate.js";
+import type { Gate, PressOutcome } from "./gate.js";
 import type { Gates } from "./gates.js";
 import {
   decide,
@@ -82,6 +82,7 @@ export interface Notifier {
 
 export class GuestAccessService {
   private readonly store: AccessStore;
+  private readonly gate: Gate;
   private readonly gates: Gates;
   private readonly logger: ServiceLogger;
   private readonly notifier: Notifier | null;
@@ -95,11 +96,13 @@ export class GuestAccessService {
 
   constructor(opts: {
     store: AccessStore;
+    gate: Gate;
     gates: Gates;
     logger: ServiceLogger;
     notifier?: Notifier;
   }) {
     this.store = opts.store;
+    this.gate = opts.gate;
     this.gates = opts.gates;
     this.logger = opts.logger;
     this.notifier = opts.notifier ?? null;
@@ -149,7 +152,13 @@ export class GuestAccessService {
 
     // Unsaid means the first gate — what a caller from before gates were
     // plural meant, and what a house with one gate always means.
-    const gates = input.gates === undefined ? [this.gates.primary().record.id] : this.checkGates(input.gates);
+    const first = this.gates.primary();
+    const gates =
+      input.gates === undefined
+        ? first
+          ? [first.id]
+          : ({ field: "gates", code: "no_gate" } as const)
+        : this.checkGates(input.gates);
     if (!Array.isArray(gates)) return { refusal: gates };
 
     const access: Access = {
@@ -364,7 +373,7 @@ export class GuestAccessService {
         label,
         // A stay opens the first gate; the owner adds the others by hand, and
         // a later revision of the stay never takes them back.
-        gates: [this.gates.primary().record.id],
+        gates: this.gates.primary() ? [this.gates.primary()!.id] : [],
         code: this.mintCode(now),
         source,
         stayWindow,
@@ -485,8 +494,7 @@ export class GuestAccessService {
     // is not on the access is refused before anything else is looked at: the
     // code is a key to THESE gates, not to the house.
     const target = gateId ?? (access.gates.length === 1 ? access.gates[0] : undefined);
-    const gate = target && access.gates.includes(target) ? this.gates.get(target) : undefined;
-    if (!target || !gate) {
+    if (!target || !access.gates.includes(target) || !this.gates.record(target)) {
       this.record(access, "refused", { actor: "guest", reason: "not_this_gate", gate: target });
       return { outcome: "not_this_gate", access };
     }
@@ -497,10 +505,19 @@ export class GuestAccessService {
       return { outcome: decision.reason, access, decision };
     }
 
-    const outcome = await gate.press({
+    // A gate the house no longer has — removed, or never pointed at an
+    // equipment — cannot be pressed; the owner's page says which.
+    const equipment = this.gates.equipmentOf(target);
+    if (!equipment) {
+      this.record(access, "failed", { actor: "guest", reason: "gate_unavailable", gate: target });
+      return { outcome: "gate_error", access, decision };
+    }
+
+    const outcome = await this.gate.press({
       accessId: access.id,
       label: access.label,
       stay: [access.source?.property, access.source?.reservationNumber].filter(Boolean).join(" · "),
+      target: equipment.id,
     });
 
     const devices = access.devices.map((d) =>
@@ -558,15 +575,11 @@ export class GuestAccessService {
       .filter((a) => (!gateId || a.gates.includes(gateId)) && this.decideForCount(a, now)).length;
   }
 
-  /** Each gate's device counts the accesses that open IT. */
   publishSummary(guestflowLinked?: boolean): void {
-    const now = new Date();
-    for (const { record, gate } of this.gates.list()) {
-      gate.publishSummary({
-        activeAccesses: this.activeCount(now, record.id),
-        guestflowLinked: guestflowLinked ?? this.lastGuestflowLinked,
-      });
-    }
+    this.gate.publishSummary({
+      activeAccesses: this.activeCount(),
+      guestflowLinked: guestflowLinked ?? this.lastGuestflowLinked,
+    });
   }
 
   /** Accesses still able to open something, by the gates they list. */

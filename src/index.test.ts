@@ -9,6 +9,9 @@ import { createPlugin } from "./index.js";
 import { DEVICE_ID } from "./gate.js";
 
 const silent = { info: () => {}, debug: () => {}, warn: () => {}, error: () => {} };
+// What the core really hands back: it files a discovered device under its
+// `friendlyName`, so THAT is the `sourceDeviceId` an order arrives with.
+const DEVICE = { id: "d", integrationId: "guest-access", sourceDeviceId: DEVICE_ID, name: DEVICE_ID };
 const dirs: string[] = [];
 
 function makePlugin(settings: Record<string, string> = {}) {
@@ -56,6 +59,12 @@ describe("the plugin Sowel loads", () => {
   it("keeps its state where an update cannot reach it", async () => {
     const { plugin, dataDir } = makePlugin();
     await plugin.start();
+    // The recipe hands the house's gates down; the owner picks one.
+    await plugin.executeOrder(DEVICE, "gate_catalog", JSON.stringify([{ id: "eq-portail", name: "Portail", state: "closed" }]));
+    await plugin.handlePageRequest({
+      method: "POST", path: "/gates", query: {}, headers: {}, body: { equipmentId: "eq-portail" },
+      ip: "1.2.3.4", user: { id: "u1", username: "adrien", role: "admin" },
+    });
     await plugin.handlePageRequest({
       method: "POST",
       path: "/accesses",
@@ -90,6 +99,8 @@ describe("the plugin Sowel loads", () => {
       user: { id: "u1", username: "adrien", role: "admin" },
     });
     expect((state.body as { accesses: unknown[] }).accesses).toHaveLength(1);
+    // And the gate, and the catalogue — a plugin update must not forget them.
+    expect((state.body as { gates: Array<{ name: string }> }).gates.map((g) => g.name)).toEqual(["Portail"]);
   });
 
   it("serves the guests' page without anyone being named", async () => {
@@ -108,39 +119,7 @@ describe("the plugin Sowel loads", () => {
     await plugin.stop();
   });
 
-  it("takes the recipe's three orders, and refuses anything else", async () => {
-    const { plugin } = makePlugin();
-    await plugin.start();
-    // What the core really hands back: it files a discovered device under its
-    // `friendlyName`, so THAT is the `sourceDeviceId` an order arrives with.
-    const device = {
-      id: "d",
-      integrationId: "guest-access",
-      sourceDeviceId: DEVICE_ID,
-      name: "Accès invités",
-    };
-
-    await expect(plugin.executeOrder(device, "gate_state", "open")).resolves.toBeUndefined();
-    // The name of what opens, pushed by the recipe from its own equipment.
-    await expect(plugin.executeOrder(device, "opening_label", "Portail d'entrée")).resolves.toBeUndefined();
-    const state = (await plugin.handlePageRequest({
-      method: "GET", path: "/state", query: {}, headers: {}, body: undefined,
-      user: { id: "u", username: "adrien", role: "admin" },
-    } as never)) as { body: { gates: Array<{ openingLabel: string | null }> } };
-    expect(state.body.gates[0].openingLabel).toBe("Portail d'entrée");
-    // An outcome with nothing in flight is dropped, not an error.
-    await expect(plugin.executeOrder(device, "result", "opened")).resolves.toBeUndefined();
-
-    await expect(plugin.executeOrder(device, "result", "sideways")).rejects.toThrow(/Unknown outcome/);
-    await expect(plugin.executeOrder(device, "gate_state", "ajar")).rejects.toThrow(/Unknown gate state/);
-    await expect(plugin.executeOrder(device, "nope", "x")).rejects.toThrow(/Unsupported order/);
-    await expect(
-      plugin.executeOrder({ ...device, sourceDeviceId: "other" }, "result", "opened"),
-    ).rejects.toThrow(/Unknown device/);
-    await plugin.stop();
-  });
-
-  it("routes a recipe's order to the gate whose device it names", async () => {
+  it("takes the recipe's two orders, and refuses anything else", async () => {
     const { plugin } = makePlugin();
     await plugin.start();
     const page = (method: string, path: string, body?: unknown) =>
@@ -148,15 +127,24 @@ describe("the plugin Sowel loads", () => {
         method, path, query: {}, headers: {}, body,
         user: { id: "u", username: "adrien", role: "admin" },
       } as never) as Promise<{ status: number; body: any }>;
-    const added = await page("POST", "/gates", { name: "Garage" });
-    const garage = added.body.gate;
-    await plugin.executeOrder(
-      { id: "d2", integrationId: "guest-access", sourceDeviceId: garage.deviceId, name: garage.deviceId },
-      "opening_label",
-      "Porte du garage",
-    );
+
+    // The catalogue: what « + portail » will offer.
+    await plugin.executeOrder(DEVICE, "gate_catalog", JSON.stringify([
+      { id: "eq-portail", name: "Portail d'entrée", state: "open" },
+      { id: "eq-garage", name: "Garage", state: "closed" },
+    ]));
     const state = await page("GET", "/state");
-    expect(state.body.gates.map((g: any) => g.openingLabel)).toEqual([null, "Porte du garage"]);
+    expect(state.body.catalog.map((e: any) => e.name)).toEqual(["Portail d'entrée", "Garage"]);
+    expect(state.body.recipe.answering).toBe(true);
+    await expect(plugin.executeOrder(DEVICE, "gate_catalog", "not json")).rejects.toThrow(/catalogue/);
+
+    // An outcome with nothing in flight is dropped, not an error.
+    await expect(plugin.executeOrder(DEVICE, "result", "opened")).resolves.toBeUndefined();
+    await expect(plugin.executeOrder(DEVICE, "result", "sideways")).rejects.toThrow(/Unknown outcome/);
+    await expect(plugin.executeOrder(DEVICE, "gate_state", "open")).rejects.toThrow(/Unsupported order/);
+    await expect(
+      plugin.executeOrder({ ...DEVICE, sourceDeviceId: "other" }, "result", "opened"),
+    ).rejects.toThrow(/Unknown device/);
     await plugin.stop();
   });
 

@@ -1,94 +1,115 @@
-// The gates — one list of people per thing that opens (spec §1.bis).
+// The gates — one list of people per thing that opens (spec §3.1.bis).
 
-import { describe, it, expect, afterEach, vi } from "vitest";
+import { describe, it, expect, afterEach } from "vitest";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { AccessStore } from "./store.js";
-import { Gates, deviceIdFor } from "./gates.js";
-import { DEVICE_ID } from "./gate.js";
+import { Gates, parseCatalog } from "./gates.js";
 
-const silent = { info: () => {}, debug: () => {}, warn: () => {}, error: () => {} };
+const silent = { info: () => {}, warn: () => {}, error: () => {} };
 const dirs: string[] = [];
 
 afterEach(() => {
   for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true });
 });
 
-/** A device manager that, like the core's, files each device under its friendlyName. */
+const CATALOG = [
+  { id: "eq-portail", name: "Portail d'entrée", state: "closed" as const },
+  { id: "eq-garage", name: "Garage", state: "open" as const },
+];
+
 function makeGates(dir = mkdtempSync(resolve(tmpdir(), "guest-access-gates-"))) {
   dirs.push(dir);
-  const devices = new Map<string, Array<Record<string, unknown>>>();
-  const statuses = new Map<string, string>();
-  const deviceManager = {
-    upsertFromDiscovery: vi.fn((_i: string, _s: string, d: Record<string, unknown>) => {
-      devices.set(d.friendlyName as string, []);
-    }),
-    updateDeviceData: (_i: string, id: string, payload: Record<string, unknown>) => {
-      devices.get(id)?.push(payload);
-    },
-    updateDeviceStatus: (_i: string, id: string, status: string) => {
-      statuses.set(id, status);
-    },
-  };
   const store = new AccessStore(dir, silent);
-  const gates = new Gates({ integrationId: "guest-access", deviceManager, logger: silent, store, answerMs: 40 });
-  return { gates, store, devices, statuses, dir };
+  return { gates: new Gates({ store, logger: silent }), store, dir };
 }
 
-describe("the gates", () => {
-  it("starts with the device every installation already had, under its old name", () => {
-    const { gates, devices } = makeGates();
-    gates.start();
-    expect(gates.list().map((g) => g.record)).toEqual([
-      expect.objectContaining({ id: "main", deviceId: DEVICE_ID }),
+describe("the catalogue the recipe sends", () => {
+  it("is read entry by entry, and anything malformed is dropped rather than trusted", () => {
+    expect(
+      parseCatalog(JSON.stringify([
+        { id: "eq-1", name: "  Porte   du garage ", state: "open" },
+        { id: "eq-2", state: "sideways" },
+        { name: "no id" },
+        null,
+        "x",
+      ])),
+    ).toEqual([
+      { id: "eq-1", name: "Porte du garage", state: "open" },
+      { id: "eq-2", name: "eq-2", state: "unknown" },
     ]);
-    // Nothing bound to « Accès invités » has to be bound again.
-    expect([...devices.keys()]).toEqual([DEVICE_ID]);
+    expect(parseCatalog("{ not json")).toBeNull();
+    expect(parseCatalog(JSON.stringify({ id: "x" }))).toBeNull();
   });
 
-  it("adds a gate as its own device, started at once, with its own counter", () => {
-    const { gates, devices, statuses } = makeGates();
-    gates.start();
-    const { record } = gates.add("Porte du garage");
-    expect(record!.deviceId).toBe(deviceIdFor("Porte du garage"));
-    expect(statuses.get(record!.deviceId)).toBe("online");
-    // The resting counter, published on its own device and not the first one's.
-    expect(devices.get(record!.deviceId)).toContainEqual({ requests: 0 });
-    expect(gates.byDevice(record!.deviceId)).toBe(gates.get(record!.id));
-  });
-
-  it("keeps the gates across a restart", () => {
+  it("is kept, so an update of the plugin does not forget the gates", () => {
     const first = makeGates();
-    const { record } = first.gates.add("Garage");
-    const second = makeGates(first.dir);
-    expect(second.gates.ids()).toEqual(["main", record!.id]);
+    first.gates.setCatalog(CATALOG);
+    const again = makeGates(first.dir);
+    expect(again.gates.catalog()).toEqual(CATALOG);
+    expect(again.gates.catalogReceivedAt()).not.toBeNull();
+  });
+});
+
+describe("the owner's picks", () => {
+  it("starts with no gate at all — nothing is opened until the owner picks one", () => {
+    const { gates } = makeGates();
+    expect(gates.list()).toEqual([]);
+    expect(gates.primary()).toBeUndefined();
   });
 
-  it("refuses a name that is empty, too long, or already a gate", () => {
+  it("adds a gate for an equipment the recipe offered, named after it", () => {
     const { gates } = makeGates();
-    expect(gates.add("  ").refusal).toEqual({ field: "name", code: "required" });
-    expect(gates.add("x".repeat(41)).refusal).toEqual({ field: "name", code: "too_long" });
-    gates.add("Garage");
-    expect(gates.add(" Garage ").refusal).toEqual({ field: "name", code: "taken" });
-  });
-
-  it("calls a gate by its equipment's name once the recipe has said it", () => {
-    const { gates } = makeGates();
-    const { record } = gates.add("Garage");
+    gates.setCatalog(CATALOG);
+    const { record } = gates.add("eq-garage");
+    expect(record).toMatchObject({ equipmentId: "eq-garage" });
     expect(gates.label(record!.id)).toBe("Garage");
-    gates.get(record!.id)!.setOpeningLabel("Porte du garage");
-    expect(gates.label(record!.id)).toBe("Porte du garage");
-    expect(gates.label("nope")).toBeNull();
+    expect(gates.equipmentOf(record!.id)).toEqual(CATALOG[1]);
+    expect(gates.byEquipment("eq-garage")?.id).toBe(record!.id);
   });
 
-  it("marks a removed gate's device offline, and forgets it", () => {
-    const { gates, statuses } = makeGates();
-    gates.start();
-    const { record } = gates.add("Garage");
-    expect(gates.remove(record!.id, [["main"]])).toEqual({ ok: true });
-    expect(statuses.get(record!.deviceId)).toBe("offline");
-    expect(gates.get(record!.id)).toBeUndefined();
-    expect(gates.remove(record!.id, [])).toEqual({ missing: true });
+  it("refuses nothing picked, an equipment the recipe did not offer, and one already a gate", () => {
+    const { gates } = makeGates();
+    gates.setCatalog(CATALOG);
+    expect(gates.add("").refusal).toEqual({ field: "equipmentId", code: "required" });
+    expect(gates.add("eq-lamp").refusal).toEqual({ field: "equipmentId", code: "unknown_equipment" });
+    gates.add("eq-garage");
+    expect(gates.add("eq-garage").refusal).toEqual({ field: "equipmentId", code: "taken" });
+  });
+
+  it("follows a rename, and says so when the house no longer has the equipment", () => {
+    const { gates } = makeGates();
+    gates.setCatalog(CATALOG);
+    const { record } = gates.add("eq-garage");
+    gates.setCatalog([CATALOG[0], { ...CATALOG[1], name: "Porte du garage" }]);
+    expect(gates.label(record!.id)).toBe("Porte du garage");
+    gates.setCatalog([CATALOG[0]]);
+    expect(gates.equipmentOf(record!.id)).toBeUndefined();
+  });
+
+  it("re-points a gate at another equipment, keeping its id — and every access on it", () => {
+    const { gates } = makeGates();
+    gates.setCatalog(CATALOG);
+    const { record } = gates.add("eq-portail");
+    expect(gates.bind(record!.id, "eq-garage").record).toMatchObject({ id: record!.id, equipmentId: "eq-garage" });
+    expect(gates.bind("nope", "eq-garage")).toEqual({ missing: true });
+  });
+
+  it("keeps the picks across a restart", () => {
+    const first = makeGates();
+    first.gates.setCatalog(CATALOG);
+    const { record } = first.gates.add("eq-garage");
+    expect(makeGates(first.dir).gates.ids()).toEqual([record!.id]);
+  });
+
+  it("removes a gate only when nobody still able to open depends on it alone", () => {
+    const { gates } = makeGates();
+    gates.setCatalog(CATALOG);
+    const a = gates.add("eq-portail").record!;
+    const b = gates.add("eq-garage").record!;
+    expect(gates.remove(b.id, [[b.id]]).refusal).toEqual({ field: "gate", code: "gate_in_use" });
+    expect(gates.remove(b.id, [[a.id, b.id]])).toEqual({ ok: true });
+    expect(gates.remove(b.id, [])).toEqual({ missing: true });
   });
 });

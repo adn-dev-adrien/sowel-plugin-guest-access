@@ -46,7 +46,7 @@ function makeGate(answerMs = 50) {
   return { gate, data, statuses, missed, deviceManager };
 }
 
-const press = { accessId: "a1", label: "Camille", stay: "Le Gîte · 202609042" };
+const press = { accessId: "a1", label: "Camille", stay: "Le Gîte · 202609042", target: "eq-portail" };
 
 /**
  * The publishes a PRESS made, as opposed to the resting counter the plugin
@@ -63,10 +63,20 @@ describe("the device", () => {
       orders: Array<{ key: string; enumValues: string[] }>;
     };
     expect(device.data.map((d) => d.key)).toEqual(
-      expect.arrayContaining(["requests", "last_request_at", "last_stay", "link"]),
+      expect.arrayContaining(["requests", "last_request_gate", "last_request_at", "last_stay", "link"]),
     );
     const orders = device.orders.map((o) => o.key);
-    expect(orders).toEqual(expect.arrayContaining(["result", "gate_state"]));
+    expect(orders).toEqual(["result", "gate_catalog"]);
+  });
+
+  it("names the gate before the counter moves — the recipe reads it on the counter", async () => {
+    const { gate, data } = makeGate(20);
+    gate.start();
+    void gate.press({ ...press, target: "eq-garage" });
+    const published = pressPublishes(data)[0];
+    const keys = Object.keys(published);
+    expect(published.last_request_gate).toBe("eq-garage");
+    expect(keys.indexOf("last_request_gate")).toBeLessThan(keys.indexOf("requests"));
   });
 
   it("is online as soon as the plugin runs — nothing has to be reached", () => {

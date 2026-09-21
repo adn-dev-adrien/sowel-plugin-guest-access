@@ -20,16 +20,18 @@ garage »… — et le suit si vous le renommez.
 
 ## Plusieurs portails, une liste chacun
 
-Un portail et une porte de garage n'ont pas les mêmes personnes autorisées. Chaque portail est
-**son propre device** dans Sowel, relié à son équipement par **sa propre instance de la recette** ; la
-page de gestion a un onglet par portail, et un accès coche les portails qu'il ouvre. Une personne
-qui ouvre les deux garde **un seul code et un seul lien** : son téléphone affiche une glissière par
-portail.
+Un portail et une porte de garage n'ont pas les mêmes personnes autorisées. La page de gestion a un
+onglet par portail, et un accès coche les portails qu'il ouvre. Une personne qui ouvre les deux
+garde **un seul code et un seul lien** : son téléphone affiche une glissière par portail.
 
-Pour ajouter un portail : onglet **« + portail »** → un nom (le device s'appelle alors
-`Accès partagés · <nom>`) → créer son équipement → créer une instance de la recette qui le relie au
-vrai portail. Un séjour guestFlow ouvre le premier portail ; ajoutez-en d'autres à la main, une
-révision du séjour ne les reprend jamais.
+**Un seul device et une seule recette pour toute la maison.** La recette tend au plugin la liste des
+équipements de type portail, avec leur nom ; pour ajouter un portail : onglet **« + portail »** →
+choisir l'équipement. C'est tout. Chaque demande désigne son équipement, et la recette n'actionne
+qu'un portail — jamais autre chose dans la maison.
+
+Sur la fiche de chaque portail (Maison), une carte **Accès partagés** dit combien de personnes peuvent
+l'ouvrir et mène à son onglet. Un séjour guestFlow ouvre le premier portail ; ajoutez-en d'autres à
+la main, une révision du séjour ne les reprend jamais.
 
 ## Ce qui a changé, et pourquoi
 
@@ -53,7 +55,7 @@ le journal se remplit.
 | --- | --- | --- |
 | La page de gestion | Sowel → **Accès partagés** (menu principal) | L'administrateur, derrière la session Sowel |
 | La page des clients | `https://<sowel>/p/guest-access/` | N'importe qui muni d'un code |
-| Les équipements | Un device par portail (« Accès invités », puis « Accès partagés · … ») | La recette, par ses ordres |
+| L'équipement | Device « Accès invités », un seul pour toute la maison | La recette, par ses ordres |
 
 ### La page de gestion
 
@@ -149,11 +151,12 @@ Le plugin **refuse de joindre guestFlow en HTTP clair** vers une autre machine (
 où il n'y a pas de fil à écouter) : la signature empêche de forger, pas de lire, et le code du séjour
 traverserait le réseau en clair.
 
-## L'équipement, inchangé
+## L'équipement
 
 | Donnée | Rôle |
 | --- | --- |
 | `requests` | **Le compteur** des demandes. C'est le déclencheur de la recette : un booléen ou un horodatage la ferait deviner, parce que `equipment.data.changed` se répète avec une valeur inchangée. Un compteur ne repasse jamais par la même valeur. |
+| `last_request_gate` | L'équipement que vise la demande en cours — écrit juste avant le compteur. La recette refuse tout ce qui n'est pas un portail. |
 | `last_request_at`, `last_stay` | De quoi lire le journal de la recette |
 | `link` | Liaison avec guestFlow — `false` quand il n'y en a pas, ce qui est honnête |
 | `active_accesses` | Combien d'accès peuvent ouvrir en ce moment |
@@ -162,11 +165,11 @@ traverserait le réseau en clair.
 | Ordre | Valeurs | Rôle |
 | --- | --- | --- |
 | `result` | `opened`, `already_open`, `refused`, `error` | L'issue, que la recette renvoie quand elle a agi. C'est elle qui débloque la réponse au téléphone du client. |
-| `gate_state` | `open`, `closed`, `unknown` | Le contact du portail, poussé par la recette. Il ne va **pas** au client (un bouton qui dit « Fermer » est un afficheur d'état déguisé en verbe, et la page est interrogeable par qui détient un code) ; il est pour vous, sur la page de gestion. |
+| `gate_catalog` | JSON | Les portails de la maison — id, nom, contact —, poussés par la recette à son démarrage et à chaque changement. C'est la liste que propose « + portail ». Le contact ne va **pas** au client (un bouton qui dit « Fermer » est un afficheur d'état déguisé en verbe, et la page est interrogeable par qui détient un code) ; il est pour vous, sur la page de gestion. |
 
-Les deux ordres et le compteur portent les mêmes noms qu'en v0.3 : une installation déjà liée
-continue de fonctionner après la mise à jour. Les deux nouvelles données sont additives — Sowel ne
-relie pas tout seul une donnée ajoutée, il faut un clic sur la fiche de l'équipement.
+Sowel ne relie pas tout seul une donnée ou un ordre ajouté à un équipement existant : un équipement
+créé avant la v1.4 doit être recréé depuis le device (la recette le refuse avec un message qui le
+dit).
 
 ## Garde-fous
 
@@ -205,8 +208,9 @@ Puis, dans l'ordre :
 
 1. **Plugins → Accès partagés → Accès public** : ouvrir la porte des clients.
 2. **Réglages du plugin** : renseigner l'adresse publique de Sowel (et guestFlow, si vous l'utilisez).
-3. **Recette** « Accès partagés — ouverture » : la lier à l'équipement du device « Accès invités » et au
-   portail. Une instance par portail, si vous en ajoutez.
+3. **Équipement** : en créer un depuis le device « Accès invités » (il porte le compteur et les ordres).
+4. **Recette** « Accès partagés — ouverture » : **une seule instance**, liée à cet équipement.
+5. **Accès partagés → « + portail »** : choisir le ou les portails, puis créer les accès.
 
 Il faut Sowel **1.72.0 ou plus récent** : les pages de plugin et l'arbre public sont des capacités du
 cœur (spec 180).

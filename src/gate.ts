@@ -54,8 +54,8 @@ export type PressOutcome = "opened" | RefusalReason;
  */
 export const DEVICE_ID = "Accès invités";
 export const REQUESTS_KEY = "requests";
-/** An equipment name, not a paragraph — and it ends up in a page title. */
-export const OPENING_LABEL_MAX = 60;
+/** Which gate the press in flight is for: the equipment id the recipe will pulse. */
+export const TARGET_KEY = "last_request_gate";
 
 /** How long the phone waits for the house to answer before being told nothing came. */
 const DEFAULT_ANSWER_MS = 10_000;
@@ -65,16 +65,16 @@ const DOUBLE_TAP_MS = 2_000;
 const MAX_QUEUE = 3;
 
 /**
- * The device, unchanged from v0.3 on purpose.
+ * The device — ONE for the whole house, whatever the number of gates.
  *
- * The recipe binds to `requests`, `result` and `gate_state`, and an installation
- * that already did must keep working after this update — a rebinding in front of
- * a gate at 23 h is not an upgrade path. The two new readings are additive, and
- * an equipment that never rebinds simply does not show them.
+ * The recipe binds to `requests`, `last_request_gate` and `result`, and hands
+ * down `gate_catalog`, the house's gates. A press names its gate in
+ * `last_request_gate`, published just before the counter moves, and the single
+ * recipe instance pulses that one — after checking it is a gate at all.
  */
-export function describeDevice(deviceId: string = DEVICE_ID): Record<string, unknown> {
+export function describeDevice(): Record<string, unknown> {
   return {
-    friendlyName: deviceId,
+    friendlyName: DEVICE_ID,
     manufacturer: "Sowel",
     model: "Guest gate access",
     data: [
@@ -82,6 +82,7 @@ export function describeDevice(deviceId: string = DEVICE_ID): Record<string, unk
       // re-fires with unchanged values, so a boolean or a timestamp would make
       // the recipe's trigger guess. A counter never repeats a value.
       { key: REQUESTS_KEY, type: "number", category: "generic" },
+      { key: TARGET_KEY, type: "text", category: "generic" },
       { key: "last_request_at", type: "text", category: "generic" },
       { key: "last_stay", type: "text", category: "generic" },
       // Kept under its old name: the link to guestFlow. It reads false when no
@@ -97,16 +98,9 @@ export function describeDevice(deviceId: string = DEVICE_ID): Record<string, unk
         category: "generic",
         enumValues: ["opened", "already_open", "refused", "error"],
       },
-      {
-        key: "gate_state",
-        type: "enum",
-        category: "generic",
-        enumValues: ["open", "closed", "unknown"],
-      },
-      // What opens, by the name its owner gave the equipment. Additive: an
-      // equipment bound before this order existed simply never receives it,
-      // and the page keeps its neutral word.
-      { key: "opening_label", type: "text", category: "generic" },
+      // The house's gates as JSON — id, name, contact. Only the recipe can read
+      // other integrations' equipments; the plugin is handed the list.
+      { key: "gate_catalog", type: "text", category: "generic" },
     ],
   };
 }
@@ -115,6 +109,8 @@ interface PressContext {
   accessId: string;
   label: string;
   stay: string;
+  /** The equipment the recipe is to pulse. */
+  target: string;
 }
 
 interface InFlight {
@@ -130,30 +126,21 @@ export interface GateOptions {
   deviceManager: DeviceManagerLike;
   logger: Logger;
   answerMs?: number;
-  /**
-   * Which device this gate publishes under — its `friendlyName`, so the id the
-   * core files it by (see DEVICE_ID). The first gate keeps the historical name,
-   * so an installation that bound it before gates were plural keeps working.
-   */
-  deviceId?: string;
 }
 
 export class Gate {
   private readonly opts: GateOptions;
   private readonly answerMs: number;
-  readonly deviceId: string;
+  readonly deviceId = DEVICE_ID;
   private requestCount = 0;
   private inFlight: InFlight | null = null;
   private queue = 0;
-  private gateState: GateState = "unknown";
-  private openingLabel: string | null = null;
   private lastResult: string | null = null;
   private started = false;
 
   constructor(options: GateOptions) {
     this.opts = options;
     this.answerMs = options.answerMs ?? DEFAULT_ANSWER_MS;
-    this.deviceId = options.deviceId ?? DEVICE_ID;
   }
 
   start(): void {
@@ -161,7 +148,7 @@ export class Gate {
     this.opts.deviceManager.upsertFromDiscovery(
       this.opts.integrationId,
       this.opts.integrationId,
-      describeDevice(this.deviceId),
+      describeDevice(),
     );
     // The service is up the moment the plugin starts: unlike v0.3, nothing has
     // to be reached for a guest to be served. What may be missing is the link
@@ -191,34 +178,6 @@ export class Gate {
 
   isStarted(): boolean {
     return this.started;
-  }
-
-  /** The gate contact, pushed down by the recipe. Shown to the owner only. */
-  setGateState(state: GateState): void {
-    this.gateState = state;
-    this.publish({ /* nothing device-side; the owner reads it from the page */ });
-  }
-
-  getGateState(): GateState {
-    return this.gateState;
-  }
-
-  /**
-   * The name of what opens — « Portail », « Porte du garage » — pushed down by
-   * the recipe, which is the only one that knows which equipment it drives.
-   *
-   * Not a setting: an owner who renames the equipment would otherwise have to
-   * rename it twice, and the second place is the one nobody remembers. The
-   * plugin still learns nothing about equipments; it is handed a string.
-   */
-  setOpeningLabel(raw: string): void {
-    const label = raw.replace(/\s+/g, " ").trim().slice(0, OPENING_LABEL_MAX);
-    this.openingLabel = label || null;
-  }
-
-  /** Null until the recipe has said — the page then falls back to a neutral word. */
-  getOpeningLabel(): string | null {
-    return this.openingLabel;
   }
 
   publishSummary(summary: { activeAccesses: number; guestflowLinked: boolean }): void {
@@ -302,6 +261,9 @@ export class Gate {
     this.publish({
       last_request_at: new Date().toISOString(),
       last_stay: context.stay || context.label,
+      // Which gate, before the counter: the recipe reads it the moment the
+      // counter moves, so it must already be there.
+      [TARGET_KEY]: context.target,
       [REQUESTS_KEY]: this.requestCount,
     });
     this.opts.logger.info(

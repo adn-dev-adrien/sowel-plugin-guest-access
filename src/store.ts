@@ -13,7 +13,7 @@
 
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
-import type { Access, GateRecord, JournalEntry, JournalKind } from "./model.js";
+import type { Access, CatalogEntry, GateRecord, JournalEntry, JournalKind } from "./model.js";
 import { CODE_RETENTION_DAYS, JOURNAL_RETENTION_DAYS, PRIMARY_GATE_ID } from "./model.js";
 import { normalizeCode, codeMatches, tokenMatches, randomId } from "./codes.js";
 import { effectiveWindow } from "./validity.js";
@@ -31,12 +31,14 @@ const JOURNAL_MAX_ENTRIES = 5000;
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 /**
- * Version 2 added the gates. A version 1 file is read as what it was — one
- * gate, which every access opens — and rewritten as 2 on the next change.
+ * Version 2 added the gates, version 3 points each at an equipment and keeps
+ * the last catalogue the recipe sent. Older files are read as what they were —
+ * gates not yet pointed at anything — and rewritten as 3 on the next change.
  */
 interface AccessesFile {
-  version: 1 | 2;
-  gates?: GateRecord[];
+  version: 1 | 2 | 3;
+  gates?: Array<GateRecord & { deviceId?: string }>;
+  catalog?: { entries: CatalogEntry[]; receivedAt: string } | null;
   accesses: Access[];
 }
 interface JournalFile {
@@ -49,18 +51,32 @@ export class AccessStore {
   private readonly logger: StoreLogger;
   private accesses: Access[] = [];
   private gateRecords: GateRecord[] = [];
+  private catalogFile: { entries: CatalogEntry[]; receivedAt: string } | null = null;
   private entries: JournalEntry[] = [];
 
   constructor(dataDir: string, logger: StoreLogger) {
     this.dir = dataDir;
     this.logger = logger;
     if (!existsSync(this.dir)) mkdirSync(this.dir, { recursive: true });
-    const file = this.read<AccessesFile>(ACCESSES_FILE, { version: 2, gates: [], accesses: [] });
-    this.gateRecords = Array.isArray(file.gates) ? file.gates : [];
+    const file = this.read<AccessesFile>(ACCESSES_FILE, { version: 3, gates: [], accesses: [] });
+    this.gateRecords = (Array.isArray(file.gates) ? file.gates : []).map((g) => ({
+      id: g.id,
+      equipmentId: typeof g.equipmentId === "string" ? g.equipmentId : null,
+      ...(g.name ? { name: g.name } : {}),
+      createdAt: g.createdAt,
+    }));
+    this.catalogFile = file.catalog ?? null;
     this.accesses = (file.accesses ?? []).map((a) => ({
       ...a,
       gates: Array.isArray(a.gates) ? a.gates : [PRIMARY_GATE_ID],
     }));
+    // A file from before gates existed: every access opened the one gate there
+    // was. It is kept, not yet pointed at an equipment, so no access loses it.
+    if (!file.version || file.version === 1) {
+      if (!this.gateRecords.length && this.accesses.length) {
+        this.gateRecords = [{ id: PRIMARY_GATE_ID, equipmentId: null, name: "Accès invités", createdAt: new Date().toISOString() }];
+      }
+    }
     this.entries = this.read<JournalFile>(JOURNAL_FILE, { version: 1, entries: [] }).entries;
   }
 
@@ -72,6 +88,16 @@ export class AccessStore {
 
   saveGates(gates: GateRecord[]): void {
     this.gateRecords = gates.map((g) => ({ ...g }));
+    this.persistAccesses();
+  }
+
+  /** The last catalogue the recipe sent — kept, so a plugin update does not forget the gates. */
+  catalog(): { entries: CatalogEntry[]; receivedAt: string } | null {
+    return this.catalogFile ? { entries: this.catalogFile.entries.map((e) => ({ ...e })), receivedAt: this.catalogFile.receivedAt } : null;
+  }
+
+  saveCatalog(entries: CatalogEntry[], receivedAt: string): void {
+    this.catalogFile = { entries: entries.map((e) => ({ ...e })), receivedAt };
     this.persistAccesses();
   }
 
@@ -273,8 +299,9 @@ export class AccessStore {
 
   private persistAccesses(): void {
     this.write(ACCESSES_FILE, {
-      version: 2,
+      version: 3,
       gates: this.gateRecords,
+      catalog: this.catalogFile,
       accesses: this.accesses,
     } satisfies AccessesFile);
   }

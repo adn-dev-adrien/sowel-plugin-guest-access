@@ -12,7 +12,7 @@ capabilities any plugin can use, and this plugin is simply the first to.
 
 | Capability | What it is |
 | --- | --- |
-| `ui: { entry, label, icon, placement? }` | A manifest may declare an ES module; the SPA imports it at `/plugins/<id>/page` and calls `mount(container, ctx)`, with `ctx.api()` already bound to `/api/v1/plugins/<id>/page/*`. Admin-only, assets under `/plugin-ui/<id>/*`. `placement: "main"` lists it in the main navigation rather than under Administration — this plugin asks for it. |
+| `ui: { entry, label, icon, placement?, equipmentLink? }` | A manifest may declare an ES module; the SPA imports it at `/plugins/<id>/page` and calls `mount(container, ctx)`, with `ctx.api()` already bound to `/api/v1/plugins/<id>/page/*`. Admin-only, assets under `/plugin-ui/<id>/*`. `placement: "main"` lists it in the main navigation rather than under Administration; `equipmentLink: { types }` puts a card on those equipments' pages, with a sentence the plugin writes (`GET equipment-link`), and the page gets `ctx.params`. This plugin asks for both. |
 | `publicTree: true` | A manifest may declare an anonymous tree at `/p/<id>/*`. It answers the same 404 as an undeclared plugin **until an admin opens it** (audit-logged), then 60 req/min per IP, `X-Robots-Tag: noindex`, 30 s timeout, and `Set-Cookie` from a plugin refused. |
 | `deps.dataDir` | `data/plugins/<id>/`, created before the factory runs, never touched by install, update or uninstall — and carried by the backup. `pluginDir` is not a place to keep state: an update removes it and unpacks the new release in its place. |
 
@@ -28,7 +28,7 @@ git checkout feat/plugin-pages-and-public-tree
 npm install && npm run validate       # backend + UI: typecheck, lint, format, tests
 ```
 
-Or, from the patch kept here (six commits, `git am` takes them in one go):
+Or, from the patch kept here (seven commits, `git am` takes them in one go):
 
 ```bash
 git checkout -b feat/plugin-pages-and-public-tree origin/main
@@ -40,9 +40,9 @@ Beyond the code it carries `specs/180-plugin-pages-and-public-tree/`
 `docs/technical/plugin-development.md` and `docs/technical/api-reference.md` — the documentation
 gates that repository runs on every pull request.
 
-**Tests it adds:** 25 route cases (`src/api/routes/plugin-surface.test.ts`), 8 on the page listing, 2 on the sidebar/drawer split,
-3 on `getDataDir`, 3 on the settings proxy, 2 on the backup, and 6 on the SPA page. `npm run validate`
-is green on the branch: 2 619 backend tests, 1 124 UI tests.
+**Tests it adds:** 25 route cases (`src/api/routes/plugin-surface.test.ts`), 9 on the page listing, 2 on the sidebar/drawer split, 3 on the equipment card,
+3 on `getDataDir`, 3 on the settings proxy, 2 on the backup, and 7 on the SPA page. `npm run validate`
+is green on the branch: 2 621 backend tests, 1 128 UI tests.
 
 ## Until it is merged
 

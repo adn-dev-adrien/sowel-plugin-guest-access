@@ -13,14 +13,16 @@ import type { PluginHttpRequest, PluginHttpResponse } from "./plugin-contract.js
 import type { GuestAccessService } from "./service.js";
 import type { GuestFlowConnector } from "./guestflow.js";
 import { stateOf } from "./guestflow.js";
+import type { Gate } from "./gate.js";
 import type { Gates } from "./gates.js";
-import { effectiveWindow } from "./validity.js";
+import { effectiveWindow, hasEnded } from "./validity.js";
 import { formatCode } from "./codes.js";
 import { DEFAULT_GUEST_PATH } from "./guest-url.js";
 
 export interface AdminDeps {
   service: GuestAccessService;
   connector: GuestFlowConnector;
+  gate: Gate;
   gates: Gates;
   guestBaseUrl(): string | null;
   /** Where the guests' page answers under that address (see guest-url.ts). */
@@ -99,7 +101,7 @@ function refuse(refusal: { field: string; code: string }): PluginHttpResponse {
 const notFound: PluginHttpResponse = { status: 404, body: { error: "not_found" } };
 
 export function createAdminApi(deps: AdminDeps) {
-  const { service, connector, gates } = deps;
+  const { service, connector, gate, gates } = deps;
 
   const stateBody = (now = new Date()) => {
     const guestBaseUrl = deps.guestBaseUrl();
@@ -115,20 +117,34 @@ export function createAdminApi(deps: AdminDeps) {
         GROUPS.map((group) => [group, rows.filter((r) => r.state === group).map((r) => r.id)]),
       ),
       // One entry per gate, in the owner's order — the page's tabs.
-      gates: gates.list().map(({ record, gate }) => ({
-        id: record.id,
-        name: record.name,
-        deviceId: record.deviceId,
-        // What opens, by the equipment's own name — null until the recipe says.
-        openingLabel: gate.getOpeningLabel(),
-        // The contact the recipe pushes down. The guest never sees it — the
-        // label of a button that names a direction is a state display wearing
-        // a verb — but the owner does.
-        gateState: gate.getGateState(),
-        lastResult: gate.getLastResult(),
-        recipeAnswering: gate.getLastResult() !== null,
-        accesses: rows.filter((r) => r.gates.includes(record.id)).length,
+      gates: gates.list().map((record) => {
+        const equipment = gates.equipmentOf(record.id);
+        return {
+          id: record.id,
+          equipmentId: record.equipmentId,
+          name: gates.label(record.id),
+          // False when the gate points at nothing the house still has: the
+          // page asks the owner to pick its equipment again.
+          bound: !!equipment,
+          // The contact the recipe reads. The guest never sees it — the label
+          // of a button that names a direction is a state display wearing a
+          // verb — but the owner does.
+          gateState: equipment?.state ?? "unknown",
+          accesses: rows.filter((r) => r.gates.includes(record.id)).length,
+        };
+      }),
+      // What « + portail » offers: every gate of the house, the ones already
+      // on the list marked so.
+      catalog: gates.catalog().map((entry) => ({
+        ...entry,
+        taken: !!gates.byEquipment(entry.id),
       })),
+      recipe: {
+        // The catalogue is the first thing a running recipe sends, and it is
+        // kept: « no recipe » therefore survives neither a restart nor an update.
+        answering: gates.catalogReceivedAt() !== null,
+        lastResult: gate.getLastResult(),
+      },
       guestflow: connector.state(),
       publicTree: {
         open: deps.publicTreeOpen(),
@@ -138,6 +154,39 @@ export function createAdminApi(deps: AdminDeps) {
         guestBaseUrl,
         guestPath,
       },
+    };
+  };
+
+  /**
+   * The line the core prints on an equipment's own page (spec 180 R1.6.ter):
+   * how many people may open THIS gate, and the word for the link. Written
+   * here, in the plugin's words and the viewer's language — the core only
+   * draws it.
+   */
+  const equipmentLink = (equipmentId: string, lang: "fr" | "en") => {
+    const record = gates.byEquipment(equipmentId);
+    const now = new Date();
+    const people = record
+      ? service.list().filter((a) => a.gates.includes(record.id) && !a.revokedAt && !a.suspendedAt && !hasEnded(a, now)).length
+      : 0;
+    const words = {
+      fr: {
+        some: (n: number) => (n === 1 ? "1 personne peut ouvrir ce portail avec un code." : `${n} personnes peuvent ouvrir ce portail avec un code.`),
+        none: "Personne n'a encore d'accès à ce portail.",
+        manage: "Gérer les accès",
+        open: "Ouvrir des accès",
+      },
+      en: {
+        some: (n: number) => (n === 1 ? "1 person can open this gate with a code." : `${n} people can open this gate with a code.`),
+        none: "Nobody has access to this gate yet.",
+        manage: "Manage access",
+        open: "Give access",
+      },
+    }[lang];
+    return {
+      text: people ? words.some(people) : words.none,
+      action: record ? words.manage : words.open,
+      gateId: record?.id ?? null,
     };
   };
 
@@ -164,13 +213,22 @@ export function createAdminApi(deps: AdminDeps) {
     }
 
     if (method === "POST" && path === "/gates") {
-      const result = gates.add(body.name);
+      const result = gates.add(body.equipmentId);
       if (result.refusal) return refuse(result.refusal);
-      service.publishSummary();
       return { status: 201, body: { gate: result.record } };
     }
 
+    if (method === "GET" && path === "/equipment-link") {
+      return ok(equipmentLink(request.query.equipmentId ?? "", request.query.lang === "en" ? "en" : "fr"));
+    }
+
     const gateMatch = /^\/gates\/([A-Za-z0-9_-]+)$/.exec(path);
+    if (gateMatch && method === "PATCH") {
+      const result = gates.bind(gateMatch[1], body.equipmentId);
+      if (result.missing) return notFound;
+      if (result.refusal) return refuse(result.refusal);
+      return ok({ gate: result.record });
+    }
     if (gateMatch && method === "DELETE") {
       const result = gates.remove(gateMatch[1], service.liveAccessGates());
       if (result.missing) return notFound;

@@ -1,7 +1,7 @@
 From 9690aa76891e30a652e027a3ab520aafe87d04d9 Mon Sep 17 00:00:00 2001
 From: Adrien Jouve <adrien.jouve@adn-dev.fr>
 Date: Sun, 20 Sep 2026 16:45:50 +0000
-Subject: [PATCH 1/6] feat(plugins): a plugin may bring a page, a door and a
+Subject: [PATCH 1/7] feat(plugins): a plugin may bring a page, a door and a
  drawer (spec 180)
 MIME-Version: 1.0
 Content-Type: text/plain; charset=UTF-8
@@ -3035,7 +3035,7 @@ index ff5b1941..612973be 100644
 From b438f9d81b2d99bd83be648c0542156988870077 Mon Sep 17 00:00:00 2001
 From: adrienJouve <adrien.jouve@adn-dev.fr>
 Date: Sun, 20 Sep 2026 21:17:31 +0200
-Subject: [PATCH 2/6] docs(spec-180): the architecture and plan the specs gate
+Subject: [PATCH 2/7] docs(spec-180): the architecture and plan the specs gate
  requires
 
 The spec folder carried spec.md alone, and scripts/check-specs-complete.sh
@@ -3304,7 +3304,7 @@ index 00000000..5075fc40
 From 25333f78356b94ce01710704567075b6d6624ba0 Mon Sep 17 00:00:00 2001
 From: adrienJouve <adrien.jouve@adn-dev.fr>
 Date: Sun, 20 Sep 2026 21:22:12 +0200
-Subject: [PATCH 3/6] fix(plugins): a query key may not write on the map's own
+Subject: [PATCH 3/7] fix(plugins): a query key may not write on the map's own
  shape
 
 CodeQL flagged `queryOf` as remote property injection, and it is right: the
@@ -3435,7 +3435,7 @@ index d7693f40..28da2681 100644
 From 27c598b4a97b332f959a289d90724968750f4d4e Mon Sep 17 00:00:00 2001
 From: adrienJouve <adrien.jouve@adn-dev.fr>
 Date: Sun, 20 Sep 2026 21:25:48 +0200
-Subject: [PATCH 4/6] fix(plugins): build the query map with Object.fromEntries
+Subject: [PATCH 4/7] fix(plugins): build the query map with Object.fromEntries
 
 The null-prototype map still wrote each key with `out[key] = value`, which is
 the dynamic property write CodeQL objects to, guard or no guard.
@@ -3503,7 +3503,7 @@ index 28da2681..5a8c9e9a 100644
 From fb7ad6a199b6a0a966148632c0a431e04b6a4c03 Mon Sep 17 00:00:00 2001
 From: adrienJouve <adrien.jouve@adn-dev.fr>
 Date: Sun, 20 Sep 2026 22:23:59 +0200
-Subject: [PATCH 5/6] fix(plugins): announce the page URL the asset tree
+Subject: [PATCH 5/7] fix(plugins): announce the page URL the asset tree
  actually serves
 MIME-Version: 1.0
 Content-Type: text/plain; charset=UTF-8
@@ -3737,7 +3737,7 @@ index 584facb6..01c7fa8f 100644
 From 904a7a137cdd92b38c428d8211a60e324c455b4e Mon Sep 17 00:00:00 2001
 From: adrienJouve <adrien.jouve@adn-dev.fr>
 Date: Mon, 21 Sep 2026 08:52:18 +0200
-Subject: [PATCH 6/6] feat(plugins): a page may ask for the main navigation
+Subject: [PATCH 6/7] feat(plugins): a page may ask for the main navigation
  (spec 180 R1.6.bis)
 MIME-Version: 1.0
 Content-Type: text/plain; charset=UTF-8
@@ -4435,6 +4435,697 @@ index 612973be..98607082 100644
    icon: string;
 +  /** Spec 180 R1.6.bis — `main` is listed in the main navigation, `admin` under Administration. */
 +  placement: "admin" | "main";
+   /** Absolute path the SPA imports the page module from. */
+   entryUrl: string;
+ }
+-- 
+2.47.1
+
+
+From 6d6869338af4f481cb84538d13b393f1906b24f7 Mon Sep 17 00:00:00 2001
+From: adrienJouve <adrien.jouve@adn-dev.fr>
+Date: Mon, 21 Sep 2026 12:07:18 +0200
+Subject: [PATCH 7/7] feat(plugins): a plugin page may be linked from an
+ equipment's own page (spec 180 R1.6.ter)
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+A plugin that holds something about an equipment — who may open this
+gate — had no way to say so where the owner looks at that equipment. Its
+page was reachable from the menu only.
+
+`ui.equipmentLink: { types }` puts a card on the page of every equipment
+of those types, beside the core's own panels (confirmation before action,
+timed command). The card links to `/plugins/<id>/page?equipment=<id>`,
+and the page module now receives the query string as `ctx.params`.
+
+The card's sentence and the link's words are the plugin's: the core asks
+`GET equipment-link?equipmentId=&lang=` on the plugin's page tree and
+prints the `{ text, action }` it answers, because only the plugin knows
+what it holds. A plugin that does not answer still gets its card, with
+its page's label and a plain « Open ». Admin-only, like the page.
+---
+ docs/technical/api-reference.fr.md            | 30 ++++----
+ docs/technical/api-reference.md               | 30 ++++----
+ docs/technical/plugin-development.fr.md       | 32 +++++---
+ docs/technical/plugin-development.md          | 38 ++++++----
+ .../180-plugin-pages-and-public-tree/spec.md  | 27 +++++--
+ src/plugins/plugin-loader.ts                  |  3 +
+ src/plugins/plugin-pages.test.ts              | 22 ++++++
+ src/shared/types.ts                           |  8 ++
+ .../equipments/PluginEquipmentLinks.test.tsx  | 66 +++++++++++++++++
+ .../equipments/PluginEquipmentLinks.tsx       | 73 +++++++++++++++++++
+ .../components/layout/plugin-page-nav.test.ts |  1 +
+ ui/src/i18n/locales/en.json                   |  1 +
+ ui/src/i18n/locales/fr.json                   |  1 +
+ ui/src/pages/EquipmentDetailPage.tsx          |  4 +
+ ui/src/pages/PluginPage.test.tsx              | 14 +++-
+ ui/src/pages/PluginPage.tsx                   | 11 ++-
+ ui/src/types.ts                               |  2 +
+ 17 files changed, 294 insertions(+), 69 deletions(-)
+ create mode 100644 ui/src/components/equipments/PluginEquipmentLinks.test.tsx
+ create mode 100644 ui/src/components/equipments/PluginEquipmentLinks.tsx
+
+diff --git a/docs/technical/api-reference.fr.md b/docs/technical/api-reference.fr.md
+index c7e72b55..65eebe50 100644
+--- a/docs/technical/api-reference.fr.md
++++ b/docs/technical/api-reference.fr.md
+@@ -387,21 +387,21 @@ Routes admin uniquement pour gérer les plugins d'intégration de devices.
+ 
+ Routes admin uniquement pour la gestion des plugins tiers.
+ 
+-| Method | Path                             | Description                                                                                                  |
+-| ------ | -------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+-| `GET`  | `/api/v1/plugins`                | Liste les plugins installés.                                                                                 |
+-| `GET`  | `/api/v1/plugins/store`          | Liste les plugins disponibles (registre + sources personnelles, chacun avec un `tier`).                      |
+-| `POST` | `/api/v1/plugins/store/refresh`  | Force le rafraîchissement du registre et des caches de releases des sources perso.                           |
+-| `GET`  | `/api/v1/plugins/sources`        | Liste les sources personnelles de plugins (spec 136).                                                        |
+-| `POST` | `/api/v1/plugins/sources`        | Ajoute une source personnelle. Body : `{ repo }` (`owner/repo` GitHub public).                               |
+-| `POST` | `/api/v1/plugins/sources/remove` | Retire une source personnelle. Body : `{ repo }`. Les plugins installés sont conservés.                      |
+-| `POST` | `/api/v1/plugins/install`        | Installe depuis GitHub. Body : `{ repo, confirmed?, expectedSha256? }`.                                      |
+-| `POST` | `/api/v1/plugins/:id/update`     | Met à jour un plugin. Body : `{ confirmed?, expectedSha256? }` (paquets perso seulement).                    |
+-| `POST` | `/api/v1/plugins/:id/uninstall`  | Désinstalle un plugin.                                                                                       |
+-| `POST` | `/api/v1/plugins/:id/enable`     | Active un plugin (le charge et le démarre).                                                                  |
+-| `POST` | `/api/v1/plugins/:id/disable`    | Désactive un plugin (le stoppe et le décharge).                                                              |
+-| `GET`  | `/api/v1/plugins/pages`          | Spec 180 — les pages proposées par les plugins installés : `{ pluginId, label, icon, placement, entryUrl }`. |
+-| `PUT`  | `/api/v1/plugins/:id/public`     | Spec 180 — ouvre ou ferme l'arbre anonyme du plugin. Corps : `{ enabled }`. Journalisé à l'audit.            |
++| Method | Path                             | Description                                                                                                                  |
++| ------ | -------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
++| `GET`  | `/api/v1/plugins`                | Liste les plugins installés.                                                                                                 |
++| `GET`  | `/api/v1/plugins/store`          | Liste les plugins disponibles (registre + sources personnelles, chacun avec un `tier`).                                      |
++| `POST` | `/api/v1/plugins/store/refresh`  | Force le rafraîchissement du registre et des caches de releases des sources perso.                                           |
++| `GET`  | `/api/v1/plugins/sources`        | Liste les sources personnelles de plugins (spec 136).                                                                        |
++| `POST` | `/api/v1/plugins/sources`        | Ajoute une source personnelle. Body : `{ repo }` (`owner/repo` GitHub public).                                               |
++| `POST` | `/api/v1/plugins/sources/remove` | Retire une source personnelle. Body : `{ repo }`. Les plugins installés sont conservés.                                      |
++| `POST` | `/api/v1/plugins/install`        | Installe depuis GitHub. Body : `{ repo, confirmed?, expectedSha256? }`.                                                      |
++| `POST` | `/api/v1/plugins/:id/update`     | Met à jour un plugin. Body : `{ confirmed?, expectedSha256? }` (paquets perso seulement).                                    |
++| `POST` | `/api/v1/plugins/:id/uninstall`  | Désinstalle un plugin.                                                                                                       |
++| `POST` | `/api/v1/plugins/:id/enable`     | Active un plugin (le charge et le démarre).                                                                                  |
++| `POST` | `/api/v1/plugins/:id/disable`    | Désactive un plugin (le stoppe et le décharge).                                                                              |
++| `GET`  | `/api/v1/plugins/pages`          | Spec 180 — les pages proposées par les plugins installés : `{ pluginId, label, icon, placement, equipmentTypes, entryUrl }`. |
++| `PUT`  | `/api/v1/plugins/:id/public`     | Spec 180 — ouvre ou ferme l'arbre anonyme du plugin. Corps : `{ enabled }`. Journalisé à l'audit.                            |
+ 
+ Les bodies des routes plugins sont validés par schéma (issue #597). `repo` doit porter la forme `owner/repo` pour **ajouter une source personnelle** comme pour **installer** : la valeur est interpolée dans une URL `api.github.com/repos/<repo>` et jointe au répertoire des plugins, donc sa forme est une frontière de sécurité. La suppression n'a besoin que d'une clé non vide, puisqu'il s'agit d'une recherche dans ce qui est déjà stocké. Sur les deux routes `sources`, `repo` est trimé avant vérification, donc un copier-coller avec un retour à la ligne final fonctionne toujours, et un `repo` non textuel y répond désormais 400 là où il faisait planter le handler en 500 (l'installation répondait déjà 400).
+ 
+diff --git a/docs/technical/api-reference.md b/docs/technical/api-reference.md
+index 0a5a1916..c1f2e7eb 100644
+--- a/docs/technical/api-reference.md
++++ b/docs/technical/api-reference.md
+@@ -460,21 +460,21 @@ Admin-only routes for managing device integration plugins.
+ 
+ Admin-only routes for third-party plugin management.
+ 
+-| Method | Path                             | Description                                                                                     |
+-| ------ | -------------------------------- | ----------------------------------------------------------------------------------------------- |
+-| `GET`  | `/api/v1/plugins`                | List installed plugins.                                                                         |
+-| `GET`  | `/api/v1/plugins/store`          | List available plugins (registry entries + personal sources, each with a `tier`).               |
+-| `POST` | `/api/v1/plugins/store/refresh`  | Force-refresh the registry and the personal source release caches.                              |
+-| `GET`  | `/api/v1/plugins/sources`        | List personal plugin sources (spec 136).                                                        |
+-| `POST` | `/api/v1/plugins/sources`        | Add a personal source. Body: `{ repo }` (public GitHub `owner/repo`).                           |
+-| `POST` | `/api/v1/plugins/sources/remove` | Remove a personal source. Body: `{ repo }`. Installed plugins are kept.                         |
+-| `POST` | `/api/v1/plugins/install`        | Install from GitHub. Body: `{ repo, confirmed?, expectedSha256? }`.                             |
+-| `POST` | `/api/v1/plugins/:id/update`     | Update a plugin. Body: `{ confirmed?, expectedSha256? }` (personal packages only).              |
+-| `POST` | `/api/v1/plugins/:id/uninstall`  | Uninstall a plugin.                                                                             |
+-| `POST` | `/api/v1/plugins/:id/enable`     | Enable a plugin (loads and starts it).                                                          |
+-| `POST` | `/api/v1/plugins/:id/disable`    | Disable a plugin (stops and unloads it).                                                        |
+-| `GET`  | `/api/v1/plugins/pages`          | Spec 180 — the pages installed plugins offer: `{ pluginId, label, icon, placement, entryUrl }`. |
+-| `PUT`  | `/api/v1/plugins/:id/public`     | Spec 180 — open or shut the plugin's anonymous tree. Body: `{ enabled }`. Audit-logged.         |
++| Method | Path                             | Description                                                                                                     |
++| ------ | -------------------------------- | --------------------------------------------------------------------------------------------------------------- |
++| `GET`  | `/api/v1/plugins`                | List installed plugins.                                                                                         |
++| `GET`  | `/api/v1/plugins/store`          | List available plugins (registry entries + personal sources, each with a `tier`).                               |
++| `POST` | `/api/v1/plugins/store/refresh`  | Force-refresh the registry and the personal source release caches.                                              |
++| `GET`  | `/api/v1/plugins/sources`        | List personal plugin sources (spec 136).                                                                        |
++| `POST` | `/api/v1/plugins/sources`        | Add a personal source. Body: `{ repo }` (public GitHub `owner/repo`).                                           |
++| `POST` | `/api/v1/plugins/sources/remove` | Remove a personal source. Body: `{ repo }`. Installed plugins are kept.                                         |
++| `POST` | `/api/v1/plugins/install`        | Install from GitHub. Body: `{ repo, confirmed?, expectedSha256? }`.                                             |
++| `POST` | `/api/v1/plugins/:id/update`     | Update a plugin. Body: `{ confirmed?, expectedSha256? }` (personal packages only).                              |
++| `POST` | `/api/v1/plugins/:id/uninstall`  | Uninstall a plugin.                                                                                             |
++| `POST` | `/api/v1/plugins/:id/enable`     | Enable a plugin (loads and starts it).                                                                          |
++| `POST` | `/api/v1/plugins/:id/disable`    | Disable a plugin (stops and unloads it).                                                                        |
++| `GET`  | `/api/v1/plugins/pages`          | Spec 180 — the pages installed plugins offer: `{ pluginId, label, icon, placement, equipmentTypes, entryUrl }`. |
++| `PUT`  | `/api/v1/plugins/:id/public`     | Spec 180 — open or shut the plugin's anonymous tree. Body: `{ enabled }`. Audit-logged.                         |
+ 
+ The plugin bodies are schema-validated (issue #597). `repo` must carry the `owner/repo` shape when **adding a personal source** and when **installing**: it is interpolated into a `api.github.com/repos/<repo>` URL and joined onto the plugin directory, so its shape is a security boundary. Removal only needs a non-empty key, since it is a lookup against what is already stored. On the two `sources` routes `repo` is trimmed before it is checked, so a paste with a trailing newline still works, and a non-string `repo` there now answers 400 where it used to crash the handler with a 500 (install already answered 400).
+ 
+diff --git a/docs/technical/plugin-development.fr.md b/docs/technical/plugin-development.fr.md
+index 42667593..2ab69ff7 100644
+--- a/docs/technical/plugin-development.fr.md
++++ b/docs/technical/plugin-development.fr.md
+@@ -96,18 +96,18 @@ Le fichier `manifest.json` décrit le plugin à Sowel. Il vit à la racine du r
+ 
+ ### Référence des champs
+ 
+-| Champ          | Type                    | Requis | Description                                                                                                                                                                                                 |
+-| -------------- | ----------------------- | ------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+-| `id`           | string                  | Oui    | Identifiant unique du plugin. Minuscules avec tirets (par ex. `weather-forecast`). Doit correspondre au nom du répertoire sous `plugins/`.                                                                  |
+-| `name`         | string                  | Oui    | Nom d'affichage lisible présenté dans l'UI.                                                                                                                                                                 |
+-| `version`      | string                  | Oui    | Version SemVer (par ex. `0.2.0`). **Doit être mise à jour à chaque release.** Voir [Versioning](#versioning).                                                                                               |
+-| `description`  | string                  | Oui    | Courte description (une phrase) affichée dans le store de plugins et la page intégrations.                                                                                                                  |
+-| `icon`         | string                  | Oui    | Nom d'icône Lucide (par ex. `CloudSun`, `Camera`). Utilisé dans l'UI pour la carte d'intégration.                                                                                                           |
+-| `author`       | string                  | Non    | Nom de l'auteur ou organisation.                                                                                                                                                                            |
+-| `sowelVersion` | string                  | Non    | Plage SemVer des versions Sowel compatibles (par ex. `>=0.10.0`).                                                                                                                                           |
+-| `settings`     | IntegrationSettingDef[] | Non    | Tableau de définitions de réglages pour le formulaire de configuration UI. Voir [Réglages](#reglages).                                                                                                      |
+-| `ui`           | PluginUiDef             | Non    | Spec 180 — `{ entry, label, icon?, placement? }` : le plugin apporte sa propre page dans l'interface. Voir [Apporter une page, une porte et un tiroir](#apporter-une-page-une-porte-et-un-tiroir-spec-180). |
+-| `publicTree`   | boolean                 | Non    | Spec 180 — le plugin peut servir des appelants anonymes sous `/p/<id>/*`, une fois la porte ouverte par un administrateur.                                                                                  |
++| Champ          | Type                    | Requis | Description                                                                                                                                                                                                                 |
++| -------------- | ----------------------- | ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
++| `id`           | string                  | Oui    | Identifiant unique du plugin. Minuscules avec tirets (par ex. `weather-forecast`). Doit correspondre au nom du répertoire sous `plugins/`.                                                                                  |
++| `name`         | string                  | Oui    | Nom d'affichage lisible présenté dans l'UI.                                                                                                                                                                                 |
++| `version`      | string                  | Oui    | Version SemVer (par ex. `0.2.0`). **Doit être mise à jour à chaque release.** Voir [Versioning](#versioning).                                                                                                               |
++| `description`  | string                  | Oui    | Courte description (une phrase) affichée dans le store de plugins et la page intégrations.                                                                                                                                  |
++| `icon`         | string                  | Oui    | Nom d'icône Lucide (par ex. `CloudSun`, `Camera`). Utilisé dans l'UI pour la carte d'intégration.                                                                                                                           |
++| `author`       | string                  | Non    | Nom de l'auteur ou organisation.                                                                                                                                                                                            |
++| `sowelVersion` | string                  | Non    | Plage SemVer des versions Sowel compatibles (par ex. `>=0.10.0`).                                                                                                                                                           |
++| `settings`     | IntegrationSettingDef[] | Non    | Tableau de définitions de réglages pour le formulaire de configuration UI. Voir [Réglages](#reglages).                                                                                                                      |
++| `ui`           | PluginUiDef             | Non    | Spec 180 — `{ entry, label, icon?, placement?, equipmentLink? }` : le plugin apporte sa propre page dans l'interface. Voir [Apporter une page, une porte et un tiroir](#apporter-une-page-une-porte-et-un-tiroir-spec-180). |
++| `publicTree`   | boolean                 | Non    | Spec 180 — le plugin peut servir des appelants anonymes sous `/p/<id>/*`, une fois la porte ouverte par un administrateur.                                                                                                  |
+ 
+ **Champs qui n'existent PAS dans le manifest :** `entry`, `integrationId`, `license`, `repository`. Ne les incluez pas.
+ 
+@@ -345,6 +345,13 @@ principale avec `"placement": "main"` : elle est listée après Analyse, dans la
+ barre latérale comme dans le tiroir mobile, et reste réservée aux
+ administrateurs. Toute autre valeur, ou aucune, la laisse sous Administration.
+ 
++`"equipmentLink": { "types": ["gate"] }` ajoute une carte sur la fiche de chaque
++équipement de ces types, avec un lien vers `/plugins/<id>/page?equipment=<id>` ;
++votre module lit la requête dans `ctx.params`. La phrase de la carte est la
++vôtre : le cœur appelle `GET /equipment-link?equipmentId=<id>&lang=<fr|en>` sur
++l'arbre de votre page et affiche le `{ text, action }` que vous répondez. Sans
++réponse, la carte montre quand même le libellé de votre page et un simple lien.
++
+ ```javascript
+ export function mount(container, ctx) {
+   container.replaceChildren(render(ctx));
+@@ -363,6 +370,7 @@ export function unmount(container) {
+ | `locale`           | `"fr"`, `"en"`… — la langue courante de l'interface.                                                                                    |
+ | `theme`            | `"light"` ou `"dark"`.                                                                                                                  |
+ | `navigate(to)`     | Naviguer dans Sowel, par exemple `navigate("/equipments/abc")`.                                                                         |
++| `params`           | La requête de la page, sous forme de table — `{ equipment: "<id>" }` quand on arrive de la carte d'un équipement (R1.6.ter).            |
+ 
+ Du DOM, volontairement : votre plugin se construit dans son propre dépôt, avec
+ ses propres dépendances, et un second React dans la page est une classe de
+diff --git a/docs/technical/plugin-development.md b/docs/technical/plugin-development.md
+index e833e8ee..58613522 100644
+--- a/docs/technical/plugin-development.md
++++ b/docs/technical/plugin-development.md
+@@ -96,21 +96,21 @@ The `manifest.json` file describes the plugin to Sowel. It lives at the root of
+ 
+ ### Field Reference
+ 
+-| Field          | Type                    | Required | Description                                                                                                                                                                              |
+-| -------------- | ----------------------- | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+-| `id`           | string                  | Yes      | Unique plugin identifier. Lowercase with hyphens (e.g. `weather-forecast`). Must match the directory name under `plugins/`.                                                              |
+-| `name`         | string                  | Yes      | Human-readable display name shown in the UI.                                                                                                                                             |
+-| `version`      | string                  | Yes      | SemVer version (e.g. `0.2.0`). **Must be updated with each release.** See [Versioning](#versioning).                                                                                     |
+-| `description`  | string                  | Yes      | Short description (one sentence) shown in the plugin store and integrations page.                                                                                                        |
+-| `icon`         | string                  | Yes      | Lucide icon name (e.g. `CloudSun`, `Camera`). Used in the UI for the integration card.                                                                                                   |
+-| `repo`         | string                  | Yes      | GitHub `owner/repo`. Install throws `Package manifest missing 'repo'` without it, and a backup restore reinstalls from it.                                                               |
+-| `author`       | string                  | No       | Author name or organization.                                                                                                                                                             |
+-| `type`         | string                  | No       | `integration` (default) or `recipe`.                                                                                                                                                     |
+-| `category`     | string                  | No       | Store category (spec 137). Recipes without one land in "Other" at the bottom of the store, with no error to explain it.                                                                  |
+-| `sowelVersion` | string                  | No       | SemVer range of compatible Sowel versions (e.g. `>=0.10.0`). Outside the range, the store button is disabled.                                                                            |
+-| `settings`     | IntegrationSettingDef[] | No       | Array of setting definitions for the UI configuration form. See [Settings](#settings).                                                                                                   |
+-| `ui`           | PluginUiDef             | No       | Spec 180 — `{ entry, label, icon?, placement? }`: the plugin brings its own page into the UI. See [Bringing a page, a door and a drawer](#bringing-a-page-a-door-and-a-drawer-spec-180). |
+-| `publicTree`   | boolean                 | No       | Spec 180 — the plugin can serve anonymous callers under `/p/<id>/*`, once an admin opens it.                                                                                             |
++| Field          | Type                    | Required | Description                                                                                                                                                                                              |
++| -------------- | ----------------------- | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
++| `id`           | string                  | Yes      | Unique plugin identifier. Lowercase with hyphens (e.g. `weather-forecast`). Must match the directory name under `plugins/`.                                                                              |
++| `name`         | string                  | Yes      | Human-readable display name shown in the UI.                                                                                                                                                             |
++| `version`      | string                  | Yes      | SemVer version (e.g. `0.2.0`). **Must be updated with each release.** See [Versioning](#versioning).                                                                                                     |
++| `description`  | string                  | Yes      | Short description (one sentence) shown in the plugin store and integrations page.                                                                                                                        |
++| `icon`         | string                  | Yes      | Lucide icon name (e.g. `CloudSun`, `Camera`). Used in the UI for the integration card.                                                                                                                   |
++| `repo`         | string                  | Yes      | GitHub `owner/repo`. Install throws `Package manifest missing 'repo'` without it, and a backup restore reinstalls from it.                                                                               |
++| `author`       | string                  | No       | Author name or organization.                                                                                                                                                                             |
++| `type`         | string                  | No       | `integration` (default) or `recipe`.                                                                                                                                                                     |
++| `category`     | string                  | No       | Store category (spec 137). Recipes without one land in "Other" at the bottom of the store, with no error to explain it.                                                                                  |
++| `sowelVersion` | string                  | No       | SemVer range of compatible Sowel versions (e.g. `>=0.10.0`). Outside the range, the store button is disabled.                                                                                            |
++| `settings`     | IntegrationSettingDef[] | No       | Array of setting definitions for the UI configuration form. See [Settings](#settings).                                                                                                                   |
++| `ui`           | PluginUiDef             | No       | Spec 180 — `{ entry, label, icon?, placement?, equipmentLink? }`: the plugin brings its own page into the UI. See [Bringing a page, a door and a drawer](#bringing-a-page-a-door-and-a-drawer-spec-180). |
++| `publicTree`   | boolean                 | No       | Spec 180 — the plugin can serve anonymous callers under `/p/<id>/*`, once an admin opens it.                                                                                                             |
+ 
+ **Fields that do NOT exist in the manifest:** `entry`, `integrationId`, `license`, `repository`. Do not include these. Note `repo` above is required and is a different field from `repository`.
+ 
+@@ -393,6 +393,13 @@ ask for the main navigation instead with `"placement": "main"` — it is listed
+ after Analyse, on the desktop sidebar and in the mobile drawer alike, and stays
+ admin-only. Anything else, or nothing, keeps it under Administration.
+ 
++`"equipmentLink": { "types": ["gate"] }` puts a card on the page of every
++equipment of those types, linking to `/plugins/<id>/page?equipment=<id>`; your
++module reads the query from `ctx.params`. The card's sentence is yours: the core
++calls `GET /equipment-link?equipmentId=<id>&lang=<fr|en>` on your page tree and
++prints the `{ text, action }` you answer. Answer nothing and the card still
++shows your page's label with a plain link.
++
+ ```javascript
+ export function mount(container, ctx) {
+   container.replaceChildren(render(ctx));
+@@ -411,6 +418,7 @@ export function unmount(container) {
+ | `locale`           | `"fr"`, `"en"`… — the UI's current language.                                                                                           |
+ | `theme`            | `"light"` or `"dark"`.                                                                                                                 |
+ | `navigate(to)`     | Navigate inside Sowel, e.g. `navigate("/equipments/abc")`.                                                                             |
++| `params`           | The page's query string as a map — `{ equipment: "<id>" }` when arriving from an equipment's card (R1.6.ter).                          |
+ 
+ Plain DOM on purpose: your plugin is built in its own repository, against its
+ own dependencies, and a second React in the page is a class of bug nobody
+diff --git a/specs/180-plugin-pages-and-public-tree/spec.md b/specs/180-plugin-pages-and-public-tree/spec.md
+index 9154046c..71a9b0a8 100644
+--- a/specs/180-plugin-pages-and-public-tree/spec.md
++++ b/specs/180-plugin-pages-and-public-tree/spec.md
+@@ -89,6 +89,15 @@ another machine holds the reason it exists.
+    `/plugins/` like every other — does not open the Administration section.
+    Placement changes where the entry is drawn, never who may see it: the list
+    and the page stay admin-only.
++   6.ter `ui.equipmentLink: { types }` asks for a card on the page of every
++   equipment of those types, beside the core's own panels (confirmation before
++   action, timed command). The card links to `/plugins/<id>/page?equipment=<id>`
++   and the page receives the query as `ctx.params`. Its sentence and the link's
++   words are the plugin's, asked of its page tree — `GET equipment-link?
++equipmentId=&lang=` answering `{ text, action }` — because only the plugin
++   knows what it holds about that equipment (how many people may open that
++   gate). A plugin that does not answer still gets its card: its page's label
++   and a plain « Open ». Admin-only, like the page.
+ 
+ ### R2 — The anonymous tree
+ 
+@@ -143,6 +152,7 @@ another machine holds the reason it exists.
+ 
+ - [x] A plugin declaring `ui` appears in the Administration menu with its icon
+ - [x] A page declaring `placement: "main"` is listed in the main navigation, on the desktop sidebar and in the mobile drawer (R1.6.bis)
++- [x] A page declaring `equipmentLink` gets a card on those equipments' pages, with the plugin's sentence, linking with `?equipment=` handed on as `ctx.params` (R1.6.ter)
+       and label, and its page renders inside the app in both themes.
+ - [x] `GET /api/v1/plugins/pages` and `/api/v1/plugins/<id>/page/*` answer 403
+       to a `standard` user, before the plugin is reached.
+@@ -159,14 +169,15 @@ another machine holds the reason it exists.
+ 
+ ## Tests
+ 
+-| File                                               | Covers                                                      |
+-| -------------------------------------------------- | ----------------------------------------------------------- |
+-| `src/api/routes/plugin-surface.test.ts`            | R1.2, R1.6, R2.7–R2.10, R4, R5 (25 cases)                   |
+-| `src/plugins/plugin-pages.test.ts`                 | R1.1–R1.3, R1.6.bis (8 cases)                               |
+-| `ui/src/components/layout/plugin-page-nav.test.ts` | R1.6.bis — the one split sidebar and drawer share (2 cases) |
+-| `src/packages/package-manager.test.ts`             | R3.11 (3 cases in `getDataDir`)                             |
+-| `src/backup/backup-manager.test.ts`                | R3.13 (2 cases)                                             |
+-| `ui/src/pages/PluginPage.test.tsx`                 | R1.4, R1.5 and the three failure screens (6 cases)          |
++| File                                                         | Covers                                                                |
++| ------------------------------------------------------------ | --------------------------------------------------------------------- |
++| `src/api/routes/plugin-surface.test.ts`                      | R1.2, R1.6, R2.7–R2.10, R4, R5 (25 cases)                             |
++| `src/plugins/plugin-pages.test.ts`                           | R1.1–R1.3, R1.6.bis, R1.6.ter (9 cases)                               |
++| `ui/src/components/equipments/PluginEquipmentLinks.test.tsx` | R1.6.ter — the card, its fallback, only the types asked for (3 cases) |
++| `ui/src/components/layout/plugin-page-nav.test.ts`           | R1.6.bis — the one split sidebar and drawer share (2 cases)           |
++| `src/packages/package-manager.test.ts`                       | R3.11 (3 cases in `getDataDir`)                                       |
++| `src/backup/backup-manager.test.ts`                          | R3.13 (2 cases)                                                       |
++| `ui/src/pages/PluginPage.test.tsx`                           | R1.4, R1.5, `ctx.params`, and the three failure screens (7 cases)     |
+ 
+ ## Migration and compatibility
+ 
+diff --git a/src/plugins/plugin-loader.ts b/src/plugins/plugin-loader.ts
+index c6af5eb4..96b231ae 100644
+--- a/src/plugins/plugin-loader.ts
++++ b/src/plugins/plugin-loader.ts
+@@ -293,6 +293,9 @@ export class PluginLoader {
+         icon: ui.icon || pkg.manifest.icon,
+         // Anything but an explicit `main` stays where every page used to be.
+         placement: ui.placement === "main" ? "main" : "admin",
++        equipmentTypes: Array.isArray(ui.equipmentLink?.types)
++          ? ui.equipmentLink.types.filter((t): t is string => typeof t === "string" && t.length > 0)
++          : [],
+         entryUrl: pluginAssetUrl(pkg.manifest.id, ui.entry, pkg.manifest.version),
+       });
+     }
+diff --git a/src/plugins/plugin-pages.test.ts b/src/plugins/plugin-pages.test.ts
+index cb3e215f..4517c612 100644
+--- a/src/plugins/plugin-pages.test.ts
++++ b/src/plugins/plugin-pages.test.ts
+@@ -58,6 +58,7 @@ describe("PluginLoader.getPages", () => {
+         label: "Accès invités",
+         icon: "DoorOpen",
+         placement: "admin",
++        equipmentTypes: [],
+         entryUrl: "/plugin-ui/guest-access/panel.js?v=1.0.0",
+       },
+     ]);
+@@ -82,6 +83,27 @@ describe("PluginLoader.getPages", () => {
+     expect(loader.getPages().map((p) => p.placement)).toEqual(["main", "admin"]);
+   });
+ 
++  it("carries the equipment types whose page links here, and nothing that is not one (R1.6.ter)", () => {
++    const loader = makeLoader([
++      {
++        manifest: {
++          ...base,
++          ui: {
++            entry: "ui/panel.js",
++            label: "X",
++            equipmentLink: { types: ["gate", "", 42 as unknown as string] },
++          },
++        },
++        enabled: true,
++      },
++      {
++        manifest: { ...base, id: "plain", ui: { entry: "ui/panel.js", label: "Y" } },
++        enabled: true,
++      },
++    ]);
++    expect(loader.getPages().map((p) => p.equipmentTypes)).toEqual([["gate"], []]);
++  });
++
+   it("falls back to the plugin's own name and icon", () => {
+     const loader = makeLoader([
+       { manifest: { ...base, ui: { entry: "ui/panel.js", label: "" } }, enabled: true },
+diff --git a/src/shared/types.ts b/src/shared/types.ts
+index aa781a87..fb9ed6f7 100644
+--- a/src/shared/types.ts
++++ b/src/shared/types.ts
+@@ -1791,6 +1791,12 @@ export interface PluginUiDef {
+    * day to day rather than configured once. Still admin-only either way.
+    */
+   placement?: PluginPagePlacement;
++  /**
++   * Spec 180 R1.6.ter — the equipment types whose own page carries a card
++   * linking here (`/plugins/<id>/page?equipment=<equipmentId>`). The card's
++   * sentence comes from the plugin, `GET <page tree>/equipment-link`.
++   */
++  equipmentLink?: { types: string[] };
+ }
+ 
+ export type PluginPagePlacement = "admin" | "main";
+@@ -1801,6 +1807,8 @@ export interface PluginPageInfo {
+   label: string;
+   icon: string;
+   placement: PluginPagePlacement;
++  /** Equipment types whose page links here — empty when the plugin asks for none. */
++  equipmentTypes: string[];
+   /** Absolute URL path the SPA imports the module from. */
+   entryUrl: string;
+ }
+diff --git a/ui/src/components/equipments/PluginEquipmentLinks.test.tsx b/ui/src/components/equipments/PluginEquipmentLinks.test.tsx
+new file mode 100644
+index 00000000..f6eb738e
+--- /dev/null
++++ b/ui/src/components/equipments/PluginEquipmentLinks.test.tsx
+@@ -0,0 +1,66 @@
++import { describe, it, expect, vi, afterEach } from "vitest";
++import { MemoryRouter } from "react-router-dom";
++import { render, screen, waitFor } from "../../test-utils";
++import { PluginEquipmentLinks } from "./PluginEquipmentLinks";
++import type { EquipmentWithDetails, PluginPageInfo } from "../../types";
++
++const pages: PluginPageInfo[] = [
++  {
++    pluginId: "guest-access",
++    label: "Accès partagés",
++    icon: "DoorOpen",
++    placement: "main",
++    equipmentTypes: ["gate"],
++    entryUrl: "/plugin-ui/guest-access/panel.js?v=1.4.0",
++  },
++  {
++    pluginId: "other",
++    label: "Autre",
++    icon: "Puzzle",
++    placement: "admin",
++    equipmentTypes: [],
++    entryUrl: "/plugin-ui/other/panel.js?v=1.0.0",
++  },
++];
++
++vi.mock("../layout/usePluginPages", () => ({ usePluginPages: () => pages }));
++
++const gate = { id: "eq-7", name: "Portail", type: "gate" } as EquipmentWithDetails;
++
++function answer(body: unknown, status = 200) {
++  return vi.spyOn(globalThis, "fetch").mockResolvedValue(
++    new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } }),
++  );
++}
++
++afterEach(() => vi.restoreAllMocks());
++
++// Spec 180 R1.6.ter — the core draws the card; the words are the plugin's.
++describe("PluginEquipmentLinks", () => {
++  it("draws a card for the page that asked for this type, with the plugin's sentence and link", async () => {
++    const fetchMock = answer({ text: "3 personnes peuvent ouvrir ce portail avec un code.", action: "Gérer les accès" });
++    render(<MemoryRouter><PluginEquipmentLinks equipment={gate} /></MemoryRouter>);
++
++    expect(await screen.findByText("3 personnes peuvent ouvrir ce portail avec un code.")).toBeTruthy();
++    const link = screen.getByRole("link", { name: /Gérer les accès/ });
++    expect(link.getAttribute("href")).toBe("/plugins/guest-access/page?equipment=eq-7");
++    expect(String(fetchMock.mock.calls[0][0])).toMatch(/^\/api\/v1\/plugins\/guest-access\/page\/equipment-link\?equipmentId=eq-7&lang=/);
++    // Only the page that asked — not every plugin page.
++    expect(screen.queryByText("Autre")).toBeNull();
++  });
++
++  it("still links when the plugin does not answer", async () => {
++    answer({ error: "not_found" }, 404);
++    render(<MemoryRouter><PluginEquipmentLinks equipment={gate} /></MemoryRouter>);
++    await waitFor(() => expect(screen.getByRole("link").getAttribute("href")).toBe("/plugins/guest-access/page?equipment=eq-7"));
++    expect(screen.getByText("Accès partagés")).toBeTruthy();
++  });
++
++  it("draws nothing on an equipment type nobody asked for", () => {
++    answer({});
++    const { container } = render(
++      <MemoryRouter><PluginEquipmentLinks equipment={{ ...gate, type: "light_onoff" } as EquipmentWithDetails} /></MemoryRouter>,
++    );
++    expect(container.innerHTML).toBe("");
++  });
++});
+diff --git a/ui/src/components/equipments/PluginEquipmentLinks.tsx b/ui/src/components/equipments/PluginEquipmentLinks.tsx
+new file mode 100644
+index 00000000..5079bb6f
+--- /dev/null
++++ b/ui/src/components/equipments/PluginEquipmentLinks.tsx
+@@ -0,0 +1,73 @@
++import { useEffect, useState } from "react";
++import { Link } from "react-router-dom";
++import { useTranslation } from "react-i18next";
++import { ArrowRight } from "lucide-react";
++import { fetchJSON, API_BASE } from "../../api/client";
++import { usePluginPages } from "../layout/usePluginPages";
++import { PluginPageIcon } from "../layout/PluginPageIcon";
++import { pluginPagePath } from "../layout/plugin-page-nav";
++import type { EquipmentWithDetails, PluginPageInfo } from "../../types";
++
++interface LinkLine {
++  text?: string;
++  action?: string;
++}
++
++/**
++ * Spec 180 R1.6.ter — a card per plugin page that asked to be linked from this
++ * equipment's type. The sentence and the link's words are the plugin's, asked
++ * of its own page tree; the core only draws them. A plugin that does not answer
++ * still gets its card, with its page's label and a plain link.
++ * Admin-only, like the pages themselves — the caller gates the mount.
++ */
++export function PluginEquipmentLinks({ equipment }: { equipment: EquipmentWithDetails }) {
++  const pages = usePluginPages(true).filter((page) => page.equipmentTypes?.includes(equipment.type));
++  if (!pages.length) return null;
++  return (
++    <>
++      {pages.map((page) => (
++        <PluginEquipmentLinkCard key={page.pluginId} page={page} equipmentId={equipment.id} />
++      ))}
++    </>
++  );
++}
++
++function PluginEquipmentLinkCard({ page, equipmentId }: { page: PluginPageInfo; equipmentId: string }) {
++  const { t, i18n } = useTranslation();
++  const [line, setLine] = useState<LinkLine>({});
++
++  useEffect(() => {
++    let cancelled = false;
++    const query = new URLSearchParams({ equipmentId, lang: i18n.language });
++    fetchJSON<LinkLine>(`${API_BASE}/plugins/${page.pluginId}/page/equipment-link?${query}`)
++      .then((answer) => {
++        if (!cancelled) setLine(answer ?? {});
++      })
++      .catch(() => {
++        // Silence is a plain link, not an error on somebody's equipment page.
++        if (!cancelled) setLine({});
++      });
++    return () => {
++      cancelled = true;
++    };
++  }, [page.pluginId, equipmentId, i18n.language]);
++
++  return (
++    <div className="bg-surface rounded-[10px] border border-border mb-6 p-4">
++      <div className="flex items-center gap-2 mb-1">
++        <span className="text-text-tertiary">
++          <PluginPageIcon name={page.icon} size={16} />
++        </span>
++        <h3 className="text-[14px] font-semibold text-text">{page.label}</h3>
++        <Link
++          to={`${pluginPagePath(page.pluginId)}?${new URLSearchParams({ equipment: equipmentId })}`}
++          className="ml-auto flex items-center gap-1 text-[13px] text-primary hover:underline"
++        >
++          {line.action || t("equipments.pluginLink.open")}
++          <ArrowRight size={14} strokeWidth={1.5} />
++        </Link>
++      </div>
++      {line.text && <p className="text-[12px] text-text-tertiary">{line.text}</p>}
++    </div>
++  );
++}
+diff --git a/ui/src/components/layout/plugin-page-nav.test.ts b/ui/src/components/layout/plugin-page-nav.test.ts
+index 78eab0a8..1578bb70 100644
+--- a/ui/src/components/layout/plugin-page-nav.test.ts
++++ b/ui/src/components/layout/plugin-page-nav.test.ts
+@@ -7,6 +7,7 @@ const page = (pluginId: string, placement: PluginPageInfo["placement"]): PluginP
+   label: pluginId,
+   icon: "Puzzle",
+   placement,
++  equipmentTypes: [],
+   entryUrl: `/plugin-ui/${pluginId}/panel.js?v=1.0.0`,
+ });
+ 
+diff --git a/ui/src/i18n/locales/en.json b/ui/src/i18n/locales/en.json
+index 13e58dfc..4be10604 100644
+--- a/ui/src/i18n/locales/en.json
++++ b/ui/src/i18n/locales/en.json
+@@ -223,6 +223,7 @@
+   "equipments.gateConfirm.title": "Confirmation before action",
+   "equipments.gateConfirm.enable": "Enable",
+   "equipments.gateConfirm.hint": "On mobile, asks for a slide-to-confirm before actuating. Protects against accidental taps (phone in a pocket).",
++  "equipments.pluginLink.open": "Open",
+   "equipments.invertDirection.title": "Invert open/close direction",
+   "equipments.invertDirection.enable": "Enable",
+   "equipments.invertDirection.hint": "Use this when the motor moves the opposite way to the controls. Swaps open/close (and the position command). The reported position is not changed.",
+diff --git a/ui/src/i18n/locales/fr.json b/ui/src/i18n/locales/fr.json
+index 615b9c40..43606845 100644
+--- a/ui/src/i18n/locales/fr.json
++++ b/ui/src/i18n/locales/fr.json
+@@ -223,6 +223,7 @@
+   "equipments.gateConfirm.title": "Confirmation avant action",
+   "equipments.gateConfirm.enable": "Activer",
+   "equipments.gateConfirm.hint": "Sur mobile, demande un glissement de confirmation avant d'actionner. Protège des appuis involontaires (téléphone en poche).",
++  "equipments.pluginLink.open": "Ouvrir",
+   "equipments.invertDirection.title": "Inverser le sens ouverture/fermeture",
+   "equipments.invertDirection.enable": "Activer",
+   "equipments.invertDirection.hint": "À utiliser quand le moteur va dans le sens opposé aux commandes. Inverse ouvrir/fermer (et la commande de position). La position affichée n'est pas modifiée.",
+diff --git a/ui/src/pages/EquipmentDetailPage.tsx b/ui/src/pages/EquipmentDetailPage.tsx
+index 2398764f..990a0173 100644
+--- a/ui/src/pages/EquipmentDetailPage.tsx
++++ b/ui/src/pages/EquipmentDetailPage.tsx
+@@ -33,6 +33,7 @@ import { MissingBindingsModal } from "../components/equipments/MissingBindingsMo
+ import { GateControl } from "../components/equipments/GateControl";
+ import { HeaterControl } from "../components/equipments/HeaterControl";
+ import { ButtonActionsSection } from "../components/equipments/ButtonActionsSection";
++import { PluginEquipmentLinks } from "../components/equipments/PluginEquipmentLinks";
+ import { EnergyDataPanel } from "../components/equipments/EnergyDataPanel";
+ import { ElectricalMeteringPanel } from "../components/equipments/ElectricalMeteringPanel";
+ import { MeteringParentPanel } from "../components/equipments/MeteringParentPanel";
+@@ -445,6 +446,9 @@ export function EquipmentDetailPage() {
+         <GateConfirmationPanel equipment={equipment} onUpdated={() => void fetchEquipments()} />
+       )}
+ 
++      {/* Spec 180 R1.6.ter — plugin pages that asked for a link from this type, admin only */}
++      {isAdmin && <PluginEquipmentLinks equipment={equipment} />}
++
+       {/* Timed command — act now, revert after N (spec 174 phase 2), admin only.
+           Offered only where a hand-revert could end the window early: the
+           equipment must carry the order AND a state reading tied to it. */}
+diff --git a/ui/src/pages/PluginPage.test.tsx b/ui/src/pages/PluginPage.test.tsx
+index ed779095..8d01cb01 100644
+--- a/ui/src/pages/PluginPage.test.tsx
++++ b/ui/src/pages/PluginPage.test.tsx
+@@ -23,12 +23,13 @@ const page = {
+   label: "Accès invités",
+   icon: "DoorOpen",
+   placement: "admin" as const,
++  equipmentTypes: [],
+   entryUrl: "/plugin-ui/guest-access/ui/panel.js?v=1.0.0",
+ };
+ 
+-function renderPage(): void {
++function renderPage(entry = "/plugins/guest-access/page"): void {
+   render(
+-    <MemoryRouter initialEntries={["/plugins/guest-access/page"]}>
++    <MemoryRouter initialEntries={[entry]}>
+       <Routes>
+         <Route path="/plugins/:pluginId/page" element={<PluginPage />} />
+       </Routes>
+@@ -71,6 +72,15 @@ describe("PluginPage", () => {
+     fetchMock.mockRestore();
+   });
+ 
++  it("hands the plugin its query string — how an equipment's page says which equipment", async () => {
++    const mount = vi.fn();
++    vi.mocked(loader.loadPluginModule).mockResolvedValue({ mount });
++    renderPage("/plugins/guest-access/page?equipment=eq-42");
++    await waitFor(() => expect(mount).toHaveBeenCalled());
++    const ctx = (mount.mock.calls[0] as [HTMLElement, PluginPageContext])[1];
++    expect(ctx.params).toEqual({ equipment: "eq-42" });
++  });
++
+   it("says so when no installed plugin offers that page", async () => {
+     vi.mocked(api.getPluginPages).mockResolvedValue([]);
+     renderPage();
+diff --git a/ui/src/pages/PluginPage.tsx b/ui/src/pages/PluginPage.tsx
+index a6225e3f..7efa4be7 100644
+--- a/ui/src/pages/PluginPage.tsx
++++ b/ui/src/pages/PluginPage.tsx
+@@ -13,7 +13,7 @@
+  */
+ 
+ import { useCallback, useEffect, useRef, useState } from "react";
+-import { useNavigate, useParams } from "react-router-dom";
++import { useLocation, useNavigate, useParams } from "react-router-dom";
+ import { useTranslation } from "react-i18next";
+ import { AlertTriangle, Loader2 } from "lucide-react";
+ import { getPluginPages } from "../api";
+@@ -35,6 +35,11 @@ export interface PluginPageContext {
+   theme: "light" | "dark";
+   /** Navigate inside Sowel — a plugin page may link to an equipment. */
+   navigate: (to: string) => void;
++  /**
++   * The page's query string, as a map. An equipment's own page links here
++   * with `?equipment=<id>` (R1.6.ter); the plugin decides what that means.
++   */
++  params: Record<string, string>;
+ }
+ 
+ type PageState = "loading" | "ready" | "unknown" | "failed";
+@@ -43,6 +48,7 @@ export function PluginPage(): React.ReactElement {
+   const { pluginId = "" } = useParams<{ pluginId: string }>();
+   const { t, i18n } = useTranslation();
+   const navigate = useNavigate();
++  const { search } = useLocation();
+   const containerRef = useRef<HTMLDivElement>(null);
+   const [state, setState] = useState<PageState>("loading");
+   const [label, setLabel] = useState("");
+@@ -92,6 +98,7 @@ export function PluginPage(): React.ReactElement {
+           locale: i18n.language,
+           theme: document.documentElement.classList.contains("dark") ? "dark" : "light",
+           navigate: (to: string) => navigate(to),
++          params: Object.fromEntries(new URLSearchParams(search)),
+         });
+         if (!cancelled) setState("ready");
+       } catch (err) {
+@@ -111,7 +118,7 @@ export function PluginPage(): React.ReactElement {
+       }
+       if (container) container.replaceChildren();
+     };
+-  }, [pluginId, api, i18n.language, navigate]);
++  }, [pluginId, api, i18n.language, navigate, search]);
+ 
+   return (
+     <div className="p-4 sm:p-6">
+diff --git a/ui/src/types.ts b/ui/src/types.ts
+index 98607082..cf7e72fb 100644
+--- a/ui/src/types.ts
++++ b/ui/src/types.ts
+@@ -1416,6 +1416,8 @@ export interface PluginPageInfo {
+   icon: string;
+   /** Spec 180 R1.6.bis — `main` is listed in the main navigation, `admin` under Administration. */
+   placement: "admin" | "main";
++  /** Spec 180 R1.6.ter — equipment types whose own page links to this one. */
++  equipmentTypes: string[];
    /** Absolute path the SPA imports the page module from. */
    entryUrl: string;
  }

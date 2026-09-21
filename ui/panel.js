@@ -21,14 +21,24 @@ const S = {
     allGates: "Tous",
     addGate: "portail",
     addGateTitle: "Nouveau portail",
-    addGateHelp: "Le plugin crée un device à ce nom. Créez ensuite son équipement, puis une instance de la recette « Accès partagés » qui le relie au vrai portail.",
-    gateName: "Nom",
+    addGateHelp: "Les portails de la maison, tels que la recette les voit. Choisissez celui que ces accès ouvriront.",
+    gateEquipment: "Équipement qui s'ouvre",
+    pickEquipment: "Choisir…",
+    alreadyListed: "{g} — déjà dans la liste",
+    add: "Ajouter",
+    noCatalog: "Aucune recette « Accès partagés — ouverture » n'a encore répondu, donc aucun portail à proposer. Créez-en une — une seule pour toute la maison — reliée à l'équipement du device « Accès invités ».",
+    catalogEmpty: "La maison n'a aucun équipement de type portail.",
+    allTaken: "Tous les portails de la maison sont déjà dans la liste.",
+    unbound: "« {g} » ne s'ouvre sur aucun équipement de la maison : choisissez lequel.",
+    bind: "Relier",
+    unnamedGate: "Portail",
+    noGateYet: "Aucun portail pour l'instant : ajoutez-en un avec « + portail ».",
     removeGate: "Retirer ce portail",
     confirmRemoveGate: "Retirer « {g} » ? Son device passe hors ligne ; les accès qui ouvraient aussi un autre portail le gardent.",
     gate_open: "ouvert",
     gate_closed: "fermé",
     gate_unknown: "état inconnu",
-    recipeMissing: "« {g} » : aucune recette n'a encore répondu — vérifiez qu'une instance de la recette « Accès partagés » est liée à son équipement.",
+    recipeMissing: "Aucune recette « Accès partagés — ouverture » n'a encore répondu — créez-en une (une seule pour toute la maison), reliée à l'équipement du device « Accès invités ».",
     doorShut: "Page d'ouverture fermée",
     doorShutHelp: "Ouvrez « Accès public » dans Plugins → Accès partagés, sinon les liens répondent 404.",
     noGuestUrl: "Adresse publique de Sowel non renseignée : les liens d'accès ne peuvent pas être fabriqués (Réglages du plugin).",
@@ -100,9 +110,10 @@ const S = {
     confirmRemove: "L'accès disparaît de la liste. Le journal, lui, est conservé.",
     required: "Un nom est nécessaire.",
     too_long: "Ce nom est trop long (40 caractères au plus).",
-    taken: "Un portail porte déjà ce nom.",
+    taken: "Cet équipement est déjà dans la liste.",
     no_gate: "Cochez au moins un portail — un accès qui n'ouvre rien ne sert à rien.",
     unknown_gate: "Ce portail n'existe plus. Rechargez la page.",
+    unknown_equipment: "La recette ne propose pas cet équipement (ce n'est pas un portail, ou il n'existe plus).",
     gate_in_use: "Des accès encore valables n'ouvrent que ce portail : modifiez-les ou révoquez-les d'abord.",
     last_gate: "Il faut au moins un portail.",
     still_live: "Révoquez l'accès avant de le supprimer.",
@@ -139,14 +150,24 @@ const S = {
     allGates: "All",
     addGate: "gate",
     addGateTitle: "New gate",
-    addGateHelp: "The plugin creates a device by that name. Then create its equipment, and an instance of the « Shared access » recipe linking it to the real gate.",
-    gateName: "Name",
+    addGateHelp: "The house's gates, as the recipe sees them. Pick the one these accesses will open.",
+    gateEquipment: "Equipment that opens",
+    pickEquipment: "Pick…",
+    alreadyListed: "{g} — already listed",
+    add: "Add",
+    noCatalog: "No « Shared access — opening » recipe has answered yet, so there is no gate to offer. Create one — a single one for the whole house — bound to the equipment of the « Accès invités » device.",
+    catalogEmpty: "The house has no equipment of type gate.",
+    allTaken: "Every gate of the house is already listed.",
+    unbound: "« {g} » opens no equipment of the house: pick which.",
+    bind: "Link",
+    unnamedGate: "Gate",
+    noGateYet: "No gate yet: add one with « + gate ».",
     removeGate: "Remove this gate",
     confirmRemoveGate: "Remove « {g} »? Its device goes offline; accesses that also open another gate keep that one.",
     gate_open: "open",
     gate_closed: "closed",
     gate_unknown: "state unknown",
-    recipeMissing: "« {g} »: no recipe has answered yet — check that an instance of the « Shared access » recipe is bound to its equipment.",
+    recipeMissing: "No « Shared access — opening » recipe has answered yet — create one (a single one for the whole house), bound to the equipment of the « Accès invités » device.",
     doorShut: "Opening page shut",
     doorShutHelp: "Turn on « Public access » in Plugins → Shared access, or the links answer 404.",
     noGuestUrl: "Sowel's public address is not set: access links cannot be built (plugin settings).",
@@ -218,9 +239,10 @@ const S = {
     confirmRemove: "The access leaves the list. The journal is kept.",
     required: "A name is needed.",
     too_long: "That name is too long (40 characters at most).",
-    taken: "A gate already has that name.",
+    taken: "That equipment is already listed.",
     no_gate: "Tick at least one gate — an access that opens nothing is no use.",
     unknown_gate: "That gate no longer exists. Reload the page.",
+    unknown_equipment: "The recipe does not offer that equipment (not a gate, or gone).",
     gate_in_use: "Accesses still valid open only this gate: edit or revoke them first.",
     last_gate: "At least one gate is needed.",
     still_live: "Revoke the access before deleting it.",
@@ -353,19 +375,13 @@ const CSS = `
 .ga .dt-trigger { all: unset; box-sizing: border-box; flex: 1; display: flex; align-items: center; gap: 8px; border: 1px solid var(--color-border, #dfe4e9); border-radius: var(--radius-md, 8px); padding: 0 10px; min-height: 40px; cursor: pointer; }
 .ga .dt-trigger:focus-visible { outline: 2px solid var(--color-primary, #1A4F6E); }
 .ga .dt-trigger .ph { color: var(--color-text-tertiary, #9aa8b4); }
+.ga .dt-row select { min-width: 64px; padding: 8px 6px; }
+.ga .dt-row select option:disabled { color: var(--color-text-tertiary, #9aa8b4); }
 .ga .dt-pop { border: 1px solid var(--color-border, #dfe4e9); border-radius: 10px; padding: 10px; }
 .ga .dt-head { display: flex; justify-content: space-between; align-items: center; font-weight: 600; font-size: 13px; text-transform: capitalize; }
 .ga .dt-cal { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; text-align: center; font-size: 12px; margin-top: 4px; }
 .ga .dt-cal b { font-weight: 600; color: var(--color-text-tertiary, #9aa8b4); padding: 4px 0; }
-.ga .dt-cal button, .ga .dt-times button { all: unset; box-sizing: border-box; padding: 6px 0; border-radius: 6px; cursor: pointer; font-variant-numeric: tabular-nums; text-align: center; }
-.ga .dt-cal button:hover:not(:disabled), .ga .dt-times button:hover:not(:disabled) { background: var(--color-border-light, #eef1f4); }
-.ga .dt-cal button:focus-visible, .ga .dt-times button:focus-visible { outline: 2px solid var(--color-primary, #1A4F6E); }
-.ga .dt-cal button:disabled, .ga .dt-times button:disabled { color: var(--color-text-tertiary, #9aa8b4); opacity: .55; text-decoration: line-through; cursor: not-allowed; }
-.ga .dt-cal button.sel, .ga .dt-times button.sel { background: var(--color-primary, #1A4F6E); color: #fff; opacity: 1; }
-.ga .dt-cal button.bound { outline: 1px dashed var(--color-primary, #1A4F6E); }
-.ga .dt-times { display: grid; grid-template-columns: repeat(6, 1fr); gap: 4px; margin-top: 8px; max-height: 136px; overflow: auto; font-size: 12px; }
-.ga .dt-times button { border: 1px solid var(--color-border-light, #e5e9ed); padding: 5px 0; }
-.ga .dt-times button:disabled { border-color: transparent; }
+.ga .dt-cal button, .ga .dt-cal button:hover:not(:disabled), .ga .dt-cal button:focus-visible, .ga .dt-cal button:disabled, .ga .dt-cal button.sel, .ga .dt-cal button.bound { outline: 1px dashed var(--color-primary, #1A4F6E); }
 .ga .hint { font-size: 12px; color: var(--color-text-secondary, #5c6b79); }
 .ga .journal { display: grid; gap: 6px; max-height: 360px; overflow: auto; }
 .ga .journal .line { display: flex; gap: 10px; font-size: 12px; }
@@ -379,7 +395,10 @@ const CSS = `
 
 const TAB_KEY = "guest-access.tab";
 const GROUPS = ["active", "scheduled", "suspended", "revoked", "ended"];
+/** Where a new period starts: now, rounded up to the next half hour. */
 const STEP_MIN = 30;
+/** The minutes offered in the time selector — Adrien's call, 2026-09-21. */
+const MINUTE_STEP = 5;
 
 // ── Wall-clock values ──────────────────────────────────────
 //
@@ -443,6 +462,11 @@ export async function mount(container, ctx) {
     return p ? wallFmt.format(new Date(Date.UTC(p.y, p.mo - 1, p.d, p.h, p.mi))) : "";
   };
   const monthFmt = new Intl.DateTimeFormat(locale, { month: "long", year: "numeric", timeZone: "UTC" });
+  const dayFmt = new Intl.DateTimeFormat(locale, { weekday: "short", day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
+  const fmtDay = (wall) => {
+    const p = parts(wall);
+    return p ? dayFmt.format(new Date(Date.UTC(p.y, p.mo - 1, p.d))) : "";
+  };
 
   const style = document.createElement("style");
   style.textContent = CSS;
@@ -508,10 +532,11 @@ export async function mount(container, ctx) {
   const gates = () => state.data.gates;
   const gateLabel = (id) => {
     const gate = gates().find((g) => g.id === id);
-    return gate ? gate.openingLabel || gate.name : "?";
+    return gate ? gate.name || t("unnamedGate") : "?";
   };
   /** The tab actually shown — a remembered gate may have been removed since. */
   function currentTab() {
+    if (!gates().length) return "none";
     const many = gates().length > 1;
     if (state.tab === "all" && many) return "all";
     if (gates().some((g) => g.id === state.tab)) return state.tab;
@@ -554,12 +579,12 @@ export async function mount(container, ctx) {
       bar.appendChild(b);
     };
     if (gates().length > 1) add("all", t("allGates"), state.data.accesses.length, false);
-    for (const gate of gates()) add(gate.id, gate.openingLabel || gate.name, gate.accesses, true);
+    for (const gate of gates()) add(gate.id, gateLabel(gate.id), gate.accesses, true);
     const plus = el("button", "tab");
     plus.type = "button";
     plus.appendChild(icon("plus", 15));
     plus.append(t("addGate"));
-    plus.onclick = openAddGate;
+    plus.onclick = () => openAddGate();
     bar.appendChild(plus);
     return bar;
   }
@@ -570,8 +595,8 @@ export async function mount(container, ctx) {
     const shown = tab === "all" ? gates() : gates().filter((g) => g.id === tab);
     for (const gate of shown) {
       const chip = el("span", "chip");
-      chip.appendChild(el("span", `dot ${gate.gateState === "unknown" ? "" : "ok"}`));
-      chip.append(`${gate.openingLabel || gate.name} · ${t(`gate_${gate.gateState}`)}`);
+      chip.appendChild(el("span", `dot ${gate.bound && gate.gateState !== "unknown" ? "ok" : gate.bound ? "" : "ko"}`));
+      chip.append(`${gateLabel(gate.id)} · ${t(`gate_${gate.gateState}`)}`);
       bar.appendChild(chip);
     }
     // Said only when it is wrong: an open door is the normal state.
@@ -589,7 +614,7 @@ export async function mount(container, ctx) {
       bar.appendChild(chip);
     }
     bar.appendChild(el("span", "grow"));
-    if (tab !== "all" && gates().length > 1) {
+    if (tab !== "all" && tab !== "none") {
       bar.appendChild(iconButton("trash", t("removeGate"), () => {
         if (confirm(t("confirmRemoveGate", { g: gateLabel(tab) }))) {
           act(`/gates/${tab}`, { method: "DELETE" }).then((ok) => ok && selectTab("all"));
@@ -597,6 +622,7 @@ export async function mount(container, ctx) {
       }));
     }
     bar.appendChild(iconButton("history", t("journal"), () => openJournal(null)));
+    if (tab === "none") return bar;
     const create = el("button", "primary");
     create.type = "button";
     create.appendChild(icon("plus", 16));
@@ -615,11 +641,7 @@ export async function mount(container, ctx) {
     if (data.publicTree.guestBaseUrl && data.publicTree.guestPath !== data.publicTree.path) {
       lines.push(t("aliasNote", { link: `${data.publicTree.guestBaseUrl}${data.publicTree.guestPath}`, tree: data.publicTree.path }));
     }
-    for (const gate of gates()) {
-      if ((tab === "all" || tab === gate.id) && !gate.recipeAnswering) {
-        lines.push(t("recipeMissing", { g: gate.openingLabel || gate.name }));
-      }
-    }
+    if (!data.recipe.answering) lines.push(t("recipeMissing"));
     if (data.guestflow.pendingPushes) lines.push(t("pending", { n: data.guestflow.pendingPushes }));
     for (const line of lines) wrap.appendChild(el("p", "", line));
     return lines.length ? wrap : null;
@@ -741,6 +763,14 @@ export async function mount(container, ctx) {
     blocks.push(title, tabs(tab), toolbar(tab));
     const n = notes(tab);
     if (n) blocks.push(n);
+    for (const gate of gates()) {
+      if (!gate.bound && (tab === "all" || tab === gate.id)) blocks.push(unboundBlock(gate));
+    }
+    if (tab === "none") {
+      blocks.push(el("p", "muted", t("noGateYet")));
+      root.prepend(...blocks);
+      return;
+    }
     // Without guestFlow, all three filters would show the same list.
     if (state.data.guestflow.configured) blocks.push(filters());
 
@@ -808,31 +838,80 @@ export async function mount(container, ctx) {
     return foot;
   };
 
-  function openAddGate() {
+  /**
+   * « + portail » — pick the equipment. The list is the recipe's catalogue:
+   * the house's gates by their Sowel names, the ones already listed shown but
+   * not choosable. Nothing to type, nothing else to create.
+   */
+  function openAddGate(preselect) {
     openDialog((sheet, close) => {
       sheet.appendChild(el("h2", "", t("addGateTitle")));
+      const catalog = state.data.catalog;
+      if (!state.data.recipe.answering || !catalog.length) {
+        sheet.appendChild(el("p", "hint", state.data.recipe.answering ? t("catalogEmpty") : t("noCatalog")));
+        const foot = el("div", "foot");
+        const b = el("button", "btn", t("close"));
+        b.type = "button";
+        b.onclick = close;
+        foot.appendChild(b);
+        sheet.appendChild(foot);
+        return;
+      }
       sheet.appendChild(el("p", "hint", t("addGateHelp")));
-      const input = el("input");
-      input.maxLength = 40;
-      input.required = true;
-      sheet.appendChild(field(t("gateName"), input));
+      const select = el("select");
+      const first = el("option", "", t("pickEquipment"));
+      first.value = "";
+      select.appendChild(first);
+      for (const entry of catalog) {
+        const option = el("option", "", entry.taken ? t("alreadyListed", { g: entry.name }) : entry.name);
+        option.value = entry.id;
+        option.disabled = entry.taken;
+        select.appendChild(option);
+      }
+      if (preselect) select.value = preselect;
+      sheet.appendChild(field(t("gateEquipment"), select));
+      if (catalog.every((e) => e.taken)) sheet.appendChild(el("p", "hint", t("allTaken")));
       const refusal = el("p", "refusal");
       refusal.hidden = true;
       sheet.appendChild(refusal);
-      sheet.appendChild(footer(close, t("save"), async () => {
+      sheet.appendChild(footer(close, t("add"), async () => {
         try {
-          const { gate } = await ctx.api("/gates", { method: "POST", body: { name: input.value } });
+          const { gate } = await ctx.api("/gates", { method: "POST", body: { equipmentId: select.value } });
           close();
-          state.tab = gate.id;
-          try { localStorage.setItem(TAB_KEY, gate.id); } catch { /* private window */ }
+          remember(gate.id);
           await load();
         } catch (err) {
           refusal.textContent = refusalText(err);
           refusal.hidden = false;
         }
       }));
-      queueMicrotask(() => input.focus());
+      queueMicrotask(() => select.focus());
     });
+  }
+
+  /** A gate that points at nothing the house has — pick its equipment again, inline. */
+  function unboundBlock(gate) {
+    const wrap = el("div", "toolbar notes");
+    wrap.appendChild(el("span", "refusal", t("unbound", { g: gateLabel(gate.id) })));
+    const select = el("select");
+    const first = el("option", "", t("pickEquipment"));
+    first.value = "";
+    select.appendChild(first);
+    for (const entry of state.data.catalog.filter((e) => !e.taken)) {
+      const option = el("option", "", entry.name);
+      option.value = entry.id;
+      select.appendChild(option);
+    }
+    const go = el("button", "btn", t("bind"));
+    go.type = "button";
+    go.onclick = () => act(`/gates/${gate.id}`, { method: "PATCH", body: { equipmentId: select.value } });
+    wrap.append(select, go);
+    return wrap;
+  }
+
+  function remember(tab) {
+    state.tab = tab;
+    try { localStorage.setItem(TAB_KEY, tab); } catch { /* private window */ }
   }
 
   function openChangeCode(row) {
@@ -853,11 +932,12 @@ export async function mount(container, ctx) {
   }
 
   /**
-   * A date and a half-hour, picked in one place.
+   * A day from a calendar, then the time from two standard lists — hours, and
+   * minutes in steps of five.
    *
-   * `lower` and `upper` are bounds read when the calendar is drawn, so moving
-   * « from » re-greys « until » the next time it opens. `strict`: the bound
-   * itself is excluded — « until » cannot equal « from ».
+   * `lower` and `upper` are bounds read whenever it redraws, so moving « from »
+   * re-greys « until ». Both are strict: « until » cannot equal « from ». What
+   * falls outside is struck in the calendar and disabled in the two lists.
    */
   function dateTimePicker({ value, lower, upper, optional, onChange }) {
     let current = value || "";
@@ -866,8 +946,12 @@ export async function mount(container, ctx) {
     const rowEl = el("div", "dt-row");
     const trigger = el("button", "dt-trigger");
     trigger.type = "button";
+    const hourSel = el("select", "dt-h");
+    const minuteSel = el("select", "dt-m");
+    hourSel.setAttribute("aria-label", lang === "en" ? "Hour" : "Heure");
+    minuteSel.setAttribute("aria-label", "Minutes");
     const clear = iconButton("x", t("clear"), () => { current = ""; pop.hidden = true; paint(); onChange && onChange(current); });
-    rowEl.append(trigger);
+    rowEl.append(trigger, hourSel, el("span", "muted", ":"), minuteSel);
     if (optional) rowEl.append(clear);
     const pop = el("div", "dt-pop");
     pop.hidden = true;
@@ -876,13 +960,61 @@ export async function mount(container, ctx) {
     const lo = () => (lower ? lower() : "");
     const hi = () => (upper ? upper() : "");
     const allowed = (wall) => (!lo() || wall > lo()) && (!hi() || wall < hi());
-    const dayAllowed = (day) => (!lo() || day >= dayOf(lo())) && (!hi() || day <= dayOf(hi()));
+    const minutesOf = (hh) => {
+      const list = [];
+      for (let m = 0; m < 60; m += MINUTE_STEP) list.push(m);
+      // A value typed elsewhere (a stay from guestFlow) stays choosable.
+      const p = parts(current);
+      if (p && p.h === hh && !list.includes(p.mi)) list.push(p.mi);
+      return list.sort((x, y) => x - y);
+    };
+    const firstAllowed = (day) => {
+      for (let h = 0; h < 24; h++) for (const m of minutesOf(h)) {
+        const wall = `${day}T${pad(h)}:${pad(m)}`;
+        if (allowed(wall)) return wall;
+      }
+      return null;
+    };
+    const lastAllowed = (day) => {
+      for (let h = 23; h >= 0; h--) for (const m of minutesOf(h).reverse()) {
+        const wall = `${day}T${pad(h)}:${pad(m)}`;
+        if (allowed(wall)) return wall;
+      }
+      return null;
+    };
+    const dayAllowed = (day) => firstAllowed(day) !== null;
+
+    function paintTime() {
+      const p = parts(current);
+      const day = current ? dayOf(current) : null;
+      hourSel.replaceChildren();
+      minuteSel.replaceChildren();
+      hourSel.disabled = minuteSel.disabled = !day;
+      for (let h = 0; h < 24; h++) {
+        const option = el("option", "", pad(h));
+        option.value = String(h);
+        option.disabled = !!day && !minutesOf(h).some((m) => allowed(`${day}T${pad(h)}:${pad(m)}`));
+        hourSel.appendChild(option);
+      }
+      const hh = p ? p.h : 0;
+      for (const m of minutesOf(hh)) {
+        const option = el("option", "", pad(m));
+        option.value = String(m);
+        option.disabled = !!day && !allowed(`${day}T${pad(hh)}:${pad(m)}`);
+        minuteSel.appendChild(option);
+      }
+      if (p) {
+        hourSel.value = String(p.h);
+        minuteSel.value = String(p.mi);
+      }
+    }
 
     function paint() {
       trigger.replaceChildren(icon("calendar", 16));
-      if (current) trigger.append(fmtWall(current));
+      if (current) trigger.append(fmtDay(current));
       else trigger.appendChild(el("span", "ph", t("pick")));
       clear.hidden = !current;
+      paintTime();
     }
 
     function set(wall) {
@@ -891,6 +1023,20 @@ export async function mount(container, ctx) {
       drawPop();
       onChange && onChange(current);
     }
+
+    hourSel.onchange = () => {
+      const day = dayOf(current);
+      const h = Number(hourSel.value);
+      const p = parts(current);
+      let wall = `${day}T${pad(h)}:${pad(p ? p.mi : 0)}`;
+      // The minute kept if it still fits that hour, the first one that does if not.
+      if (!allowed(wall)) {
+        const m = minutesOf(h).find((mm) => allowed(`${day}T${pad(h)}:${pad(mm)}`));
+        wall = `${day}T${pad(h)}:${pad(m ?? 0)}`;
+      }
+      set(wall);
+    };
+    minuteSel.onchange = () => set(`${dayOf(current)}T${pad(Number(hourSel.value))}:${pad(Number(minuteSel.value))}`);
 
     function drawPop() {
       if (pop.hidden) return;
@@ -917,31 +1063,17 @@ export async function mount(container, ctx) {
         if (current && dayOf(current) === day) b.classList.add("sel");
         if (lo() && dayOf(lo()) === day) b.classList.add("bound");
         b.onclick = () => {
-          const time = current ? current.slice(11) : (lo() ? lo().slice(11) : "08:00");
+          const time = current ? current.slice(11) : "08:00";
           let wall = `${day}T${time}`;
-          // The same day as the bound, at an hour before it: the first free
-          // half hour rather than a value the next click would have to fix.
-          if (!allowed(wall) && lo() && wall <= lo()) wall = addMinutes(lo(), STEP_MIN);
-          if (!allowed(wall) && hi() && wall >= hi()) wall = addMinutes(hi(), -STEP_MIN);
+          // The same day as the bound, at a time outside it: the nearest time
+          // that fits rather than a value the next click would have to fix.
+          if (!allowed(wall)) wall = (lo() && wall <= lo() ? firstAllowed(day) : lastAllowed(day)) ?? wall;
+          pop.hidden = true;
           set(wall);
         };
         cal.appendChild(b);
       }
       pop.appendChild(cal);
-
-      const times = el("div", "dt-times");
-      const day = current ? dayOf(current) : null;
-      for (let m = 0; m < 24 * 60; m += STEP_MIN) {
-        const hhmm = `${pad(Math.floor(m / 60))}:${pad(m % 60)}`;
-        const b = el("button", "", hhmm);
-        b.type = "button";
-        b.disabled = !day || !allowed(`${day}T${hhmm}`);
-        if (current && current.slice(11) === hhmm) b.classList.add("sel");
-        b.onclick = () => set(`${day}T${hhmm}`);
-        times.appendChild(b);
-      }
-      pop.appendChild(times);
-      queueMicrotask(() => times.querySelector(".sel, button:not(:disabled)")?.scrollIntoView({ block: "nearest" }));
     }
 
     trigger.onclick = () => {
@@ -956,6 +1088,8 @@ export async function mount(container, ctx) {
       el: wrap,
       get: () => current,
       set: (wall) => { current = wall; paint(); drawPop(); },
+      /** Redraw against bounds that moved. */
+      refresh: () => { paintTime(); drawPop(); },
     };
   }
 
@@ -979,7 +1113,7 @@ export async function mount(container, ctx) {
           box.type = "checkbox";
           box.value = gate.id;
           box.checked = ticked.includes(gate.id);
-          label.append(box, gate.openingLabel || gate.name);
+          label.append(box, gateLabel(gate.id));
           checks.appendChild(label);
           return box;
         });
@@ -1025,7 +1159,7 @@ export async function mount(container, ctx) {
             // Moving the start past the end carries the end along, keeping the
             // length — never leaving the two the wrong way round.
             if (fromValue && toValue && v >= toValue) {
-              toValue = addMinutes(v, Math.max(STEP_MIN, minutesBetween(fromValue, toValue)));
+              toValue = addMinutes(v, Math.max(MINUTE_STEP, minutesBetween(fromValue, toValue)));
               toPicker.set(toValue);
               shiftNote.hidden = false;
             } else if (!fromValue && toValue && v >= toValue) {
@@ -1034,6 +1168,7 @@ export async function mount(container, ctx) {
               shiftNote.hidden = false;
             }
             fromValue = v;
+            toPicker.refresh();
           },
         });
         const fromField = field(t("validFrom"), fromPicker.el);
@@ -1157,6 +1292,15 @@ export async function mount(container, ctx) {
   cleanup.push(() => document.removeEventListener("visibilitychange", onVisible));
 
   await load();
+
+  // Arriving from an equipment's own page (core spec 180 R1.6.ter): show that
+  // gate, or — when it has no list yet — offer to add it, already picked.
+  const wanted = ctx.params && ctx.params.equipment;
+  if (wanted && state.data) {
+    const gate = gates().find((g) => g.equipmentId === wanted);
+    if (gate) selectTab(gate.id);
+    else openAddGate(wanted);
+  }
 }
 
 export function unmount(container) {

@@ -20,14 +20,16 @@ describe("the state the page draws", () => {
     const body = response.body as Record<string, any>;
     expect(body.gates).toEqual([
       expect.objectContaining({
-        id: "main",
-        deviceId: "Accès invités",
-        gateState: "unknown",
-        openingLabel: null,
-        recipeAnswering: false,
+        id: h.firstGate.id,
+        equipmentId: "eq-portail",
+        name: "Portail d'entrée",
+        bound: true,
+        gateState: "closed",
         accesses: 0,
       }),
     ]);
+    expect(body.catalog).toEqual([{ id: "eq-portail", name: "Portail d'entrée", state: "closed", taken: true }]);
+    expect(body.recipe).toMatchObject({ answering: true, lastResult: null });
     expect(body.guestflow).toMatchObject({ configured: false, linked: false });
     expect(body.publicTree).toMatchObject({ open: true, path: "/p/guest-access/" });
   });
@@ -162,42 +164,53 @@ describe("what the page may do", () => {
 });
 
 describe("the gates", () => {
-  it("adds a gate, lists it, and refuses a nameless or duplicate one", async () => {
+  it("adds a gate for an equipment the recipe offered, and refuses the rest", async () => {
     const h = start();
-    const added = await h.admin("POST", "/gates", { body: { name: "Porte du garage" } });
+    h.gates.setCatalog([...h.gates.catalog(), { id: "eq-garage", name: "Porte du garage", state: "open" }]);
+    const added = await h.admin("POST", "/gates", { body: { equipmentId: "eq-garage" } });
     expect(added.status).toBe(201);
-    const gate = (added.body as { gate: { id: string; deviceId: string } }).gate;
-    expect(gate.deviceId).toBe("Accès partagés · Porte du garage");
+    const gate = (added.body as { gate: { id: string } }).gate;
 
     const body = (await h.admin("GET", "/state")).body as Record<string, any>;
-    expect(body.gates.map((g: any) => g.id)).toEqual(["main", gate.id]);
+    expect(body.gates.map((g: any) => g.name)).toEqual(["Portail d'entrée", "Porte du garage"]);
+    expect(body.catalog.every((e: any) => e.taken)).toBe(true);
 
-    expect((await h.admin("POST", "/gates", { body: { name: "  " } })).body).toMatchObject({ code: "required" });
-    expect((await h.admin("POST", "/gates", { body: { name: "Porte du garage" } })).body).toMatchObject({ code: "taken" });
+    expect((await h.admin("POST", "/gates", { body: {} })).body).toMatchObject({ code: "required" });
+    expect((await h.admin("POST", "/gates", { body: { equipmentId: "eq-lamp" } })).body).toMatchObject({ code: "unknown_equipment" });
+    expect((await h.admin("POST", "/gates", { body: { equipmentId: "eq-garage" } })).body).toMatchObject({ code: "taken" });
+    expect(gate.id).toBeTruthy();
+  });
+
+  it("re-points a gate whose equipment the house no longer has", async () => {
+    const h = start();
+    h.gates.setCatalog([{ id: "eq-new", name: "Nouveau portail", state: "closed" }]);
+    let body = (await h.admin("GET", "/state")).body as Record<string, any>;
+    expect(body.gates[0]).toMatchObject({ bound: false, gateState: "unknown" });
+
+    const patched = await h.admin("PATCH", `/gates/${h.firstGate.id}`, { body: { equipmentId: "eq-new" } });
+    expect(patched.status).toBe(200);
+    body = (await h.admin("GET", "/state")).body as Record<string, any>;
+    expect(body.gates[0]).toMatchObject({ id: h.firstGate.id, bound: true, name: "Nouveau portail" });
+    expect((await h.admin("PATCH", "/gates/nope", { body: { equipmentId: "eq-new" } })).status).toBe(404);
   });
 
   it("creates an access for the gates ticked, and refuses one that opens nothing", async () => {
     const h = start();
-    const garage = h.gates.add("Garage").record!;
-    const both = await h.admin("POST", "/accesses", { body: { label: "Léa", gates: [garage.id, "main"] } });
+    const garage = h.addGate("eq-garage", "Garage");
+    const both = await h.admin("POST", "/accesses", { body: { label: "Léa", gates: [garage.id, h.firstGate.id] } });
     // Stored in the house's order, whatever order the page sent.
-    expect((both.body as { access: { gates: string[] } }).access.gates).toEqual(["main", garage.id]);
+    expect((both.body as { access: { gates: string[] } }).access.gates).toEqual([h.firstGate.id, garage.id]);
 
     const none = await h.admin("POST", "/accesses", { body: { label: "Personne", gates: [] } });
     expect(none.status).toBe(422);
     expect(none.body).toMatchObject({ field: "gates", code: "no_gate" });
     const ghost = await h.admin("POST", "/accesses", { body: { label: "X", gates: ["nope"] } });
     expect(ghost.body).toMatchObject({ code: "unknown_gate" });
-
-    const body = (await h.admin("GET", "/state")).body as Record<string, any>;
-    expect(body.gates.map((g: any) => g.accesses)).toEqual([1, 1]);
   });
 
-  it("will not remove the last gate, nor the only gate of someone still able to open", async () => {
+  it("will not remove the only gate of someone still able to open", async () => {
     const h = start();
-    expect((await h.admin("DELETE", "/gates/main")).body).toMatchObject({ code: "last_gate" });
-
-    const garage = h.gates.add("Garage").record!;
+    const garage = h.addGate("eq-garage", "Garage");
     const plumber = h.service.createManual({ label: "Plombier", gates: [garage.id] }, "adrien").access!;
     expect((await h.admin("DELETE", `/gates/${garage.id}`)).body).toMatchObject({ code: "gate_in_use" });
 
@@ -206,5 +219,27 @@ describe("the gates", () => {
     expect((await h.admin("DELETE", `/gates/${garage.id}`)).status).toBe(200);
     expect(h.service.get(plumber.id)!.gates).toEqual([]);
     expect((await h.admin("DELETE", `/gates/${garage.id}`)).status).toBe(404);
+  });
+});
+
+describe("the line on the equipment's own page", () => {
+  it("counts who may open THIS gate right now, in the viewer's language", async () => {
+    const h = start();
+    const garage = h.addGate("eq-garage", "Garage");
+    h.service.createManual({ label: "Léa", gates: [h.firstGate.id, garage.id] }, "adrien");
+    h.service.createManual({ label: "Voisin" }, "adrien");
+    const held = h.service.createManual({ label: "Suspendu" }, "adrien").access!;
+    h.service.suspend(held.id, "adrien");
+
+    const fr = await h.admin("GET", "/equipment-link", { query: { equipmentId: "eq-portail" } });
+    expect(fr.body).toEqual({ text: "2 personnes peuvent ouvrir ce portail avec un code.", action: "Gérer les accès", gateId: h.firstGate.id });
+    const en = await h.admin("GET", "/equipment-link", { query: { equipmentId: "eq-garage", lang: "en" } });
+    expect(en.body).toMatchObject({ text: "1 person can open this gate with a code.", action: "Manage access" });
+  });
+
+  it("offers to give access on a gate that has no list yet", async () => {
+    const h = start();
+    const body = (await h.admin("GET", "/equipment-link", { query: { equipmentId: "eq-jardin" } })).body;
+    expect(body).toEqual({ text: "Personne n'a encore d'accès à ce portail.", action: "Ouvrir des accès", gateId: null });
   });
 });

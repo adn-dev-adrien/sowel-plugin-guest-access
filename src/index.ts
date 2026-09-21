@@ -16,8 +16,8 @@
  */
 
 import { AccessStore } from "./store.js";
-import type { GateState, RecipeOutcome } from "./gate.js";
-import { Gates } from "./gates.js";
+import { Gate, DEVICE_ID, type RecipeOutcome } from "./gate.js";
+import { Gates, parseCatalog } from "./gates.js";
 import { GuestAccessService } from "./service.js";
 import { GuestFlowConnector, type ConnectorConfig } from "./guestflow.js";
 import { createAdminApi } from "./admin-api.js";
@@ -79,7 +79,6 @@ const DEFAULT_POLL_SECONDS = 60;
 const PURGE_EVERY_MS = 6 * 60 * 60 * 1000;
 
 const OUTCOMES: RecipeOutcome[] = ["opened", "already_open", "refused", "error"];
-const GATE_STATES: GateState[] = ["open", "closed", "unknown"];
 
 /** `key` when the core passes a bare order key, `key`/`orderKey` with a dispatch config. */
 function orderKeyOf(orderKeyOrDispatchConfig: string | Record<string, unknown>): string {
@@ -99,6 +98,7 @@ class GuestAccessPlugin {
 
   private readonly deps: PluginDeps;
   private readonly store: AccessStore;
+  private readonly gate: Gate;
   private readonly gates: Gates;
   private readonly service: GuestAccessService;
   private readonly connector: GuestFlowConnector;
@@ -110,14 +110,15 @@ class GuestAccessPlugin {
   constructor(deps: PluginDeps) {
     this.deps = deps;
     this.store = new AccessStore(deps.dataDir, deps.logger);
-    this.gates = new Gates({
+    this.gate = new Gate({
       integrationId: INTEGRATION_ID,
       deviceManager: deps.deviceManager,
       logger: deps.logger,
-      store: this.store,
     });
+    this.gates = new Gates({ store: this.store, logger: deps.logger });
     this.service = new GuestAccessService({
       store: this.store,
+      gate: this.gate,
       gates: this.gates,
       logger: deps.logger,
       notifier: {
@@ -145,6 +146,7 @@ class GuestAccessPlugin {
     this.admin = createAdminApi({
       service: this.service,
       connector: this.connector,
+      gate: this.gate,
       gates: this.gates,
       guestBaseUrl: () => this.guestBaseUrl(),
       guestPath: () => this.guestPath(),
@@ -160,7 +162,7 @@ class GuestAccessPlugin {
       guestPath: () => this.guestPath(),
       openingLabel: () => {
         const all = this.gates.list();
-        return all.length === 1 ? all[0].gate.getOpeningLabel() : null;
+        return all.length === 1 ? this.gates.label(all[0].id) : null;
       },
       gateLabel: (id) => this.gates.label(id),
     });
@@ -222,7 +224,7 @@ class GuestAccessPlugin {
   }
 
   async start(): Promise<void> {
-    this.gates.start();
+    this.gate.start();
     this.started = true;
     this.connector.start(this.connectorConfig());
     this.service.publishSummary();
@@ -253,7 +255,7 @@ class GuestAccessPlugin {
 
   async stop(): Promise<void> {
     this.connector.stop();
-    this.gates.stop();
+    this.gate.stop();
     if (this.purgeTimer) clearInterval(this.purgeTimer);
     this.purgeTimer = null;
     this.started = false;
@@ -275,28 +277,21 @@ class GuestAccessPlugin {
     orderKeyOrDispatchConfig: string | Record<string, unknown>,
     value: unknown,
   ): Promise<void> {
-    // Each gate is its own device, so the device the core names is the gate
-    // the order is for. No device at all is the first gate, as it always was.
-    const gate =
-      device && device.sourceDeviceId
-        ? this.gates.byDevice(device.sourceDeviceId)
-        : this.gates.primary().gate;
-    if (!gate) throw new Error(`Unknown device: ${device.sourceDeviceId}`);
+    if (device && device.sourceDeviceId && device.sourceDeviceId !== DEVICE_ID) {
+      throw new Error(`Unknown device: ${device.sourceDeviceId}`);
+    }
     const key = orderKeyOf(orderKeyOrDispatchConfig);
     const text = typeof value === "string" ? value : String(value ?? "");
 
     if (key === "result") {
       if (!OUTCOMES.includes(text as RecipeOutcome)) throw new Error(`Unknown outcome: ${text}`);
-      gate.reportResult(text as RecipeOutcome);
+      this.gate.reportResult(text as RecipeOutcome);
       return;
     }
-    if (key === "gate_state") {
-      if (!GATE_STATES.includes(text as GateState)) throw new Error(`Unknown gate state: ${text}`);
-      gate.setGateState(text as GateState);
-      return;
-    }
-    if (key === "opening_label") {
-      gate.setOpeningLabel(text);
+    if (key === "gate_catalog") {
+      const entries = parseCatalog(text);
+      if (!entries) throw new Error("Unreadable gate catalogue");
+      this.gates.setCatalog(entries);
       return;
     }
     throw new Error(`Unsupported order: ${key || "(none)"}`);

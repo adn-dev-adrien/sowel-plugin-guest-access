@@ -42,23 +42,29 @@ export interface TimeWindow {
 /**
  * One thing that opens — a gate, a garage door — as the plugin knows it.
  *
- * Each is its own Sowel device, bound to its own equipment and driven by its
- * own instance of the recipe: the plugin still never touches what opens. The
- * id is the plugin's own and is what an access lists; the device id is what
- * the core files the device under (see `gate.ts`, DEVICE_ID).
+ * The owner picks it from the catalogue the recipe hands down (`CatalogEntry`),
+ * so it is an equipment of the house; the plugin still never touches it. The id
+ * is the plugin's own and is what an access lists, so re-pointing a gate at
+ * another equipment keeps every access on it.
  */
 export interface GateRecord {
   id: string;
-  deviceId: string;
-  /** The owner's word for it, until the recipe pushes the equipment's name. */
-  name: string;
+  /** The equipment it opens. Null on a gate carried over from before gates were picked. */
+  equipmentId: string | null;
+  /** A name to show while no equipment is known — the catalogue's name wins. */
+  name?: string;
   createdAt: string;
+}
+
+/** One gate of the house, as the recipe describes it. */
+export interface CatalogEntry {
+  id: string;
+  name: string;
+  state: "open" | "closed" | "unknown";
 }
 
 /** The gate every installation had before there could be several. */
 export const PRIMARY_GATE_ID = "main";
-/** A gate's name ends up in a device name and a tab, not a paragraph. */
-export const GATE_NAME_MAX = 40;
 
 export interface Access {
   id: string;

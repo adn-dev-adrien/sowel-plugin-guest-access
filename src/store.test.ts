@@ -134,17 +134,26 @@ describe("the store", () => {
     expect(store.countOpens(hourAgo)).toBe(3);
   });
 
-  it("reads a file from before gates were plural as one gate every access opens", () => {
+  it("reads a file from before gates as one gate, not yet pointed at an equipment", () => {
     const { gates: _dropped, ...old } = access();
     writeFileSync(resolve(dir, "accesses.json"), JSON.stringify({ version: 1, accesses: [old] }));
     const store = new AccessStore(dir, silent);
     expect(store.get("a1")?.gates).toEqual(["main"]);
-    expect(store.gates()).toEqual([]);
+    expect(store.gates()).toEqual([expect.objectContaining({ id: "main", equipmentId: null, name: "Accès invités" })]);
+  });
 
-    // Rewritten as version 2 on the next change, gates included.
-    store.saveGates([{ id: "main", deviceId: "Accès invités", name: "Accès invités", createdAt: "x" }]);
+  it("reads a version 2 file's gates, dropping the per-gate devices, and writes version 3", () => {
+    writeFileSync(resolve(dir, "accesses.json"), JSON.stringify({
+      version: 2,
+      gates: [{ id: "main", deviceId: "Accès invités", name: "Accès invités", createdAt: "x" }],
+      accesses: [access()],
+    }));
+    const store = new AccessStore(dir, silent);
+    expect(store.gates()).toEqual([{ id: "main", equipmentId: null, name: "Accès invités", createdAt: "x" }]);
+    store.saveCatalog([{ id: "eq-1", name: "Portail", state: "closed" }], "2026-09-21T10:00:00.000Z");
     const raw = JSON.parse(readFileSync(resolve(dir, "accesses.json"), "utf-8"));
-    expect(raw).toMatchObject({ version: 2, gates: [{ id: "main" }], accesses: [{ gates: ["main"] }] });
+    expect(raw).toMatchObject({ version: 3, catalog: { entries: [{ id: "eq-1" }] }, gates: [{ id: "main" }] });
+    expect(raw.gates[0].deviceId).toBeUndefined();
   });
 
   it("forgets a gate on every access that listed it", () => {
@@ -190,6 +199,6 @@ describe("the store", () => {
     store.insert(access());
     const raw = readFileSync(resolve(dir, "accesses.json"), "utf-8");
     expect(() => JSON.parse(raw)).not.toThrow();
-    expect(JSON.parse(raw)).toMatchObject({ version: 2 });
+    expect(JSON.parse(raw)).toMatchObject({ version: 3 });
   });
 });

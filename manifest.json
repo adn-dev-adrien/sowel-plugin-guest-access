@@ -2,7 +2,7 @@
   "id": "guest-access",
   "type": "integration",
   "name": "Shared Access",
-  "version": "1.3.0",
+  "version": "1.4.0",
   "description": "Let someone open something for a set time — a guest, a child, a tradesperson. Codes, hours and a journal, held in the house; guestFlow is an optional source of accesses.",
   "icon": "DoorOpen",
   "repo": "adn-dev-adrien/sowel-plugin-guest-access",
@@ -24,7 +24,12 @@
     "entry": "ui/panel.js",
     "label": "Accès partagés",
     "icon": "DoorOpen",
-    "placement": "main"
+    "placement": "main",
+    "equipmentLink": {
+      "types": [
+        "gate"
+      ]
+    }
   },
   "publicTree": true,
   "settings": [

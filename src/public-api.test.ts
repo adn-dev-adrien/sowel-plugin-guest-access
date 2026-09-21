@@ -2,6 +2,7 @@
 
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { rmSync } from "node:fs";
+import { parseCatalog } from "./gates.js";
 import { makeApiHarness, type ApiHarness } from "./apiFixtures.js";
 import { STAY } from "./serviceFixtures.js";
 
@@ -121,13 +122,15 @@ describe("setting a phone up", () => {
     }
   });
 
-  it("titles the page after what opens, once the recipe has named it", async () => {
+  it("titles the page after what opens, when the house has one gate", async () => {
     const h = start();
-    // Before the recipe says anything: a neutral word, never « Portail » for a
-    // house whose recipe drives a garage door.
+    // A gate carried over from before, pointed at nothing: a neutral word,
+    // never « Portail » for a house whose gate is a garage door.
+    h.gates.setCatalog([]);
     expect(String((await h.guest("GET", "/")).body)).toContain("<title>Accès</title>");
 
-    h.gate.setOpeningLabel("  Porte   du garage ");
+    // As the plugin receives it: through the order, which tidies the name.
+    h.gates.setCatalog(parseCatalog(JSON.stringify([{ id: "eq-portail", name: "  Porte   du garage ", state: "closed" }]))!);
     const page = String((await h.guest("GET", "/")).body);
     expect(page).toContain("<title>Porte du garage</title>");
     const manifest = JSON.parse(String((await h.guest("GET", "/manifest.webmanifest")).body));
@@ -138,7 +141,7 @@ describe("setting a phone up", () => {
     // The name travels from an admin's keyboard into a page anyone on the
     // internet loads: it is data, and it is printed as data.
     const h = start();
-    h.gate.setOpeningLabel(`<img src=x onerror=alert(1)>"'&`);
+    h.gates.setCatalog([{ id: "eq-portail", name: `<img src=x onerror=alert(1)>"'&`, state: "closed" }]);
     const page = String((await h.guest("GET", "/")).body);
     expect(page).not.toContain("<img src=x");
     expect(page).toContain("&lt;img src=x onerror=alert(1)&gt;&quot;&#39;&amp;");
@@ -175,7 +178,7 @@ describe("the session", () => {
   it("never hands out the gate's own state", async () => {
     const h = start();
     const { token } = await enrolled(h);
-    h.gate.setGateState("open");
+    h.gates.setCatalog([{ id: "eq-portail", name: "Portail d'entrée", state: "open" }]);
     const body = JSON.stringify((await h.guest("GET", "/session", { token })).body);
     // A page pollable by anyone holding a code must not say whether the gate
     // stands open 400 km away.
@@ -185,22 +188,20 @@ describe("the session", () => {
 
   it("lists the gates this access opens, by their equipment's names — and no others", async () => {
     const h = start();
-    const garage = h.gates.add("Garage").record!;
-    h.gates.get(garage.id)!.setOpeningLabel("Porte du garage");
-    h.gates.add("Cave");
-    const access = h.service.createManual({ label: "Léa", gates: ["main", garage.id] }, "adrien").access!;
+    const garage = h.addGate("eq-garage", "Porte du garage");
+    h.addGate("eq-cave", "Cave");
+    const access = h.service.createManual({ label: "Léa", gates: [h.firstGate.id, garage.id] }, "adrien").access!;
     const token = ((await h.guest("POST", "/enrol", { body: { code: access.code } })).body as { token: string }).token;
     const body = (await h.guest("GET", "/session", { token })).body as { gates: unknown };
     expect(body.gates).toEqual([
-      { id: "main", label: "Accès invités" },
+      { id: h.firstGate.id, label: "Portail d'entrée" },
       { id: garage.id, label: "Porte du garage" },
     ]);
   });
 
   it("does not name any door on the page before a code, once there are several", async () => {
     const h = start();
-    h.gate.setOpeningLabel("Portail d'entrée");
-    h.gates.add("Garage");
+    h.addGate("eq-garage", "Garage");
     expect(String((await h.guest("GET", "/")).body)).toContain("<title>Accès</title>");
   });
 
@@ -247,12 +248,11 @@ describe("pressing", () => {
 
   it("presses the gate named in the body", async () => {
     const h = start();
-    const garage = h.gates.add("Garage").record!;
-    const access = h.service.createManual({ label: "Léa", gates: ["main", garage.id] }, "adrien").access!;
+    const garage = h.addGate("eq-garage", "Garage");
+    const access = h.service.createManual({ label: "Léa", gates: [h.firstGate.id, garage.id] }, "adrien").access!;
     const token = ((await h.guest("POST", "/enrol", { body: { code: access.code } })).body as { token: string }).token;
     const pending = h.guest("POST", "/open", { token, body: { gate: garage.id } });
-    await new Promise((r) => setTimeout(r, 1));
-    h.gates.get(garage.id)!.reportResult("opened");
+    await h.answer("opened");
     expect((await pending).body).toEqual({ outcome: "opened" });
   });
 
