@@ -349,7 +349,9 @@ const CSS = `
 .ga .menu button:hover, .ga .menu button:focus-visible { background: var(--color-border-light, #eef1f4); }
 .ga .menu button.danger { color: var(--color-error, #b3261e); }
 .ga .menu hr { border: 0; border-top: 1px solid var(--color-border-light, #e5e9ed); margin: 4px; }
-.ga dialog { border: 0; border-radius: var(--radius-lg, 12px); padding: 0; background: var(--color-surface, #fff); color: inherit; max-width: 520px; width: calc(100vw - 32px); }
+/* margin: auto is what centres a modal dialog, and Sowel's reset sets every
+   margin to 0 — without this line each dialog opens in the top-left corner. */
+.ga dialog { border: 0; border-radius: var(--radius-lg, 12px); padding: 0; margin: auto; background: var(--color-surface, #fff); color: inherit; max-width: 520px; width: calc(100vw - 32px); max-height: calc(100dvh - 32px); overflow: auto; }
 .ga dialog::backdrop { background: rgba(0,0,0,.4); }
 .ga .sheet { padding: 18px; display: grid; gap: 14px; }
 .ga .field { display: grid; gap: 6px; }
@@ -381,7 +383,12 @@ const CSS = `
 .ga .dt-head { display: flex; justify-content: space-between; align-items: center; font-weight: 600; font-size: 13px; text-transform: capitalize; }
 .ga .dt-cal { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; text-align: center; font-size: 12px; margin-top: 4px; }
 .ga .dt-cal b { font-weight: 600; color: var(--color-text-tertiary, #9aa8b4); padding: 4px 0; }
-.ga .dt-cal button, .ga .dt-cal button:hover:not(:disabled), .ga .dt-cal button:focus-visible, .ga .dt-cal button:disabled, .ga .dt-cal button.sel, .ga .dt-cal button.bound { outline: 1px dashed var(--color-primary, #1A4F6E); }
+.ga .dt-cal button { all: unset; box-sizing: border-box; padding: 6px 0; border-radius: 6px; cursor: pointer; font-variant-numeric: tabular-nums; text-align: center; }
+.ga .dt-cal button:hover:not(:disabled) { background: var(--color-border-light, #eef1f4); }
+.ga .dt-cal button:focus-visible { outline: 2px solid var(--color-primary, #1A4F6E); }
+.ga .dt-cal button:disabled { color: var(--color-text-tertiary, #9aa8b4); opacity: .55; text-decoration: line-through; cursor: not-allowed; }
+.ga .dt-cal button.sel { background: var(--color-primary, #1A4F6E); color: #fff; opacity: 1; }
+.ga .dt-cal button.bound { outline: 1px dashed var(--color-primary, #1A4F6E); }
 .ga .hint { font-size: 12px; color: var(--color-text-secondary, #5c6b79); }
 .ga .journal { display: grid; gap: 6px; max-height: 360px; overflow: auto; }
 .ga .journal .line { display: flex; gap: 10px; font-size: 12px; }
@@ -1150,7 +1157,9 @@ export async function mount(container, ctx) {
         let toValue = toLocal(row && row.validUntil);
         const toPicker = dateTimePicker({
           value: toValue,
-          lower: () => fromPicker.get(),
+          // The start as last set — a plain value, not the other picker, which
+          // does not exist yet while this one draws itself the first time.
+          lower: () => fromValue,
           onChange: (v) => { toValue = v; shiftNote.hidden = true; },
         });
         const fromPicker = dateTimePicker({
