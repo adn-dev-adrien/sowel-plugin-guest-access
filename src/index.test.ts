@@ -108,7 +108,7 @@ describe("the plugin Sowel loads", () => {
     await plugin.stop();
   });
 
-  it("takes the recipe's two orders, and refuses anything else", async () => {
+  it("takes the recipe's three orders, and refuses anything else", async () => {
     const { plugin } = makePlugin();
     await plugin.start();
     // What the core really hands back: it files a discovered device under its
@@ -121,6 +121,13 @@ describe("the plugin Sowel loads", () => {
     };
 
     await expect(plugin.executeOrder(device, "gate_state", "open")).resolves.toBeUndefined();
+    // The name of what opens, pushed by the recipe from its own equipment.
+    await expect(plugin.executeOrder(device, "opening_label", "Portail d'entrée")).resolves.toBeUndefined();
+    const state = (await plugin.handlePageRequest({
+      method: "GET", path: "/state", query: {}, headers: {}, body: undefined,
+      user: { id: "u", username: "adrien", role: "admin" },
+    } as never)) as { body: { house: { openingLabel: string | null } } };
+    expect(state.body.house.openingLabel).toBe("Portail d'entrée");
     // An outcome with nothing in flight is dropped, not an error.
     await expect(plugin.executeOrder(device, "result", "opened")).resolves.toBeUndefined();
 

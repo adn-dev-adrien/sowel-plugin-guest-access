@@ -18,7 +18,7 @@ import { effectiveWindow } from "./validity.js";
 import {
   GUEST_CSS,
   GUEST_ICON,
-  GUEST_MANIFEST,
+  guestManifest,
   guestHtml,
   guestJs,
   pickLang,
@@ -29,9 +29,20 @@ export interface PublicDeps {
   service: GuestAccessService;
   guestBaseUrl(): string | null;
   guestPath(): string;
+  /** The name of what opens, as the recipe last pushed it (null until then). */
+  openingLabel?(): string | null;
 }
 
 const NO_STORE = { "cache-control": "no-store" };
+
+/** Holding an answer back. Capped by the service, well under the core's 30 s. */
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    const timer = setTimeout(resolve, ms);
+    // A held answer must never be the reason a shutdown hangs.
+    timer.unref?.();
+  });
+}
 
 function json(status: number, body: unknown): PluginHttpResponse {
   return { status, body, headers: NO_STORE };
@@ -68,7 +79,7 @@ export function createPublicApi(deps: PublicDeps) {
     if (method === "GET" && (path === "/" || path === "")) {
       return {
         status: 200,
-        body: guestHtml(lang),
+        body: guestHtml(lang, deps.openingLabel?.() ?? null),
         contentType: "text/html; charset=utf-8",
         headers: {
           ...NO_STORE,
@@ -80,13 +91,22 @@ export function createPublicApi(deps: PublicDeps) {
     }
 
     if (method === "GET" && path === "/app.js") {
-      return { status: 200, body: guestJs(lang), contentType: "text/javascript; charset=utf-8", headers: NO_STORE };
+      return {
+        status: 200,
+        body: guestJs(lang, deps.openingLabel?.() ?? null),
+        contentType: "text/javascript; charset=utf-8",
+        headers: NO_STORE,
+      };
     }
     if (method === "GET" && path === "/style.css") {
       return { status: 200, body: GUEST_CSS, contentType: "text/css; charset=utf-8" };
     }
     if (method === "GET" && path === "/manifest.webmanifest") {
-      return { status: 200, body: GUEST_MANIFEST, contentType: "application/manifest+json" };
+      return {
+        status: 200,
+        body: guestManifest(lang, deps.openingLabel?.() ?? null),
+        contentType: "application/manifest+json",
+      };
     }
     if (method === "GET" && path === "/icon.svg") {
       return { status: 200, body: GUEST_ICON, contentType: "image/svg+xml" };
@@ -100,6 +120,11 @@ export function createPublicApi(deps: PublicDeps) {
         request.headers["user-agent"] ?? "",
       );
       if (!result.ok || !result.access) {
+        // The answer is held back before it is sent, never the request before
+        // it is answered: the work is already done, what is rationed is the
+        // rate at which a guesser learns anything. A correct code never carries
+        // a delay, so no guest ever waits (service.enrol).
+        if (result.delayMs) await sleep(result.delayMs);
         // 401 for a code that matches nothing, deliberately: that is the status
         // a brute-force ban counts on at the edge. The others are told apart
         // because the guest can act on them differently.

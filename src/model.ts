@@ -88,6 +88,7 @@ export type JournalKind =
   | "refused"
   | "failed"
   | "bad_code"
+  | "guessing"
   | "stay_updated"
   | "stay_cancelled";
 
@@ -127,8 +128,22 @@ export const CODE_LENGTH = 8;
 /** Ceilings, per spec §6. Counted per access and across the gate. */
 export const MAX_OPENS_PER_ACCESS_PER_HOUR = 12;
 export const MAX_OPENS_PER_GATE_PER_HOUR = 30;
-export const MAX_ENROL_ATTEMPTS_PER_IP = 5;
-export const ENROL_ATTEMPT_WINDOW_MS = 10 * 60 * 1000;
+/**
+ * The anti-guessing budget, counted on FAILURES and counted GLOBALLY.
+ *
+ * Not per IP, and that is not a simplification: behind a reverse proxy — which
+ * is where this page is always served from — the plugin is handed the proxy's
+ * address, never the visitor's. « Five tries per IP » therefore meant five
+ * tries for the whole internet, and five wrong codes from anywhere shut every
+ * guest out for ten minutes. Counting failures globally is honest about what
+ * can actually be measured, and a correct code is never subject to it.
+ */
+export const ENROL_FAILURE_BUDGET = 10;
+export const ENROL_FAILURE_WINDOW_MS = 10 * 60 * 1000;
+/** Past the budget, a FAILING answer is held back: 1 s, 2, 4, 8, then this. */
+export const ENROL_DELAY_MAX_MS = 10 * 1000;
+/** Failures in the window past which the owner is told someone is trying. */
+export const ENROL_ALERT_AT = 25;
 export const CODE_LOCK_AFTER_FAILURES = 10;
 export const CODE_LOCK_MS = 60 * 60 * 1000;
 

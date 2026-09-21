@@ -1,5 +1,5 @@
 /**
- * « Accès invités » — the owner's page, inside Sowel (core spec 180).
+ * « Accès partagés » — the owner's page, inside Sowel (core spec 180).
  *
  * Plain DOM: this module is imported by Sowel's SPA and handed a container and
  * a context. It styles itself with Sowel's own design tokens, so it follows the
@@ -12,18 +12,18 @@
 
 const S = {
   fr: {
-    title: "Accès invités",
-    subtitle: "Qui peut ouvrir le portail, et jusqu'à quand.",
-    houseGate: "Portail",
+    title: "Accès partagés",
+    subtitle: "Qui peut ouvrir, et jusqu'à quand.",
+    houseGate: "Ouverture",
     gate_open: "ouvert",
     gate_closed: "fermé",
     gate_unknown: "état inconnu",
-    recipeMissing: "Aucune recette n'a encore répondu — vérifiez que « Accès invités au portail » est liée à cet équipement.",
-    doorOpen: "Page des clients ouverte",
-    doorShut: "Page des clients fermée",
-    doorShutHelp: "Ouvrez « Accès public » dans Plugins → Accès invités, sinon le lien des clients répond 404.",
-    noGuestUrl: "Adresse publique de Sowel non renseignée : les liens d'invitation ne peuvent pas être fabriqués (Réglages du plugin).",
-    aliasNote: "Les clients reçoivent {link} — ce nom doit réécrire tout son arbre vers {tree}, pas seulement sa racine, sinon la page s'affiche sans style et les boutons ne répondent pas.",
+    recipeMissing: "Aucune recette n'a encore répondu — vérifiez que la recette « Accès partagés » est liée à cet équipement.",
+    doorOpen: "Page d'ouverture en ligne",
+    doorShut: "Page d'ouverture fermée",
+    doorShutHelp: "Ouvrez « Accès public » dans Plugins → Accès partagés, sinon les liens répondent 404.",
+    noGuestUrl: "Adresse publique de Sowel non renseignée : les liens d'accès ne peuvent pas être fabriqués (Réglages du plugin).",
+    aliasNote: "Les liens pointent vers {link} — ce nom doit réécrire tout son arbre vers {tree}, pas seulement sa racine, sinon la page s'affiche sans style et les boutons ne répondent pas.",
     guestflowOff: "Aucun guestFlow configuré — les accès sont créés à la main.",
     guestflowOk: "guestFlow synchronisé",
     guestflowKo: "guestFlow injoignable",
@@ -97,7 +97,7 @@ const S = {
     kind_invitation: "nouvelle invitation",
     kind_regenerated: "régénéré",
     kind_enrolled: "téléphone configuré",
-    kind_opened: "portail actionné",
+    kind_opened: "ouverture commandée",
     kind_refused: "refusé",
     kind_failed: "échec",
     kind_bad_code: "code incorrect",
@@ -105,18 +105,18 @@ const S = {
     kind_stay_cancelled: "séjour annulé",
   },
   en: {
-    title: "Guest access",
-    subtitle: "Who may open the gate, and until when.",
-    houseGate: "Gate",
+    title: "Shared access",
+    subtitle: "Who may open, and until when.",
+    houseGate: "Opening",
     gate_open: "open",
     gate_closed: "closed",
     gate_unknown: "state unknown",
-    recipeMissing: "No recipe has answered yet — check that « Guest gate access » is bound to this equipment.",
-    doorOpen: "Guests' page is open",
-    doorShut: "Guests' page is shut",
-    doorShutHelp: "Open « Public access » in Plugins → Guest access, or the guests' link answers 404.",
-    noGuestUrl: "Sowel's public address is not set: invitation links cannot be built (plugin settings).",
-    aliasNote: "Guests are given {link} — that name must rewrite its whole tree onto {tree}, not just its root, or the page loads without its style and its buttons do nothing.",
+    recipeMissing: "No recipe has answered yet — check that the « Shared access » recipe is bound to this equipment.",
+    doorOpen: "Opening page is online",
+    doorShut: "Opening page is shut",
+    doorShutHelp: "Open « Public access » in Plugins → Shared access, or the links answer 404.",
+    noGuestUrl: "Sowel's public address is not set: access links cannot be built (plugin settings).",
+    aliasNote: "Links point to {link} — that name must rewrite its whole tree onto {tree}, not just its root, or the page loads without its style and its buttons do nothing.",
     guestflowOff: "No guestFlow configured — accesses are made by hand.",
     guestflowOk: "guestFlow in step",
     guestflowKo: "guestFlow unreachable",
@@ -190,7 +190,7 @@ const S = {
     kind_invitation: "new invitation",
     kind_regenerated: "regenerated",
     kind_enrolled: "phone set up",
-    kind_opened: "gate operated",
+    kind_opened: "opening sent",
     kind_refused: "refused",
     kind_failed: "failed",
     kind_bad_code: "wrong code",
@@ -332,7 +332,7 @@ export async function mount(container, ctx) {
     gate.className = "chip";
     gate.setAttribute("aria-pressed", "false");
     gate.innerHTML = `<span class="dot ${data.house.gateState === "unknown" ? "" : "ok"}"></span>`;
-    gate.append(`${t("houseGate")} · ${t(`gate_${data.house.gateState}`)}`);
+    gate.append(`${data.house.openingLabel || t("houseGate")} · ${t(`gate_${data.house.gateState}`)}`);
     houseLine.appendChild(gate);
 
     const door = document.createElement("span");

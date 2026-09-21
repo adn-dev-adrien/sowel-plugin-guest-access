@@ -17,6 +17,8 @@ export interface Harness {
   gate: Gate;
   dir: string;
   notified: Access[];
+  /** Failure counts the owner was alerted with (spec §4 — the guessing alert). */
+  guessing: number[];
   /** Answer the press the way the recipe would, once it is in flight. */
   answer(outcome: "opened" | "refused" | "error"): Promise<void>;
 }
@@ -36,7 +38,11 @@ export function makeHarness(opts: { answerMs?: number } = {}): Harness {
   });
   gate.start();
   const notified: Access[] = [];
-  const notifier: Notifier = { devicesOverNotice: (a) => notified.push(a) };
+  const guessing: number[] = [];
+  const notifier: Notifier = {
+    devicesOverNotice: (a) => notified.push(a),
+    guessingDetected: (failures) => guessing.push(failures),
+  };
   const service = new GuestAccessService({ store, gate, logger: silent, notifier });
 
   return {
@@ -45,6 +51,7 @@ export function makeHarness(opts: { answerMs?: number } = {}): Harness {
     gate,
     dir,
     notified,
+    guessing,
     async answer(outcome) {
       // Let the press reach the gate before the recipe answers it.
       await new Promise((r) => setTimeout(r, 1));

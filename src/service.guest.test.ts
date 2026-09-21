@@ -33,16 +33,41 @@ describe("setting a phone up", () => {
     expect(JSON.stringify(line)).not.toContain("NOPENOPE");
   });
 
-  it("stops after five attempts from one address", () => {
+  it("never refuses a correct code, whatever anyone else has been trying", () => {
+    // The property the old per-address throttle got backwards. Behind a reverse
+    // proxy every visitor arrives under the same address, so five wrong codes
+    // from anyone shut out every guest for ten minutes — a denial of service
+    // handed to whoever could POST five times.
     const { service } = start();
-    for (let i = 0; i < 5; i++) service.enrol("NOPENOPE", "1.2.3.4", "iPhone", DURING);
-    expect(service.enrol("NOPENOPE", "1.2.3.4", "iPhone", DURING)).toMatchObject({
-      reason: "too_many_attempts",
-    });
-    // Another phone, another address: not punished for someone else's guessing.
-    expect(service.enrol("NOPENOPE", "5.6.7.8", "iPhone", DURING)).toMatchObject({
-      reason: "bad_code",
-    });
+    const access = service.applyStay(STAY, DURING).access!;
+    for (let i = 0; i < 40; i++) service.enrol(`NOPE${String(i).padStart(4, "0")}`, "1.2.3.4", "x", DURING);
+
+    const result = service.enrol(access.code!, "1.2.3.4", "iPhone", DURING);
+    expect(result.ok).toBe(true);
+    expect(result.delayMs).toBeUndefined();
+  });
+
+  it("holds a failing answer back, doubling, once the budget is spent", () => {
+    const { service } = start();
+    const delays: number[] = [];
+    for (let i = 0; i < 14; i++) {
+      const r = service.enrol(`NOPE${String(i).padStart(4, "0")}`, "1.2.3.4", "x", DURING);
+      delays.push(r.delayMs ?? 0);
+    }
+    // Ten free, then 1 s, 2 s, 4 s, 8 s — and never past the cap.
+    expect(delays.slice(0, 10)).toEqual([0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
+    expect(delays.slice(10)).toEqual([1000, 2000, 4000, 8000]);
+    expect(Math.max(...delays)).toBeLessThanOrEqual(10000);
+  });
+
+  it("tells the owner when someone is working through codes, once", () => {
+    const { service, guessing } = start();
+    for (let i = 0; i < 40; i++) service.enrol(`NOPE${String(i).padStart(4, "0")}`, "1.2.3.4", "x", DURING);
+    // Once per window, not once per wrong code: an alert that repeats forty
+    // times is an alert nobody reads to the end.
+    expect(guessing).toHaveLength(1);
+    expect(guessing[0]).toBeGreaterThanOrEqual(25);
+    expect(service.journal().some((l) => l.kind === "guessing")).toBe(true);
   });
 
   it("locks a code that has been guessed at ten times, from wherever", () => {

@@ -1,6 +1,6 @@
 // The guest's surface — the one an anonymous caller on the internet reaches.
 
-import { describe, it, expect, afterEach } from "vitest";
+import { describe, it, expect, vi, afterEach } from "vitest";
 import { rmSync } from "node:fs";
 import { makeApiHarness, type ApiHarness } from "./apiFixtures.js";
 import { STAY } from "./serviceFixtures.js";
@@ -86,12 +86,65 @@ describe("setting a phone up", () => {
     expect(response.body).toEqual({ reason: "bad_code" });
   });
 
-  it("answers 429 once an address has tried five times", async () => {
+  it("still serves the right code after a run of wrong ones, and without waiting", async () => {
+    // The page is always reached through a reverse proxy, so every visitor
+    // arrives under one address and a throttle keyed on it punishes the wrong
+    // people. What is rationed here is a FAILING answer; a correct code is
+    // answered at once, however many others have been tried.
     const h = start();
-    for (let i = 0; i < 5; i++) await h.guest("POST", "/enrol", { body: { code: "NOPENOPE" } });
-    const response = await h.guest("POST", "/enrol", { body: { code: "NOPENOPE" } });
-    expect(response.status).toBe(429);
-    expect(response.body).toEqual({ reason: "too_many_attempts" });
+    const access = h.service.applyStay(liveStay()).access!;
+    // Spend the budget well past its end through the service itself: going
+    // through the HTTP surface would make this test sit out every held answer.
+    for (let i = 0; i < 14; i++) h.service.enrol(`NOPE${String(i).padStart(4, "0")}`, "1.2.3.4", "x");
+    const began = Date.now();
+    const response = await h.guest("POST", "/enrol", { body: { code: access.code } });
+    expect(response.status).toBe(200);
+    expect(Date.now() - began).toBeLessThan(500);
+  });
+
+  it("holds a failing answer back once the budget is spent", async () => {
+    vi.useFakeTimers();
+    try {
+      const h = start();
+      for (let i = 0; i < 10; i++) h.service.enrol(`NOPE${String(i).padStart(4, "0")}`, "1.2.3.4", "x");
+      let settled = false;
+      const pending = h.guest("POST", "/enrol", { body: { code: "NOPE9999" } }).then((r) => {
+        settled = true;
+        return r;
+      });
+      await vi.advanceTimersByTimeAsync(900);
+      expect(settled).toBe(false);          // the 11th failure waits a second
+      await vi.advanceTimersByTimeAsync(200);
+      expect((await pending).status).toBe(401);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("titles the page after what opens, once the recipe has named it", async () => {
+    const h = start();
+    // Before the recipe says anything: a neutral word, never « Portail » for a
+    // house whose recipe drives a garage door.
+    expect(String((await h.guest("GET", "/")).body)).toContain("<title>Accès</title>");
+
+    h.gate.setOpeningLabel("  Porte   du garage ");
+    const page = String((await h.guest("GET", "/")).body);
+    expect(page).toContain("<title>Porte du garage</title>");
+    const manifest = JSON.parse(String((await h.guest("GET", "/manifest.webmanifest")).body));
+    expect(manifest.name).toBe("Porte du garage");
+  });
+
+  it("escapes the equipment's name, which anyone administering the house can set", async () => {
+    // The name travels from an admin's keyboard into a page anyone on the
+    // internet loads: it is data, and it is printed as data.
+    const h = start();
+    h.gate.setOpeningLabel(`<img src=x onerror=alert(1)>"'&`);
+    const page = String((await h.guest("GET", "/")).body);
+    expect(page).not.toContain("<img src=x");
+    expect(page).toContain("&lt;img src=x onerror=alert(1)&gt;&quot;&#39;&amp;");
+    const script = String((await h.guest("GET", "/app.js")).body);
+    // In the script it rides as a JSON string literal, which is its escaping.
+    expect(script).toContain(JSON.stringify(`<img src=x onerror=alert(1)>"'&`));
   });
 
   it("answers 403 on an access that was withdrawn or has ended", async () => {

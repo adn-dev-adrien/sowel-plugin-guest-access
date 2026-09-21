@@ -54,6 +54,8 @@ export type PressOutcome = "opened" | RefusalReason;
  */
 export const DEVICE_ID = "Accès invités";
 export const REQUESTS_KEY = "requests";
+/** An equipment name, not a paragraph — and it ends up in a page title. */
+export const OPENING_LABEL_MAX = 60;
 
 /** How long the phone waits for the house to answer before being told nothing came. */
 const DEFAULT_ANSWER_MS = 10_000;
@@ -101,6 +103,10 @@ export function describeDevice(): Record<string, unknown> {
         category: "generic",
         enumValues: ["open", "closed", "unknown"],
       },
+      // What opens, by the name its owner gave the equipment. Additive: an
+      // equipment bound before this order existed simply never receives it,
+      // and the page keeps its neutral word.
+      { key: "opening_label", type: "text", category: "generic" },
     ],
   };
 }
@@ -133,6 +139,7 @@ export class Gate {
   private inFlight: InFlight | null = null;
   private queue = 0;
   private gateState: GateState = "unknown";
+  private openingLabel: string | null = null;
   private lastResult: string | null = null;
   private started = false;
 
@@ -186,6 +193,24 @@ export class Gate {
 
   getGateState(): GateState {
     return this.gateState;
+  }
+
+  /**
+   * The name of what opens — « Portail », « Porte du garage » — pushed down by
+   * the recipe, which is the only one that knows which equipment it drives.
+   *
+   * Not a setting: an owner who renames the equipment would otherwise have to
+   * rename it twice, and the second place is the one nobody remembers. The
+   * plugin still learns nothing about equipments; it is handed a string.
+   */
+  setOpeningLabel(raw: string): void {
+    const label = raw.replace(/\s+/g, " ").trim().slice(0, OPENING_LABEL_MAX);
+    this.openingLabel = label || null;
+  }
+
+  /** Null until the recipe has said — the page then falls back to a neutral word. */
+  getOpeningLabel(): string | null {
+    return this.openingLabel;
   }
 
   publishSummary(summary: { activeAccesses: number; guestflowLinked: boolean }): void {

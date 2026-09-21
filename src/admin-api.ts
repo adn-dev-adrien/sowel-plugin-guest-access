@@ -117,6 +117,8 @@ export function createAdminApi(deps: AdminDeps) {
         // label of a button that names a direction is a state display wearing
         // a verb — but the owner does.
         gateState: gate.getGateState(),
+        // What opens, by the equipment's own name — null until the recipe says.
+        openingLabel: gate.getOpeningLabel(),
         lastResult: gate.getLastResult(),
         recipeAnswering: gate.getLastResult() !== null,
       },

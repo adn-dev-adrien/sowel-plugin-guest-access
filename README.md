@@ -1,11 +1,22 @@
-# Sowel Plugin — Accès invités
+# Sowel Plugin — Accès partagés
 
-L'accès au portail des clients du gîte et de la lodge, **tenu par la maison**. Les accès, leurs
-codes, leurs horaires et leur journal vivent ici ; la page de gestion est une page de Sowel, la page
-des clients est servie par Sowel, et **guestFlow n'est qu'une source de séjours** — facultative.
+**Donner à quelqu'un le droit d'ouvrir, pour un temps donné** — et le lui reprendre. Votre enfant
+qui rentre du collège, l'artisan qui vient mardi, la voisine qui arrose pendant les vacances, les
+clients d'un gîte : chacun reçoit un code ou un lien, l'ouvre sur son téléphone et glisse pour
+ouvrir. Vous voyez qui a ouvert et quand, vous suspendez ou retirez un accès en un clic.
+
+Tout est **tenu par la maison** : les accès, leurs codes, leurs horaires et leur journal vivent ici ;
+la page de gestion est une page de Sowel, la page d'ouverture est servie par Sowel. Rien ne dépend
+d'un service extérieur. Un logiciel de réservation comme guestFlow peut *alimenter* les accès
+automatiquement, mais c'est facultatif.
 
 La recette [`sowel-recipe-guest-gate`](https://github.com/adn-dev-adrien/sowel-recipe-guest-gate)
-reste ce qui décide et actionne : ce plugin ne touche toujours pas au portail.
+reste ce qui décide et actionne : ce plugin ne touche jamais lui-même au portail ou à la porte. La
+page d'ouverture porte le nom de l'équipement que la recette pilote — « Portail », « Porte du
+garage »… — et le suit si vous le renommez.
+
+> L'identifiant technique reste `guest-access`, et le device « Accès invités » : les changer
+> orphelinerait les réglages, les données et les équipements d'une installation existante.
 
 ## Ce qui a changé, et pourquoi
 
@@ -15,12 +26,12 @@ Internet, et un jeton d'API Sowel actionne *tous* les équipements de la maison,
 — mais elle mettait le cerveau du côté du logiciel de réservation.
 
 La v1 retourne la question plutôt que de la contourner : **c'est la maison qui décide, et personne ne
-détient de jeton.** Le téléphone du client parle à l'arbre public de Sowel (spec 180 du cœur), ce
+détient de jeton.** Le téléphone du visiteur parle à l'arbre public de Sowel (spec 180 du cœur), ce
 plugin applique les règles, la recette tient la gâchette. guestFlow, lui, n'ouvre aucune connexion
 vers ici et n'a plus rien à décider.
 
 Conséquence recherchée : **tout continue de fonctionner sans guestFlow.** Arrêtez-le, changez de
-logiciel de réservation, ou n'en ayez jamais eu : les accès se créent à la main, les clients entrent,
+logiciel de réservation, ou n'en ayez jamais eu : les accès se créent à la main, les visiteurs entrent,
 le journal se remplit.
 
 ## Les trois surfaces

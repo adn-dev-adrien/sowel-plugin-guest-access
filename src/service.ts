@@ -15,9 +15,11 @@ import type { Access, AccessDevice, JournalEntry, RefusalReason, TimeWindow } fr
 import {
   CODE_LOCK_AFTER_FAILURES,
   CODE_LOCK_MS,
+  ENROL_ALERT_AT,
+  ENROL_DELAY_MAX_MS,
+  ENROL_FAILURE_BUDGET,
+  ENROL_FAILURE_WINDOW_MS,
   DEVICE_COUNT_NOTICE,
-  ENROL_ATTEMPT_WINDOW_MS,
-  MAX_ENROL_ATTEMPTS_PER_IP,
 } from "./model.js";
 import { formatCode, generateCode, generateDeviceToken, hashToken, normalizeCode, randomId } from "./codes.js";
 import { AccessStore } from "./store.js";
@@ -57,14 +59,24 @@ export interface StayFeedItem {
 
 export interface EnrolResult {
   ok: boolean;
-  reason?: "bad_code" | "locked" | "too_many_attempts" | "revoked" | "expired";
+  reason?: "bad_code" | "locked" | "revoked" | "expired";
   token?: string;
   access?: Access;
+  /**
+   * How long the caller must hold this answer back before sending it.
+   *
+   * Only ever set on a FAILURE. The service stays synchronous — the waiting is
+   * the transport's job — and a correct code never carries one.
+   */
+  delayMs?: number;
 }
 
 export interface Notifier {
   /** Fired when an access passes six phones. Information, never a block. */
   devicesOverNotice(access: Access): void;
+  /** Someone is working through codes. Information, and the only way the owner
+   *  ever learns it: nothing else about a wrong code leaves the journal. */
+  guessingDetected?(failures: number, windowMinutes: number): void;
 }
 
 export class GuestAccessService {
@@ -72,10 +84,12 @@ export class GuestAccessService {
   private readonly gate: Gate;
   private readonly logger: ServiceLogger;
   private readonly notifier: Notifier | null;
-  /** Failed enrolments, per IP and per submitted code. In memory: a restart
-   *  clearing them costs one attempt window, and persisting them would mean
-   *  writing a file on every wrong keystroke. */
-  private readonly attemptsByIp = new Map<string, number[]>();
+  /** Failed enrolments: all of them, and per submitted code. In memory — a
+   *  restart clearing them costs one window, and persisting them would mean
+   *  writing a file on every wrong keystroke. The per-IP map that used to sit
+   *  here is gone: see ENROL_FAILURE_BUDGET for why it measured nothing. */
+  private failures: number[] = [];
+  private alertedAt = 0;
   private readonly failuresByCode = new Map<string, number[]>();
 
   constructor(opts: {
@@ -371,19 +385,26 @@ export class GuestAccessService {
   // ── The guest ──────────────────────────────────────────────
 
   /** A phone being set up, from a code typed or carried by the link. */
-  enrol(code: string, ip: string, userAgent: string, now = new Date()): EnrolResult {
-    if (this.tooManyAttempts(ip, now)) return { ok: false, reason: "too_many_attempts" };
-
+  enrol(code: string, _ip: string, userAgent: string, now = new Date()): EnrolResult {
+    // The code is looked up FIRST, and the budget only ever reaches a failure.
+    //
+    // The order is the whole protection. To benefit from skipping the budget
+    // you must already hold a working code — which is to say, not be guessing.
+    // The reverse order is what let five wrong codes, from anywhere, refuse
+    // every legitimate guest for ten minutes.
     const candidate = normalizeCode(code);
-    if (this.codeLocked(candidate, now)) return { ok: false, reason: "locked" };
 
     const access = candidate ? this.store.findByCode(candidate) : undefined;
     if (!access) {
-      this.noteFailure(ip, candidate, now);
+      if (this.codeLocked(candidate, now)) {
+        return { ok: false, reason: "locked", delayMs: this.failureDelayMs(now) };
+      }
+      const delayMs = this.failureDelayMs(now);
+      this.noteFailure(candidate, now);
       // Journalled without the code: what is worth knowing is that someone is
       // trying, not what they tried.
       this.store.record({ at: now.toISOString(), accessId: null, label: "—", kind: "bad_code", actor: "guest" });
-      return { ok: false, reason: "bad_code" };
+      return { ok: false, reason: "bad_code", delayMs };
     }
 
     if (access.revokedAt) return { ok: false, reason: "revoked" };
@@ -522,11 +543,21 @@ export class GuestAccessService {
     this.store.record({ accessId: access.id, label: access.label, kind, ...extra });
   }
 
-  private tooManyAttempts(ip: string, now: Date): boolean {
-    const from = now.getTime() - ENROL_ATTEMPT_WINDOW_MS;
-    const attempts = (this.attemptsByIp.get(ip) ?? []).filter((t) => t >= from);
-    this.attemptsByIp.set(ip, attempts);
-    return attempts.length >= MAX_ENROL_ATTEMPTS_PER_IP;
+  /**
+   * How long a FAILING answer is held back, given the failures already in the
+   * window. Doubling, capped — and capped well under the 30 s the core allows a
+   * public call, so a held answer is never mistaken for a plugin that hung.
+   */
+  private failureDelayMs(now: Date): number {
+    const over = this.recentFailures(now).length - ENROL_FAILURE_BUDGET;
+    if (over < 0) return 0;
+    return Math.min(ENROL_DELAY_MAX_MS, 1000 * Math.pow(2, over));
+  }
+
+  private recentFailures(now: Date): number[] {
+    const from = now.getTime() - ENROL_FAILURE_WINDOW_MS;
+    this.failures = this.failures.filter((t) => t >= from);
+    return this.failures;
   }
 
   private codeLocked(code: string, now: Date): boolean {
@@ -537,10 +568,21 @@ export class GuestAccessService {
     return failures.length >= CODE_LOCK_AFTER_FAILURES;
   }
 
-  private noteFailure(ip: string, code: string, now: Date): void {
+  private noteFailure(code: string, now: Date): void {
     const at = now.getTime();
-    this.attemptsByIp.set(ip, [...(this.attemptsByIp.get(ip) ?? []), at]);
+    this.recentFailures(now).push(at);
     if (code) this.failuresByCode.set(code, [...(this.failuresByCode.get(code) ?? []), at]);
+
+    // Told once per window, not once per wrong code: an alert that repeats
+    // forty times is an alert nobody reads to the end.
+    const count = this.failures.length;
+    if (count >= ENROL_ALERT_AT && at - this.alertedAt > ENROL_FAILURE_WINDOW_MS) {
+      this.alertedAt = at;
+      this.store.record({
+        at: now.toISOString(), accessId: null, label: "—", kind: "guessing", actor: "guest",
+      });
+      this.notifier?.guessingDetected?.(count, Math.round(ENROL_FAILURE_WINDOW_MS / 60000));
+    }
   }
 
   /** The invitation, as every surface shows it. */

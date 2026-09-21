@@ -90,6 +90,16 @@ Sowel and the guests a page of their own, and treats guestFlow as one optional s
 10. **Time windows apply every day**, may not cross midnight and may not overlap — two overlapping
     rules make the effective one unguessable. A press outside them is told **when the next one opens**.
 11. **Ceilings at both levels**: 12 opens per hour per access, 30 per hour for the gate.
+11.bis **A correct code is never refused by the anti-guessing budget.** Enrolment looks the code up
+    *first* and only ever counts failures. The budget is **global** — ten failures in ten minutes,
+    then every *failing* answer is held back 1 s, 2 s, 4 s, 8 s, capped at 10 s — and past 25
+    failures in the window the owner is told once (journal kind `guessing`, and a notification).
+    Not per IP, deliberately: the page is always served through a reverse proxy, so the plugin is
+    handed the proxy's address and never the visitor's. The per-IP counter this replaces therefore
+    counted the whole internet as one caller, and five wrong codes from anywhere refused every
+    legitimate guest for ten minutes — proven on a running Sowel on 2026-09-21. The arithmetic that
+    makes this enough: 32⁸ ≈ 1.1 × 10¹² codes; with 20 live accesses a guess succeeds once in ~55
+    billion, and at a sustained 100 guesses a second a coin-flip's chance takes about twelve years.
 
 ### 3.3 The press
 
@@ -119,13 +129,29 @@ Sowel and the guests a page of their own, and treats guestFlow as one optional s
     a guest standing at a gate. The owner's page states the link its guests get and the tree the
     alias has to rewrite onto.
 19. A phone keeps a token of its own; only its SHA-256 is stored. The code is never kept on the phone.
-20. **The control is a slide**, with a keyboard equivalent. **Nothing is said on success.** A failure
-    note replaces the previous one rather than stacking.
+20. **The control is Sowel's own slide-to-confirm** (core spec 146) — the one an owner already uses to
+    confirm a gate or a garage door — reproduced in plain CSS and DOM because the page carries no
+    framework: same 58 / 260 / 50 / 4 geometry, amber at rest, **green with a check on arrival and no
+    text**, since nothing is said on success. Two departures from the core's version, both for use in
+    front of a gate: it confirms without a word, and it returns to rest after two seconds rather than
+    staying confirmed, because the same gesture closes the gate behind you. A keyboard equivalent
+    remains. A failure note replaces the previous one rather than stacking, and a new press clears it.
 21. **Sharing is a feature, not an abuse**: the family arrives in two cars. The page shares the link
     through the phone's own apps, or copies it.
 22. **No hard device cap.** A cap would lock a legitimate brother-in-law out at 23 h. Past six phones
     the owner gets an alarm — information, never a block.
 23. French by default, English when the phone asks for it.
+23.bis **The words assume no gîte.** The plugin is « Accès partagés » (*Shared Access*): the same
+    feature gives a child, a tradesperson or a neighbour the right to open, for a time. The plugin
+    speaks only of an *access* and of *what opens*; stay, lodging and guest vocabulary appears only
+    where a guestFlow connector supplies it. The technical id stays `guest-access` and the device
+    stays « Accès invités » — renaming either would orphan an installation's settings, data and
+    bound equipments.
+23.ter **The page is titled after what opens**, by the name of the equipment the recipe drives —
+    « Portail », « Porte du garage ». The recipe pushes it through an `opening_label` order at start
+    and on every rename; the plugin learns a string and nothing about equipments. Until it has said,
+    the page reads « Accès ». The name is escaped wherever it is printed: it comes from an admin's
+    keyboard and lands on a page anyone can load.
 
 ### 3.5 The owner's page
 
@@ -202,7 +228,7 @@ times a week, and a file the owner can read after a power cut.
 
 ## 6. Test plan
 
-165 unit tests, `npm test`:
+170 unit tests, `npm test`:
 
 | Suite | Covers |
 |---|---|
@@ -212,12 +238,12 @@ times a week, and a file the owner can read after a power cut.
 | `store` (11) | Persistence, the corrupt file kept aside, the purge, the counters |
 | `gate` (11) | The counter published last, the double tap, the queue, nothing answering |
 | `service.owner` (14) | Creation, editing, the two regenerations, suspension, deletion |
-| `service.guest` (15) | Enrolment, its throttles, the press, the ceilings |
+| `service.guest` (17) | Enrolment, the anti-guessing budget, the owner's alert, the press, the ceilings |
 | `service.stays` (10) | Stays applied, replayed, cancelled, reinstated |
 | `admin-api` (10) | The state the page draws, the actions, the refusals |
-| `public-api` (16) | The page, its CSP, enrolment statuses, the press |
+| `public-api` (19) | The page, its CSP, its title and its escaping, enrolment statuses, the held answer, the press |
 | `guestflow` (13) | Pull, push, the pending push, the signature, the HTTP refusal |
-| `index` (8) | The core contract, the orders, the data directory |
+| `index` (8) | The core contract, the three orders, the data directory |
 | `url-guard` (5) | HTTPS or localhost, and the host that merely contains « localhost » |
 | `guest-url` (10) | The alias, the path it is served under, what is refused, the fragment |
 

@@ -30,8 +30,8 @@ export function pickLang(acceptLanguage: string | undefined): Lang {
 
 const STRINGS: Record<Lang, Record<string, string>> = {
   fr: {
-    title: "Portail",
-    intro: "Entrez le code reçu par email.",
+    title: "Accès",
+    intro: "Entrez le code qu'on vous a communiqué.",
     codeLabel: "Code d'accès",
     codePlaceholder: "XXXX-XXXX",
     submit: "Valider",
@@ -42,23 +42,22 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     shared: "Lien copié",
     bad_code: "Code incorrect ou expiré.",
     locked: "Trop d'essais sur ce code. Réessayez dans une heure.",
-    too_many_attempts: "Trop d'essais. Réessayez dans quelques minutes.",
     revoked: "Cet accès a été retiré.",
     expired: "Cet accès a pris fin.",
     not_yet_active: "Votre accès commence le {when}.",
-    suspended: "Votre accès est suspendu. Contactez votre hôte.",
+    suspended: "Votre accès est suspendu. Contactez la personne qui vous l'a donné.",
     outside_hours: "En dehors des heures autorisées. Prochaine ouverture à {when}.",
     too_many_opens: "Trop d'ouvertures sur la dernière heure.",
     gate_busy: "Une autre commande est en cours. Réessayez.",
-    no_answer: "La maison n'a pas répondu. Réessayez, ou appelez votre hôte.",
+    no_answer: "La maison n'a pas répondu. Réessayez, ou prévenez la personne qui vous a donné l'accès.",
     refused_by_house: "Commande refusée depuis la maison.",
-    gate_error: "Le portail n'a pas pu être actionné.",
+    gate_error: "L'ouverture n'a pas pu être commandée.",
     offline: "Vous semblez hors ligne.",
     unknown: "Quelque chose n'a pas fonctionné.",
   },
   en: {
-    title: "Gate",
-    intro: "Enter the code you received by email.",
+    title: "Access",
+    intro: "Enter the code you were given.",
     codeLabel: "Access code",
     codePlaceholder: "XXXX-XXXX",
     submit: "Continue",
@@ -69,24 +68,43 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     shared: "Link copied",
     bad_code: "Wrong or expired code.",
     locked: "Too many tries on this code. Try again in an hour.",
-    too_many_attempts: "Too many tries. Try again in a few minutes.",
     revoked: "This access has been withdrawn.",
     expired: "This access has ended.",
     not_yet_active: "Your access starts on {when}.",
-    suspended: "Your access is on hold. Please contact your host.",
+    suspended: "Your access is on hold. Please contact the person who gave it to you.",
     outside_hours: "Outside the allowed hours. Next opening at {when}.",
     too_many_opens: "Too many openings in the last hour.",
     gate_busy: "Another command is running. Try again.",
-    no_answer: "The house did not answer. Try again, or call your host.",
+    no_answer: "The house did not answer. Try again, or let the person who gave you access know.",
     refused_by_house: "The command was refused from the house.",
-    gate_error: "The gate could not be operated.",
+    gate_error: "The opening could not be sent.",
     offline: "You seem to be offline.",
     unknown: "Something did not work.",
   },
 };
 
-export function guestHtml(lang: Lang): string {
-  const t = STRINGS[lang];
+/**
+ * The name of an equipment, set by whoever administers the house, printed into
+ * a page anyone on the internet can load. Escaped, always — a name is data.
+ */
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+/** The strings with the page title taken from what opens, when the recipe has said. */
+function stringsFor(lang: Lang, openingLabel: string | null): Record<string, string> {
+  const base = STRINGS[lang];
+  return openingLabel ? { ...base, title: openingLabel } : base;
+}
+
+export function guestHtml(lang: Lang, openingLabel: string | null = null): string {
+  const t = stringsFor(lang, openingLabel);
+  const title = escapeHtml(t.title);
   return `<!doctype html>
 <html lang="${lang}">
 <head>
@@ -94,7 +112,7 @@ export function guestHtml(lang: Lang): string {
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#1A4F6E">
 <meta name="robots" content="noindex, nofollow">
-<title>${t.title}</title>
+<title>${title}</title>
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="icon.svg">
@@ -103,7 +121,7 @@ export function guestHtml(lang: Lang): string {
 <body>
 <main>
   <header>
-    <h1 id="who">${t.title}</h1>
+    <h1 id="who">${title}</h1>
     <p id="sub"></p>
   </header>
 
@@ -121,12 +139,11 @@ export function guestHtml(lang: Lang): string {
   <section id="act" hidden>
     <p class="caption">${t.caption}</p>
     <div class="track" id="track">
-      <span class="track-label" id="track-label">${t.action}</span>
+      <div class="track-fill" id="track-fill"></div>
+      <span class="track-label" id="track-label">${t.action}<svg class="chevrons" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M6 17l5-5-5-5M13 17l5-5-5-5"/></svg></span>
       <div class="knob" id="knob" role="button" tabindex="0" aria-label="${t.action}">
-        <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">
-          <path d="M9 6l6 6-6 6" fill="none" stroke="currentColor" stroke-width="2"
-                stroke-linecap="round" stroke-linejoin="round"/>
-        </svg>
+        <svg class="i-go" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M6 17l5-5-5-5M13 17l5-5-5-5"/></svg>
+        <svg class="i-done" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M20 6L9 17l-5-5"/></svg>
       </div>
     </div>
     <button id="share" class="ghost" hidden>${t.share}</button>
@@ -149,9 +166,18 @@ export const GUEST_CSS = `:root {
   --line: #dfe4e9;
   --primary: #1A4F6E;
   --error: #b3261e;
+  /* design-system/tokens.css — a-500 (warning) and green-500 (success) */
+  --warn: #F2C035;
+  --warn-fill: rgba(242,192,53,.15);
+  --ok: #1FA260;
+  --ok-fill: rgba(31,162,96,.20);
+  --ok-line: rgba(31,162,96,.40);
+  --line-soft: rgba(24,24,27,.08);
 }
 @media (prefers-color-scheme: dark) {
-  :root { --bg:#10161c; --fg:#e9eef2; --muted:#9aa8b4; --card:#182028; --line:#2a353f; --primary:#7FB8D4; }
+  :root { --bg:#10161c; --fg:#e9eef2; --muted:#9aa8b4; --card:#182028; --line:#2a353f; --primary:#7FB8D4;
+    --warn:#F2BC6E; --warn-fill:rgba(242,188,110,.15); --ok:#3DDB89; --ok-fill:rgba(61,219,137,.20);
+    --ok-line:rgba(61,219,137,.40); --line-soft:rgba(255,255,255,.06); }
 }
 * { box-sizing: border-box; }
 body {
@@ -183,34 +209,62 @@ button.ghost { background: transparent; color: var(--muted); border: 1px solid v
 .caption { text-align: center; color: var(--muted); font-size: 13px; margin: 0 0 10px; }
 /* 260px and centred: tuned by hand on a phone. Full width puts the start of
    the gesture in the corner furthest from the thumb of the hand holding it. */
+/* Spec 146 — the very control Sowel already uses to confirm a gate or a garage
+   door, reproduced here in plain CSS because this page carries no framework.
+   Same geometry (58 / 260 / 50 / 4), same two colours, same progress fill, same
+   check on arrival. A guest who knows the Sowel app meets a control they have
+   already used, and this page stops inventing one of its own. */
 .track {
-  position: relative; width: min(260px, 100%); height: 58px; margin: 0 auto;
-  border-radius: 999px; background: var(--card); border: 1px solid var(--line);
-  display: grid; place-items: center; overflow: hidden; touch-action: none;
+  position: relative; width: 100%; max-width: 260px; height: 58px; margin: 0 auto;
+  border-radius: 12px; background: var(--line-soft); border: 1px solid var(--line);
+  overflow: hidden; touch-action: none; user-select: none;
 }
-.track-label { color: var(--muted); font-size: 14px; pointer-events: none; padding-left: 40px; }
+.track-fill {
+  position: absolute; top: 0; bottom: 0; left: 0; width: 50px; border-radius: 12px;
+  background: var(--warn-fill); transition: width .2s;
+}
+.track-label {
+  position: absolute; top: 0; bottom: 0; left: 58px; right: 0;
+  display: flex; align-items: center; justify-content: center; gap: 6px;
+  color: var(--muted); font-size: 13px; font-weight: 500; white-space: nowrap;
+  pointer-events: none; padding: 0 8px;
+}
+.chevrons { fill: none; stroke: var(--warn); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 .knob {
-  position: absolute; left: 4px; top: 4px; width: 50px; height: 50px; border-radius: 50%;
-  background: var(--primary); color: #fff; display: grid; place-items: center; cursor: grab;
-  transition: left .18s ease;
+  position: absolute; top: 4px; left: 4px; width: 50px; height: 50px; border-radius: 9px;
+  background: var(--warn); color: #fff; display: grid; place-items: center; cursor: grab;
+  box-shadow: 0 2px 6px rgba(0,0,0,.18); z-index: 2; transition: left .2s, background .2s;
 }
-.knob.dragging { transition: none; cursor: grabbing; }
-.knob:focus-visible { outline: 3px solid var(--primary); outline-offset: 3px; }
-.track.done { border-color: var(--primary); }
+.knob svg { fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+.knob .i-done { display: none; }
+.knob.dragging { transition: background .2s; cursor: grabbing; }
+.knob:focus-visible { outline: 3px solid var(--warn); outline-offset: 3px; }
+/* Arrived. Green, a check — and NOT a word: nothing is said on success, so the
+   colour is the whole answer. */
+.track.done { border-color: var(--ok-line); }
+.track.done .track-fill { width: 100% !important; background: var(--ok-fill); }
+.track.done .track-label { opacity: 0; }
+.track.done .knob { background: var(--ok); cursor: default; }
+.track.done .knob .i-go { display: none; }
+.track.done .knob .i-done { display: block; }
 .note { margin: 18px 0 0; text-align: center; font-size: 14px; color: var(--error); }
 .note.calm { color: var(--muted); }
 `;
 
-export const GUEST_MANIFEST = JSON.stringify({
-  name: "Portail",
-  short_name: "Portail",
+/** What the icon on the home screen is called — the same name as the page. */
+export function guestManifest(lang: Lang, openingLabel: string | null = null): string {
+  const name = stringsFor(lang, openingLabel).title;
+  return JSON.stringify({ ...GUEST_MANIFEST_BASE, name, short_name: name.slice(0, 12) });
+}
+
+const GUEST_MANIFEST_BASE = {
   start_url: "./",
   scope: "./",
   display: "standalone",
   background_color: "#f6f7f8",
   theme_color: "#1A4F6E",
   icons: [{ src: "icon.svg", sizes: "any", type: "image/svg+xml", purpose: "any maskable" }],
-});
+};
 
 export const GUEST_ICON = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
 <rect width="64" height="64" rx="14" fill="#1A4F6E"/>
@@ -219,8 +273,8 @@ export const GUEST_ICON = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 
 </g></svg>`;
 
 /** The app, with its own strings already in it — one round trip fewer. */
-export function guestJs(lang: Lang): string {
-  return `const T = ${JSON.stringify(STRINGS[lang])};
+export function guestJs(lang: Lang, openingLabel: string | null = null): string {
+  return `const T = ${JSON.stringify(stringsFor(lang, openingLabel))};
 const LOCALE = ${JSON.stringify(lang === "en" ? "en-GB" : "fr-FR")};
 const KEY = "guest-access-token";
 const $ = (id) => document.getElementById(id);
@@ -322,54 +376,87 @@ async function operate() {
 }
 
 // ── The slide ──────────────────────────────────────────────
+//
+// Sowel's own slide-to-confirm (core spec 146), the control an owner already
+// uses on a gate or a garage door, reproduced here without its framework. Same
+// numbers: a 50 px knob inset by 4 in a track capped at 260, so the sweep is
+// the one that was tuned by hand on a phone rather than picked round.
+//
+// Two deliberate departures from the core's version, each for a reason that
+// only applies out here, in front of a gate:
+//   · nothing is written when it arrives — the green IS the answer, because a
+//     success says nothing on this page and never has;
+//   · it returns to rest after two seconds instead of staying confirmed, since
+//     the same gesture is what closes the gate behind you.
+const KNOB = 50;
+const PAD = 4;
+const KNOB_SPAN = KNOB + PAD * 2;
+
 const track = $("track");
+const fill = $("track-fill");
 const knob = $("knob");
 const label = $("track-label");
-let dragging = false;
-let startX = 0;
-let travel = 0;
+let drag = null;
+let x = 0;
+let done = false;
 
-function limit() { return track.clientWidth - knob.clientWidth - 8; }
-function place(x) { knob.style.left = Math.max(4, Math.min(limit(), x)) + "px"; }
-function rest() { knob.classList.remove("dragging"); knob.style.left = "4px"; track.classList.remove("done"); }
+function maxOffset() { return Math.max(0, track.clientWidth - KNOB_SPAN); }
+function place(next) {
+  x = next;
+  knob.style.left = (PAD + x) + "px";
+  fill.style.width = (KNOB + x) + "px";
+}
+function rest() {
+  done = false;
+  drag = null;
+  knob.classList.remove("dragging");
+  track.classList.remove("done");
+  place(0);
+}
 
 function fire() {
+  if (done) return;
+  done = true;
+  drag = null;
+  knob.classList.remove("dragging");
   track.classList.add("done");
-  label.textContent = T.sent;
+  place(maxOffset());
   void operate();
   // A rest, never a lock: a guest may command again to close the gate behind
   // them, and a locked control would contradict that.
-  setTimeout(() => { rest(); label.textContent = T.action; }, 2000);
+  setTimeout(rest, 2000);
 }
 
 knob.addEventListener("pointerdown", (event) => {
-  dragging = true;
-  startX = event.clientX;
-  travel = parseFloat(knob.style.left || "4");
-  knob.classList.add("dragging");
+  if (done) return;
   knob.setPointerCapture(event.pointerId);
+  drag = { startX: event.clientX - x, max: maxOffset() };
+  knob.classList.add("dragging");
 });
 
 knob.addEventListener("pointermove", (event) => {
-  if (!dragging) return;
-  place(travel + (event.clientX - startX));
+  if (!drag) return;
+  const next = Math.max(0, Math.min(drag.max, event.clientX - drag.startX));
+  place(next);
+  // A positive max, so a track too narrow to have a sweep cannot confirm on the
+  // first move — the core's guard, and the reason it is here too.
+  if (drag.max > 0 && next >= drag.max - 1) fire();
 });
 
 function release() {
-  if (!dragging) return;
-  dragging = false;
+  if (!drag || done) return;
+  const max = drag.max;
+  drag = null;
   knob.classList.remove("dragging");
-  const reached = parseFloat(knob.style.left || "4") >= limit() - 6;
-  if (reached) fire(); else rest();
+  if (x < max - 1) place(0);
 }
 knob.addEventListener("pointerup", release);
-knob.addEventListener("pointercancel", () => { dragging = false; rest(); });
+knob.addEventListener("pointercancel", () => { drag = null; rest(); });
 
 // A deliberate key press on a focused control is as much an intent as a drag.
 knob.addEventListener("keydown", (event) => {
   if (["Enter", " ", "ArrowRight", "End"].includes(event.key)) {
     event.preventDefault();
-    place(limit());
     fire();
   }
 });

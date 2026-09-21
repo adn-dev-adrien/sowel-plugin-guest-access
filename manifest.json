@@ -1,37 +1,42 @@
 {
   "id": "guest-access",
   "type": "integration",
-  "name": "Guest Access",
-  "version": "1.1.0",
-  "description": "Gate access for the guests of the gîte and the lodge — accesses, codes and journal held in the house",
+  "name": "Shared Access",
+  "version": "1.2.0",
+  "description": "Let someone open something for a set time — a guest, a child, a tradesperson. Codes, hours and a journal, held in the house; guestFlow is an optional source of accesses.",
   "icon": "DoorOpen",
   "repo": "adn-dev-adrien/sowel-plugin-guest-access",
   "author": "adn-dev-adrien",
-  "tags": ["access", "guests", "gate"],
+  "tags": [
+    "access",
+    "sharing",
+    "gate",
+    "door"
+  ],
   "i18n": {
     "fr": {
-      "name": "Accès invités",
-      "description": "L'accès au portail des clients du gîte et de la lodge : les accès, leurs codes et leur journal vivent ici, et guestFlow n'est qu'une source de séjours"
+      "name": "Accès partagés",
+      "description": "Donner à quelqu'un le droit d'ouvrir, pour un temps donné — un invité, un enfant, un artisan. Codes, horaires et journal restent dans la maison ; guestFlow n'est qu'une source d'accès facultative."
     }
   },
   "sowelVersion": ">=1.72.0",
   "ui": {
     "entry": "ui/panel.js",
-    "label": "Accès invités",
+    "label": "Accès partagés",
     "icon": "DoorOpen"
   },
   "publicTree": true,
   "settings": [
     {
       "key": "guest_base_url",
-      "label": "Adresse publique de Sowel (pour le lien des clients)",
+      "label": "Adresse publique de Sowel (pour les liens d'accès)",
       "type": "text",
       "required": false,
       "placeholder": "https://sowel.adn-dev.fr"
     },
     {
       "key": "guest_path",
-      "label": "Chemin de la page des clients sous cette adresse",
+      "label": "Chemin de la page d'ouverture sous cette adresse",
       "type": "text",
       "required": false,
       "placeholder": "/p/guest-access/"

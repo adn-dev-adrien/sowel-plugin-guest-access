@@ -1,5 +1,5 @@
 /**
- * Sowel Plugin — Accès invités
+ * Sowel Plugin — Accès partagés
  *
  * The whole guest gate access, in the house. The accesses, their codes, their
  * hours, the journal, the owner's page and the guests' own page all live here;
@@ -90,9 +90,9 @@ function orderKeyOf(orderKeyOrDispatchConfig: string | Record<string, unknown>):
 
 class GuestAccessPlugin {
   readonly id = INTEGRATION_ID;
-  readonly name = "Guest Access";
+  readonly name = "Shared Access";
   readonly description =
-    "Gate access for the guests of the gîte and the lodge — accesses, codes and journal held here";
+    "Let someone open something for a set time — codes, hours and a journal, held in the house";
   readonly icon = "DoorOpen";
   readonly apiVersion = 2;
 
@@ -156,6 +156,7 @@ class GuestAccessPlugin {
       service: this.service,
       guestBaseUrl: () => this.guestBaseUrl(),
       guestPath: () => this.guestPath(),
+      openingLabel: () => this.gate.getOpeningLabel(),
     });
   }
 
@@ -178,14 +179,14 @@ class GuestAccessPlugin {
     return [
       {
         key: "guest_base_url",
-        label: "Public address of Sowel (for the guests' link)",
+        label: "Public address of Sowel (for the access links)",
         type: "text",
         required: false,
         placeholder: "https://sowel.adn-dev.fr",
       },
       {
         key: "guest_path",
-        label: "Path of the guests' page under that address",
+        label: "Path of the opening page under that address",
         type: "text",
         required: false,
         placeholder: DEFAULT_GUEST_PATH,
@@ -234,7 +235,7 @@ class GuestAccessPlugin {
       // the one thing that will answer 404 until somebody opens the door.
       this.deps.logger.warn(
         {},
-        "Guest access is running, but its public page is shut — open it in Plugins → Accès invités",
+        "Shared access is running, but its public page is shut — open it in Plugins → Accès partagés",
       );
     }
     this.deps.eventBus.emit({
@@ -282,6 +283,10 @@ class GuestAccessPlugin {
     if (key === "gate_state") {
       if (!GATE_STATES.includes(text as GateState)) throw new Error(`Unknown gate state: ${text}`);
       this.gate.setGateState(text as GateState);
+      return;
+    }
+    if (key === "opening_label") {
+      this.gate.setOpeningLabel(text);
       return;
     }
     throw new Error(`Unsupported order: ${key || "(none)"}`);

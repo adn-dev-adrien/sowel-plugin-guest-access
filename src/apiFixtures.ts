@@ -86,7 +86,12 @@ export function makeApiHarness(
       return handle(request(method, path, options));
     },
     async guest(method, path, options = {}) {
-      const handle = createPublicApi({ service, guestBaseUrl, guestPath });
+      const handle = createPublicApi({
+        service,
+        guestBaseUrl,
+        guestPath,
+        openingLabel: () => gate.getOpeningLabel(),
+      });
       return handle(
         request(method, path, {
           ...options,
