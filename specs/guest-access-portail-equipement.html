@@ -1,0 +1,278 @@
+<!doctype html>
+<html lang="fr">
+<meta charset="utf-8">
+<title>Portail et équipement</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+:root{
+  color-scheme: light dark;
+  --paper:#F5F0E6; --card:#FFFDF8; --ink:#1F241D; --muted:#5F665A; --line:#DDD5C4;
+  --sapin:#2E3B2A; --lichen:#5A6B48; --ocre:#B87B2A; --ok:#2F6B3A; --ko:#A33A2A;
+  --vert:#E1EBD3; --ambre:#F3E1C1; --gris:#ECE6D8;
+  --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  --serif:"Iowan Old Style","Palatino Linotype",Palatino,Georgia,serif;
+  --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+  /* Sowel, ses vraies couleurs */
+  --s-bg:#F4F6F8; --s-surface:#FFFFFF; --s-text:#16202a; --s-muted:#5c6b79; --s-faint:#9aa8b4;
+  --s-line:#e5e9ed; --s-line2:#dfe4e9; --s-primary:#1A4F6E; --s-primary-soft:#E3EEF4;
+  --s-ok:#1FA260; --s-warn:#F2C035; --s-ko:#b3261e; --s-hover:#eef1f4; --s-disabled:#c9d1d8;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --paper:#161C16; --card:#1F261E; --ink:#EDE8DC; --muted:#A8AE9F; --line:#39433A;
+    --sapin:#C9D8BC; --lichen:#9DB286; --ocre:#E0A956; --ok:#7CC48A; --ko:#EE8A7A;
+    --vert:#2B3A26; --ambre:#443520; --gris:#2C2A22;
+    --s-bg:#0f151b; --s-surface:#182028; --s-text:#e9eef2; --s-muted:#9aa8b4; --s-faint:#6b7a87;
+    --s-line:#26313b; --s-line2:#2a353f; --s-primary:#7FB8D4; --s-primary-soft:#1d3342;
+    --s-ok:#3DDB89; --s-warn:#F2BC6E; --s-ko:#e8827a; --s-hover:#212c36; --s-disabled:#3a4650;
+  }
+}
+:root[data-theme="dark"]{
+  --paper:#161C16; --card:#1F261E; --ink:#EDE8DC; --muted:#A8AE9F; --line:#39433A;
+  --sapin:#C9D8BC; --lichen:#9DB286; --ocre:#E0A956; --ok:#7CC48A; --ko:#EE8A7A;
+  --vert:#2B3A26; --ambre:#443520; --gris:#2C2A22;
+  --s-bg:#0f151b; --s-surface:#182028; --s-text:#e9eef2; --s-muted:#9aa8b4; --s-faint:#6b7a87;
+  --s-line:#26313b; --s-line2:#2a353f; --s-primary:#7FB8D4; --s-primary-soft:#1d3342;
+  --s-ok:#3DDB89; --s-warn:#F2BC6E; --s-ko:#e8827a; --s-hover:#212c36; --s-disabled:#3a4650;
+}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+body{margin:0;background:var(--paper);color:var(--ink);font:15px/1.55 var(--sans)}
+.wrap{max-width:1060px;margin:0 auto;padding:28px 16px 90px}
+h1{font:600 31px/1.2 var(--serif);color:var(--sapin);margin:0 0 4px}
+h2{font:600 22px/1.25 var(--serif);color:var(--sapin);margin:48px 0 10px;padding-top:8px;border-top:1px solid var(--line)}
+h3{font:600 13px/1.3 var(--sans);margin:18px 0 8px;text-transform:uppercase;letter-spacing:.07em;color:var(--lichen)}
+p{margin:0 0 10px}
+.meta{color:var(--muted);font-size:13.5px;margin-bottom:18px}
+.lead{color:var(--muted);max-width:830px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:16px}
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:14px}
+ul.tight{margin:6px 0 0;padding-left:18px} ul.tight li{margin:5px 0}
+.note{border-left:4px solid var(--ocre);background:var(--card);padding:12px 14px;border-radius:6px;margin:12px 0}
+.good{border-left:4px solid var(--ok);background:var(--card);padding:12px 14px;border-radius:6px;margin:12px 0}
+.ask{background:var(--ambre);border:1px solid var(--line);border-radius:10px;padding:14px 16px;margin:14px 0}
+.ask b{display:block;margin-bottom:4px}
+.tblwrap{overflow-x:auto}
+table.plain{border-collapse:collapse;width:100%;font-size:14px;min-width:560px}
+table.plain th,table.plain td{border-bottom:1px solid var(--line);padding:9px 8px;text-align:left;vertical-align:top}
+table.plain th{font-size:12.5px;color:var(--muted);font-weight:600}
+code{font-family:var(--mono);font-size:12.5px}
+button.seg{font:inherit;border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:8px;padding:9px 13px;min-height:44px;cursor:pointer}
+button.seg[aria-pressed=true]{background:var(--sapin);color:var(--paper);border-color:var(--sapin)}
+.segrow{display:flex;gap:8px;flex-wrap:wrap;margin:6px 0 14px}
+s.gone{color:var(--muted)}
+
+/* ── la coque Sowel ───────────────────────────── */
+.sw{background:var(--s-bg);color:var(--s-text);border:1px solid var(--line);border-radius:12px;overflow:hidden;font:14px/1.45 var(--sans);display:grid;grid-template-columns:200px 1fr;min-height:420px}
+.sw svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.side{background:var(--s-surface);border-right:1px solid var(--s-line);padding:12px 8px;display:flex;flex-direction:column;gap:2px}
+.side .logo{font:800 15px/1 var(--sans);letter-spacing:.18em;color:var(--s-primary);padding:6px 10px 14px}
+.nav{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:8px;color:var(--s-muted);cursor:default;font-size:13.5px}
+.nav.on{background:var(--s-primary-soft);color:var(--s-primary);font-weight:600}
+.nav.sub{padding-left:24px;font-size:13px}
+.side .sep{height:1px;background:var(--s-line);margin:6px 4px}
+.side .admin{margin-top:auto;border-top:1px solid var(--s-line);padding-top:6px}
+.main{padding:18px;min-width:0}
+.crumb{font-size:12px;color:var(--s-muted);margin-bottom:6px}
+.main h4{font-size:18px;font-weight:600;margin:0 0 2px}
+.main .sub2{font-size:12px;color:var(--s-muted);margin:0 0 12px}
+.tabs{display:flex;gap:4px;border-bottom:1px solid var(--s-line);margin-bottom:12px;overflow-x:auto}
+.tab{font:inherit;font-size:13px;background:none;border:0;border-bottom:2px solid transparent;color:var(--s-muted);padding:8px 12px;cursor:pointer;display:flex;gap:6px;align-items:center;white-space:nowrap}
+.tab[aria-selected=true]{color:var(--s-primary);border-color:var(--s-primary);font-weight:600}
+.tab .n{font-size:11px;background:var(--s-hover);border-radius:99px;padding:0 7px;color:var(--s-muted)}
+.eqcard{background:var(--s-surface);border:1px solid var(--s-line);border-radius:12px;padding:12px 14px;margin-bottom:10px}
+.eqcard h5{margin:0 0 8px;font-size:14px}
+.slot{display:flex;align-items:center;gap:8px;color:var(--s-muted);font-size:13px}
+
+/* ── la liste ─────────────────────────────── */
+.toolbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px}
+.toolbar .grow{flex:1}
+.chip{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--s-line);border-radius:999px;padding:3px 10px;font-size:12px;background:var(--s-surface);color:var(--s-muted);min-height:28px}
+.chip button{all:unset;cursor:pointer;display:inline-flex;color:var(--s-muted)}
+.chip button svg{width:14px;height:14px}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--s-faint)} .dot.ok{background:var(--s-ok)} .dot.ko{background:var(--s-ko)}
+.ib{all:unset;box-sizing:border-box;width:34px;height:34px;border-radius:8px;display:inline-flex;align-items:center;justify-content:center;color:var(--s-muted);cursor:pointer;position:relative}
+.ib:hover{background:var(--s-hover);color:var(--s-text)}
+.ib:focus-visible{outline:2px solid var(--s-primary)}
+.ib[data-tip]:hover::after{content:attr(data-tip);position:absolute;bottom:calc(100% + 4px);left:50%;transform:translateX(-50%);background:var(--s-text);color:var(--s-surface);font-size:11px;padding:3px 8px;border-radius:6px;white-space:nowrap;z-index:5}
+.primary{all:unset;box-sizing:border-box;display:inline-flex;align-items:center;gap:6px;height:34px;padding:0 12px;border-radius:8px;background:var(--s-primary);color:#fff;font-size:13px;cursor:pointer}
+:root:not([data-theme="light"]) .primary{color:var(--s-bg)}
+.grp{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--s-faint);font-weight:600;margin:12px 0 6px}
+.row{display:grid;grid-template-columns:1fr auto;gap:8px;align-items:center;background:var(--s-surface);border:1px solid var(--s-line);border-radius:12px;padding:10px 8px 10px 14px;margin-bottom:6px}
+.row .l1{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}
+.row .nm{font-weight:600}
+.row .cd{font-family:var(--mono);font-size:13.5px;letter-spacing:1px;color:var(--s-muted)}
+.row .l2{display:flex;gap:4px 12px;flex-wrap:wrap;font-size:12px;color:var(--s-muted);margin-top:2px}
+.row .l2 span{display:inline-flex;align-items:center;gap:4px}
+.row .l2 svg{width:13px;height:13px}
+.row .acts{display:flex;gap:0;align-items:center}
+.row.held{opacity:.62}
+.tagp{font-size:11px;border-radius:999px;padding:1px 8px;background:var(--s-hover);color:var(--s-muted)}
+.menu{position:absolute;right:0;top:calc(100% + 4px);background:var(--s-surface);border:1px solid var(--s-line2);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.14);padding:4px;min-width:220px;z-index:10}
+.menu button{all:unset;box-sizing:border-box;display:flex;gap:10px;align-items:center;width:100%;padding:8px 10px;border-radius:6px;font-size:13px;cursor:pointer;color:var(--s-text)}
+.menu button:hover{background:var(--s-hover)}
+.menu button.danger{color:var(--s-ko)}
+.menu hr{border:0;border-top:1px solid var(--s-line);margin:4px}
+.toast{position:absolute;left:50%;bottom:14px;transform:translateX(-50%);background:var(--s-text);color:var(--s-surface);padding:6px 12px;border-radius:99px;font-size:12px;z-index:20}
+
+/* avant : la vraie ligne d'aujourd'hui */
+.old .row{grid-template-columns:1fr}
+.old .acts{display:flex;flex-wrap:wrap;gap:6px}
+.old .btn{font:inherit;font-size:12.5px;min-height:32px;padding:0 11px;border-radius:8px;border:1px solid var(--s-line2);background:transparent;color:var(--s-text)}
+.old .btn.d{color:var(--s-ko);border-color:var(--s-ko)}
+
+/* ── la feuille d'édition ─────────────────────────────── */
+.sheet{background:var(--s-surface);color:var(--s-text);border:1px solid var(--line);border-radius:12px;padding:18px;max-width:520px;display:grid;gap:14px;font:14px/1.45 var(--sans)}
+.sheet h5{font-size:17px;margin:0}
+.fld{display:grid;gap:6px}
+.fld > label,.fld > .lb{font-size:12px;color:var(--s-muted)}
+.sheet input,.sheet select{font:inherit;padding:8px 10px;border-radius:8px;border:1px solid var(--s-line2);background:transparent;color:inherit;min-height:40px}
+.sheet select option:disabled{color:var(--s-disabled)}
+.dt{display:grid;grid-template-columns:1fr 110px;gap:8px}
+.refus{color:var(--s-ko);font-size:12px}
+.sheet .foot{display:flex;justify-content:flex-end;gap:8px}
+.sheet .btn{font:inherit;font-size:13px;min-height:36px;padding:0 14px;border-radius:8px;border:1px solid var(--s-line2);background:transparent;color:inherit;cursor:pointer}
+.sheet .btn.p{background:var(--s-primary);border-color:var(--s-primary);color:#fff}
+.sheet .btn:disabled{opacity:.45;cursor:not-allowed}
+.hint{font-size:12px;color:var(--s-muted)}
+.cal{display:grid;grid-template-columns:repeat(7,1fr);gap:2px;font-size:12px;text-align:center;margin-top:4px}
+.cal b{font-weight:600;color:var(--s-faint);padding:4px 0}
+.cal button{all:unset;padding:6px 0;border-radius:6px;cursor:pointer}
+.cal button:hover:not(:disabled){background:var(--s-hover)}
+.cal button:disabled{color:var(--s-disabled);cursor:not-allowed;text-decoration:line-through}
+.cal button.sel{background:var(--s-primary);color:#fff}
+.cal button.from{outline:1px dashed var(--s-primary)}
+.pop{border:1px solid var(--s-line2);border-radius:10px;padding:10px;background:var(--s-surface)}
+.pop .hd{display:flex;justify-content:space-between;align-items:center;font-weight:600;font-size:13px}
+.times{display:grid;grid-template-columns:repeat(6,1fr);gap:4px;margin-top:8px;max-height:132px;overflow:auto}
+.times button{all:unset;font-size:12px;text-align:center;padding:5px 0;border-radius:6px;border:1px solid var(--s-line);cursor:pointer;font-variant-numeric:tabular-nums}
+.times button:disabled{color:var(--s-disabled);border-color:transparent;cursor:not-allowed;text-decoration:line-through}
+.times button.sel{background:var(--s-primary);color:#fff;border-color:var(--s-primary)}
+.trigger{all:unset;box-sizing:border-box;display:flex;align-items:center;gap:8px;border:1px solid var(--s-line2);border-radius:8px;padding:0 10px;min-height:40px;cursor:pointer}
+.trigger.bad{border-color:var(--s-ko)}
+.trigger svg{width:16px;height:16px;color:var(--s-muted)}
+.gatebox{display:flex;flex-wrap:wrap;gap:8px}
+.gatebox label{display:inline-flex;gap:6px;align-items:center;border:1px solid var(--s-line2);border-radius:8px;padding:6px 10px;font-size:13px;color:var(--s-text)}
+
+@media (max-width: 720px){
+  .sw{grid-template-columns:1fr}
+  .side{display:none}
+  .row{grid-template-columns:1fr}
+  .row .acts{justify-content:flex-end;margin-top:-4px}
+}
+
+.hm{display:flex;align-items:center;gap:6px}
+.hm select{min-width:72px}
+.eqpage{background:var(--s-bg);color:var(--s-text);border:1px solid var(--line);border-radius:12px;padding:18px;font:14px/1.45 var(--sans);position:relative}
+.eqpage .crumb{font-size:12px;color:var(--s-muted)}
+.eqpage h4{font-size:18px;margin:2px 0 12px}
+.card2{background:var(--s-surface);border:1px solid var(--s-line);border-radius:10px;padding:14px;margin-bottom:12px}
+.card2 .hd{display:flex;align-items:center;gap:8px;margin-bottom:4px}
+.card2 h5{margin:0;font-size:14px}
+.card2 .hint2{font-size:12px;color:var(--s-faint)}
+.card2 .go{margin-left:auto;display:inline-flex;align-items:center;gap:4px;color:var(--s-primary);font-size:13px;cursor:pointer;background:none;border:0;font:inherit;font-size:13px}
+.card2 svg,.eqpage svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+.flow{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px;margin:10px 0}
+.flow .card{font-size:14px}
+.flow b{display:block;color:var(--sapin)}
+.opt option:disabled{color:var(--s-disabled)}
+
+</style>
+<div class="wrap">
+<h1>Choisir le portail, et le retrouver sur sa fiche</h1>
+<p class="meta">Plugin <code>guest-access</code> · recette <code>guest-gate</code> · cœur (spec 180) · 21 septembre 2026 · à trancher avant d'écrire une ligne</p>
+
+<div class="good"><b>Tranché le 21 septembre, et livré en v1.4.0 :</b> une seule recette pour la maison, le portail se choisit dans « + portail » ; la carte de la fiche donne le nombre de personnes ; minutes <b>par pas de 5</b> (et non toutes les minutes comme proposé ici). Arriver de la carte sur un portail sans liste ouvre « + portail » avec l'équipement déjà choisi — un clic sur « Ajouter » plutôt qu'un ajout sans confirmation.</div>
+
+<p class="lead">Trois retours sur la v1.3.0. Le premier est un réglage d'écran. Les deux autres touchent au câblage : aujourd'hui, « + portail » ne demande qu'un nom, et c'est à vous de créer ensuite un équipement et une instance de recette. Et rien sur la fiche du portail ne dit qu'il a des accès partagés.</p>
+
+<!-- 1 -->
+<h2>1. L'heure : heures et minutes, comme partout</h2>
+<p>Le calendrier reste pour le jour. L'heure devient deux listes standard, <b>heures</b> et <b>minutes</b> (toutes les minutes, 00 à 59) — sur téléphone, c'est la roue du système. Dans « Jusqu'au », le jour du début, les heures et les minutes antérieures sont <b>grisées et non sélectionnables</b>. Essayez de choisir 08:59 pour la fin.</p>
+<div class="sheet" id="p1">
+  <h5>Plombier — M. Roux</h5>
+  <div class="fld"><div class="lb">À partir du</div>
+    <div class="dt"><input type="date" id="fd" value="2026-09-23"><span class="hm"><select id="fh" class="opt"></select>:<select id="fm" class="opt"></select></span></div></div>
+  <div class="fld"><div class="lb">Jusqu'au</div>
+    <div class="dt"><input type="date" id="td" value="2026-09-23" min="2026-09-23"><span class="hm"><select id="th" class="opt"></select>:<select id="tm" class="opt"></select></span></div>
+    <div class="hint" id="p1note" hidden></div></div>
+</div>
+<div class="note">Le jour lui-même garde le calendrier de la v1.3.0 (jours antérieurs barrés) ; ici un champ date suffit à montrer l'idée. Le principe « déplacer le début au-delà de la fin décale la fin » est conservé.</div>
+
+<!-- 2 -->
+<h2>2. « + portail » : on choisit l'équipement, et c'est tout</h2>
+<p>Proposé : <b>une seule instance de la recette pour toute la maison</b>, créée une fois à l'installation. Elle tend au plugin la liste des équipements de type portail, avec leurs noms ; « + portail » devient une liste où l'on choisit l'équipement. Plus de device ni d'équipement à créer par portail.</p>
+<div class="flow">
+  <div class="card"><b>Aujourd'hui (v1.3.0)</b>+ portail → un nom → le plugin crée un device → vous créez son équipement → vous créez une instance de recette qui relie ce device au vrai portail. Trois écrans, par portail.</div>
+  <div class="card"><b>Proposé</b>Une fois : la recette « Accès partagés — ouverture », reliée au device « Accès invités ». Ensuite, par portail : <b>+ portail → choisir l'équipement</b>. Le nom suit l'équipement.</div>
+  <div class="card"><b>Ce qui ne change pas</b>Le plugin ne touche toujours à rien : c'est la recette qui actionne, et l'arrêt de la recette coupe tout. Elle refuse d'actionner un équipement qui n'est pas un portail.</div>
+</div>
+<div class="sheet" id="p2">
+  <h5>Nouveau portail</h5>
+  <div class="fld"><label for="eqsel">Équipement qui s'ouvre</label>
+    <select id="eqsel" class="opt">
+      <option value="">Choisir…</option>
+      <option disabled>Portail d'entrée — déjà dans la liste</option>
+      <option>Porte du garage</option>
+      <option>Portillon du jardin</option>
+    </select>
+    <div class="hint">Seuls les équipements de type portail sont proposés, avec leur nom dans Sowel.</div></div>
+  <div class="refus" id="p2r" hidden>Choisissez un équipement.</div>
+  <div class="foot"><button class="btn" type="button">Annuler</button><button class="btn p" type="button" id="p2ok">Ajouter</button></div>
+  <div class="hint" id="p2done" hidden></div>
+</div>
+<div class="note"><b>Ce que ça coûte :</b> un nouveau dialogue entre la recette et le plugin (la liste des portails, et quel portail chaque demande vise). Le device garde son nom, mais son équipement doit être relié à une donnée de plus : sur votre instance, rien n'est encore installé, et le shadow sera recâblé. Les devices « Accès partagés · … » créés par la v1.3.0 disparaissent.</div>
+
+<!-- 3 -->
+<h2>3. Sur la fiche du portail, un lien vers ses accès</h2>
+<p>Dans <b>Maison › … › Portail</b>, une carte « Accès partagés » à côté de « Confirmation avant action ». Le lien ouvre la page sur l'onglet de ce portail. Pour un portail sans liste, il propose de lui en ouvrir une (l'équipement est déjà connu, il n'y a rien à choisir).</p>
+<div class="segrow" role="group"><button class="seg" data-eq="0" aria-pressed="true">Portail d'entrée (3 accès)</button><button class="seg" data-eq="1" aria-pressed="false">Portillon du jardin (aucun)</button></div>
+<div class="eqpage" id="p3"></div>
+<div class="note"><b>Côté cœur :</b> un plugin déclare dans son manifeste un lien pour un type d'équipement (<code>ui.equipmentLink: { types: ["gate"], label }</code>) et la fiche l'affiche, admin seulement. Si la carte donne aussi le <b>nombre de personnes</b>, le cœur doit demander au plugin (un appel de plus, au même arbre que la page) ; sans le nombre, c'est un simple lien.</div>
+
+<h2>Arbitrages</h2>
+<div class="ask"><b>1 · Câblage des portails</b> : une seule recette pour la maison et le choix de l'équipement dans « + portail » (proposé), ou garder un device et une recette par portail, avec un dialogue qui guide pas à pas ?</div>
+<div class="ask"><b>2 · La carte sur la fiche</b> : lien avec le nombre de personnes autorisées (proposé), ou simple lien ?</div>
+<div class="ask"><b>3 · Les minutes</b> : toutes les minutes (proposé), ou par pas de 5 ?</div>
+</div>
+
+<script>
+const pad=n=>String(n).padStart(2,"0");
+function fill(sel,n,cur){sel.innerHTML="";for(let i=0;i<n;i++){const o=document.createElement("option");o.value=i;o.textContent=pad(i);if(i===cur)o.selected=true;sel.appendChild(o);}}
+const $=id=>document.getElementById(id);
+fill($("fh"),24,8);fill($("fm"),60,0);fill($("th"),24,18);fill($("tm"),60,0);
+const val=(d,h,m)=>`${$(d).value}T${pad(+$(h).value)}:${pad(+$(m).value)}`;
+function grey(){
+  const from=val("fd","fh","fm");
+  $("td").min=$("fd").value;
+  const same=$("td").value===$("fd").value;
+  const fh=+$("fh").value, fm=+$("fm").value;
+  [...$("th").options].forEach(o=>o.disabled=same&&+o.value<fh);
+  [...$("tm").options].forEach(o=>o.disabled=same&&+$("th").value===fh&&+o.value<=fm);
+}
+function fixTo(){
+  const from=val("fd","fh","fm"), to=val("td","th","tm");
+  if(to<=from){const d=new Date(Date.parse(from+":00Z")+30*60000);$("td").value=d.toISOString().slice(0,10);$("th").value=d.getUTCHours();$("tm").value=d.getUTCMinutes();$("p1note").textContent="Fin décalée après le début.";$("p1note").hidden=false;}
+  grey();
+}
+["fd","fh","fm"].forEach(i=>$(i).onchange=fixTo);
+["td","th","tm"].forEach(i=>$(i).onchange=()=>{$("p1note").hidden=true;fixTo();});
+grey();
+
+$("p2ok").onclick=()=>{const v=$("eqsel").value;$("p2r").hidden=!!v;if(v){$("p2done").textContent="« "+v+" » ajouté : son onglet apparaît, prêt pour « Nouvel accès ».";$("p2done").hidden=false;}};
+
+const door='<svg viewBox="0 0 24 24"><path d="M13 4h3a2 2 0 0 1 2 2v14"/><path d="M2 20h3"/><path d="M13 20h9"/><path d="M10 12v.01"/><path d="M13 4.562v16.157a1 1 0 0 1-1.242.97L5 20V5.562a2 2 0 0 1 1.515-1.94l4-1A2 2 0 0 1 13 4.561Z"/></svg>';
+const shield='<svg viewBox="0 0 24 24"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="m9 12 2 2 4-4"/></svg>';
+const arrow='<svg viewBox="0 0 24 24"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>';
+const eqs=[{name:"Portail d'entrée",n:3},{name:"Portillon du jardin",n:0}];
+function p3(i){const e=eqs[i];
+ $("p3").innerHTML=`<div class="crumb">Maison › Extérieur</div><h4>${e.name}</h4>
+ <div class="card2"><h5>Commandes</h5><div class="hint2">[ glissière d'ouverture ]</div></div>
+ <div class="card2"><div class="hd">${shield}<h5>Confirmation avant action</h5><label style="margin-left:auto;font-size:12px;color:var(--s-muted)"><input type="checkbox" checked> Activer</label></div><div class="hint2">Sur mobile, demande un glissement de confirmation avant d'actionner.</div></div>
+ <div class="card2"><div class="hd">${door}<h5>Accès partagés</h5><button class="go" id="p3go">${e.n?"Gérer les accès":"Ouvrir des accès"} ${arrow}</button></div><div class="hint2">${e.n?`${e.n} personnes peuvent ouvrir ce portail avec un code.`:"Personne n'a encore d'accès à ce portail."}</div></div>
+ <div class="card2"><h5>Inverser le sens</h5><div class="hint2">…</div></div>`;
+ $("p3go").onclick=()=>{const t=document.createElement("div");t.className="toast";t.textContent=e.n?"→ Accès partagés, onglet « "+e.name+" »":"→ Accès partagés : « "+e.name+" » ajouté, onglet ouvert";$("p3").appendChild(t);setTimeout(()=>t.remove(),1800);};
+}
+document.querySelectorAll("[data-eq]").forEach(b=>b.onclick=()=>{document.querySelectorAll("[data-eq]").forEach(x=>x.setAttribute("aria-pressed",String(x===b)));p3(+b.dataset.eq);});
+p3(0);
+</script>
