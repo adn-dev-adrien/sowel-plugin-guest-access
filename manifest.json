@@ -1,46 +1,77 @@
 {
   "id": "guest-access",
   "type": "integration",
-  "name": "Guest Access",
-  "version": "0.3.0",
-  "description": "Brings the gate-opening requests of the gîte and lodge guests from GuestFlow into Sowel",
+  "name": "Shared Access",
+  "version": "1.5.0",
+  "description": "Let someone open something for a set time — a guest, a child, a tradesperson. Codes, hours and a journal, held in the house; guestFlow is an optional source of accesses.",
   "icon": "DoorOpen",
   "repo": "adn-dev-adrien/sowel-plugin-guest-access",
   "author": "adn-dev-adrien",
-  "tags": ["access", "guests"],
+  "tags": [
+    "access",
+    "sharing",
+    "gate",
+    "door"
+  ],
   "i18n": {
     "fr": {
-      "name": "Accès invités",
-      "description": "Fait remonter dans Sowel les demandes d'ouverture du portail émises par les clients du gîte et de la lodge depuis guestFlow"
+      "name": "Accès partagés",
+      "description": "Donner à quelqu'un le droit d'ouvrir, pour un temps donné — un invité, un enfant, un artisan. Codes, horaires et journal restent dans la maison ; guestFlow n'est qu'une source d'accès facultative."
     }
   },
-  "sowelVersion": ">=1.39.0",
+  "sowelVersion": ">=1.72.0",
+  "ui": {
+    "entry": "ui/panel.js",
+    "label": "Accès partagés",
+    "icon": "DoorOpen",
+    "placement": "main",
+    "equipmentLink": {
+      "types": [
+        "gate"
+      ]
+    }
+  },
+  "publicTree": true,
   "settings": [
     {
-      "key": "base_url",
-      "label": "GuestFlow URL",
+      "key": "guest_base_url",
+      "label": "Adresse publique de Sowel (pour les liens d'accès)",
       "type": "text",
-      "required": true,
+      "required": false,
+      "placeholder": "https://sowel.adn-dev.fr"
+    },
+    {
+      "key": "guest_path",
+      "label": "Chemin de la page d'ouverture sous cette adresse",
+      "type": "text",
+      "required": false,
+      "placeholder": "/p/guest-access/"
+    },
+    {
+      "key": "guestflow_base_url",
+      "label": "URL de guestFlow (facultatif)",
+      "type": "text",
+      "required": false,
       "placeholder": "https://guestflow.adn-dev.fr"
     },
     {
-      "key": "api_key",
-      "label": "GuestFlow gate API key",
+      "key": "guestflow_api_key",
+      "label": "Clé d'API portail de guestFlow",
       "type": "password",
-      "required": true
+      "required": false
     },
     {
-      "key": "signing_secret",
-      "label": "GuestFlow signing secret",
+      "key": "guestflow_signing_secret",
+      "label": "Secret de signature de guestFlow",
       "type": "password",
-      "required": true
+      "required": false
     },
     {
-      "key": "wait_seconds",
-      "label": "Long-poll duration (s)",
+      "key": "guestflow_poll_seconds",
+      "label": "Relecture de guestFlow (s)",
       "type": "number",
       "required": false,
-      "defaultValue": "25"
+      "defaultValue": "60"
     }
   ],
   "apiVersion": 2

@@ -1,32 +1,32 @@
 import { describe, expect, it } from "vitest";
-import { isAcceptableUrl } from "./index.js";
+import { isAcceptableUrl } from "./url-guard.js";
 
-// Le second facteur rend un canal écouté survivable — le secret ne circule jamais — mais il ne
-// chiffre RIEN : le code du séjour, le logement et le prénom du client traverseraient le LAN en
-// clair. guestFlow est servi en TLS sous son nom public, donc il n'y a plus de raison d'accepter
-// autre chose.
+// The second factor makes a sniffed channel survivable — the secret never
+// travels — but it encrypts NOTHING: the stay code, the lodging and the guest's
+// name would cross the LAN in clear. guestFlow is served over TLS under its
+// public name, so there is no reason left to accept anything else.
 
-describe("l'adresse de guestFlow", () => {
-  it("accepte le HTTPS", () => {
+describe("guestFlow's address", () => {
+  it("accepts HTTPS", () => {
     expect(isAcceptableUrl("https://guestflow.adn-dev.fr")).toBe(true);
     expect(isAcceptableUrl("https://guestflow.adn-dev.fr/")).toBe(true);
     expect(isAcceptableUrl("https://192.168.0.24:4000")).toBe(true);
   });
 
-  it("refuse le HTTP clair vers une autre machine — LAN compris", () => {
-    // C'est précisément le réglage qui traînait : http://192.168.0.24:4000.
+  it("refuses plain HTTP towards another machine — the LAN included", () => {
+    // Precisely the setting that was lying around: http://192.168.0.24:4000.
     expect(isAcceptableUrl("http://192.168.0.24:4000")).toBe(false);
     expect(isAcceptableUrl("http://guestflow.adn-dev.fr")).toBe(false);
     expect(isAcceptableUrl("http://guestflow.maison.adn-dev.fr")).toBe(false);
   });
 
-  it("laisse passer localhost : là, il n'y a pas de fil à écouter", () => {
+  it("lets localhost through: there is no wire to listen to", () => {
     expect(isAcceptableUrl("http://localhost:4000")).toBe(true);
     expect(isAcceptableUrl("http://127.0.0.1:4000")).toBe(true);
     expect(isAcceptableUrl("http://[::1]:4000")).toBe(true);
   });
 
-  it("refuse ce qui n'est pas une adresse, et les protocoles exotiques", () => {
+  it("refuses what is not an address, and exotic protocols", () => {
     expect(isAcceptableUrl("")).toBe(false);
     expect(isAcceptableUrl("guestflow.adn-dev.fr")).toBe(false);
     expect(isAcceptableUrl("ftp://guestflow.adn-dev.fr")).toBe(false);
@@ -34,7 +34,7 @@ describe("l'adresse de guestFlow", () => {
     expect(isAcceptableUrl("javascript:alert(1)")).toBe(false);
   });
 
-  it("n'est pas trompée par un hôte qui CONTIENT localhost", () => {
+  it("is not fooled by a host that CONTAINS localhost", () => {
     expect(isAcceptableUrl("http://localhost.attaquant.fr")).toBe(false);
     expect(isAcceptableUrl("http://notlocalhost")).toBe(false);
   });

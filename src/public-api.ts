@@ -1,0 +1,176 @@
+// ============================================================
+// The guest's half, served on Sowel's anonymous tree (/p/guest-access/*)
+//
+// Nothing authenticated these calls. What stands between the internet and the
+// gate is this file and `service.ts`: a code that matches an access, a window
+// that is open, an owner who has not suspended it — and the throttles, which
+// are here because the core only counts requests, not what they were trying.
+//
+// Every answer is a machine reason; the page turns it into a sentence in the
+// guest's own language. An error that cannot be acted on says as little as
+// possible: a wrong code and a locked code are told apart only by the number of
+// tries, never by the answer.
+// ============================================================
+
+import type { PluginHttpRequest, PluginHttpResponse } from "./plugin-contract.js";
+import type { GuestAccessService } from "./service.js";
+import { effectiveWindow } from "./validity.js";
+import {
+  GUEST_CSS,
+  GUEST_ICON,
+  guestManifest,
+  guestHtml,
+  guestJs,
+  pickLang,
+  type Lang,
+} from "./guest-app.js";
+
+export interface PublicDeps {
+  service: GuestAccessService;
+  guestBaseUrl(): string | null;
+  guestPath(): string;
+  /**
+   * The page's title before anyone has typed a code: the name of what opens
+   * when the house has ONE gate, null otherwise — a page that anyone can load
+   * does not list the house's doors.
+   */
+  openingLabel?(): string | null;
+  /** What to call a gate on the phone of someone allowed to open it. */
+  gateLabel?(gateId: string): string | null;
+}
+
+const NO_STORE = { "cache-control": "no-store" };
+
+/** Holding an answer back. Capped by the service, well under the core's 30 s. */
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    const timer = setTimeout(resolve, ms);
+    // A held answer must never be the reason a shutdown hangs.
+    timer.unref?.();
+  });
+}
+
+function json(status: number, body: unknown): PluginHttpResponse {
+  return { status, body, headers: NO_STORE };
+}
+
+function bearer(request: PluginHttpRequest): string {
+  const header = request.headers.authorization ?? "";
+  return header.startsWith("Bearer ") ? header.slice(7).trim() : "";
+}
+
+export function createPublicApi(deps: PublicDeps) {
+  const { service } = deps;
+
+  const sessionBody = (access: Parameters<GuestAccessService["invitation"]>[0], now: Date) => {
+    const window = effectiveWindow(access);
+    const decision = service.decideFor(access, now);
+    return {
+      // The guest's own first name is what tells them they are on their own
+      // access. The lodging is deliberately not named — a guest knows where
+      // they are sleeping.
+      label: access.label,
+      until: window.to ? window.to.toISOString() : null,
+      invitationUrl: service.invitation(access, deps.guestBaseUrl(), deps.guestPath()).url,
+      // Only the gates THIS access opens — one slide each.
+      gates: service.gatesOf(access).map((id) => ({ id, label: deps.gateLabel?.(id) ?? null })),
+      decision: decision.ok ? { ok: true } : { ...decision, reason: decision.reason },
+    };
+  };
+
+  return async function handle(request: PluginHttpRequest): Promise<PluginHttpResponse> {
+    const { method, path } = request;
+    const lang: Lang = (request.query.lang === "en" || request.query.lang === "fr"
+      ? request.query.lang
+      : pickLang(request.headers["accept-language"])) as Lang;
+
+    if (method === "GET" && (path === "/" || path === "")) {
+      return {
+        status: 200,
+        body: guestHtml(lang, deps.openingLabel?.() ?? null),
+        contentType: "text/html; charset=utf-8",
+        headers: {
+          ...NO_STORE,
+          // The page needs nothing from anywhere else, and says so.
+          "content-security-policy":
+            "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; manifest-src 'self'; base-uri 'none'; form-action 'none'",
+        },
+      };
+    }
+
+    if (method === "GET" && path === "/app.js") {
+      return {
+        status: 200,
+        body: guestJs(lang, deps.openingLabel?.() ?? null),
+        contentType: "text/javascript; charset=utf-8",
+        headers: NO_STORE,
+      };
+    }
+    if (method === "GET" && path === "/style.css") {
+      return { status: 200, body: GUEST_CSS, contentType: "text/css; charset=utf-8" };
+    }
+    if (method === "GET" && path === "/manifest.webmanifest") {
+      return {
+        status: 200,
+        body: guestManifest(lang, deps.openingLabel?.() ?? null),
+        contentType: "application/manifest+json",
+      };
+    }
+    if (method === "GET" && path === "/icon.svg") {
+      return { status: 200, body: GUEST_ICON, contentType: "image/svg+xml" };
+    }
+
+    if (method === "POST" && path === "/enrol") {
+      const code = (request.body as { code?: unknown })?.code;
+      const result = service.enrol(
+        typeof code === "string" ? code : "",
+        request.ip,
+        request.headers["user-agent"] ?? "",
+      );
+      if (!result.ok || !result.access) {
+        // The answer is held back before it is sent, never the request before
+        // it is answered: the work is already done, what is rationed is the
+        // rate at which a guesser learns anything. A correct code never carries
+        // a delay, so no guest ever waits (service.enrol).
+        if (result.delayMs) await sleep(result.delayMs);
+        // 401 for a code that matches nothing, deliberately: that is the status
+        // a brute-force ban counts on at the edge. The others are told apart
+        // because the guest can act on them differently.
+        const status = result.reason === "bad_code" ? 401 : 429;
+        return json(result.reason === "revoked" || result.reason === "expired" ? 403 : status, {
+          reason: result.reason,
+        });
+      }
+      return json(200, { token: result.token, ...sessionBody(result.access, new Date()) });
+    }
+
+    if (method === "GET" && path === "/session") {
+      const session = service.session(bearer(request));
+      if (!session) return json(401, { reason: "revoked" });
+      return json(200, sessionBody(session.access, new Date()));
+    }
+
+    if (method === "POST" && path === "/open") {
+      const token = bearer(request);
+      if (!token) return json(401, { reason: "revoked" });
+      const gate = (request.body as { gate?: unknown } | undefined)?.gate;
+      const result = await service.open(token, new Date(), typeof gate === "string" ? gate : undefined);
+      if (result.outcome === "opened") return json(200, { outcome: "opened" });
+      if (!result.access) return json(401, { reason: "revoked" });
+      const decision = result.decision;
+      return json(200, {
+        outcome: result.outcome,
+        reason: result.outcome,
+        ...(decision && !decision.ok
+          ? {
+              activeAt: decision.activeAt,
+              nextOpeningAt: decision.nextOpeningAt,
+              nextOpeningDay: decision.nextOpeningDay,
+            }
+          : {}),
+      });
+    }
+
+    return json(404, { reason: "not_found" });
+  };
+}
