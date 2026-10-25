@@ -102,6 +102,15 @@ const S = {
     nextMonth: "Mois suivant",
     addHours: "Ajouter une plage horaire",
     removeHours: "Retirer cette plage",
+    allDays: "Tous les jours",
+    chooseDays: "Choisir les jours",
+    hideDays: "Masquer les jours",
+    daysAll: "Tous",
+    daysWeek: "Semaine",
+    daysWeekend: "Week-end",
+    daysOne: "Tous les {p}",
+    daysMany: "Les {l}",
+    daysRange: "Du {a} au {b}",
     stayWindow: "Séjour",
     earlyOpen: "Ouvrir dès",
     extend: "Prolonger jusqu'au",
@@ -119,7 +128,8 @@ const S = {
     still_live: "Révoquez l'accès avant de le supprimer.",
     bad_date: "Date incompréhensible.",
     end_before_start: "La fin doit venir après le début.",
-    overlap: "Deux plages se chevauchent.",
+    overlap: "Deux plages se chevauchent un même jour.",
+    bad_days: "Choisissez au moins un jour.",
     bad_time: "Heure incompréhensible (HH:MM).",
     not_a_list: "Liste invalide.",
     not_earlier: "« Ouvrir dès » doit précéder le début du séjour.",
@@ -231,6 +241,15 @@ const S = {
     nextMonth: "Next month",
     addHours: "Add a time window",
     removeHours: "Remove this window",
+    allDays: "Every day",
+    chooseDays: "Choose days",
+    hideDays: "Hide days",
+    daysAll: "All",
+    daysWeek: "Weekdays",
+    daysWeekend: "Weekend",
+    daysOne: "Every {s}",
+    daysMany: "{l}",
+    daysRange: "{a} to {b}",
     stayWindow: "Stay",
     earlyOpen: "Open from",
     extend: "Extend until",
@@ -248,7 +267,8 @@ const S = {
     still_live: "Revoke the access before deleting it.",
     bad_date: "That date cannot be read.",
     end_before_start: "The end must come after the start.",
-    overlap: "Two windows overlap.",
+    overlap: "Two windows overlap on the same day.",
+    bad_days: "Pick at least one day.",
     bad_time: "That time cannot be read (HH:MM).",
     not_a_list: "Invalid list.",
     not_earlier: "« Open from » must precede the start of the stay.",
@@ -363,7 +383,20 @@ const CSS = `
 .ga .cut { display: flex; gap: 8px; align-items: flex-start; font-size: 13px; }
 .ga .cut input { min-height: 0; margin-top: 3px; }
 .ga .windows { display: grid; gap: 8px; }
-.ga .window { display: flex; gap: 8px; align-items: center; }
+.ga .window { display: grid; gap: 8px; border: 1px solid var(--color-border, #dfe4e9); border-radius: var(--radius-md, 8px); padding: 10px; }
+.ga .window .times { display: flex; gap: 8px; align-items: center; }
+.ga .window .times input { flex: 1; min-width: 0; }
+.ga .dayline { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; }
+.ga .dayline .say { font-size: 13px; font-weight: 600; }
+.ga .dayline .say.bad { color: var(--color-error, #b3261e); }
+.ga .picker { display: grid; gap: 6px; padding-top: 8px; border-top: 1px dashed var(--color-border, #dfe4e9); }
+.ga .picker[hidden] { display: none; }
+.ga .days { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; }
+.ga .day { font: inherit; font-size: 13px; font-weight: 600; min-height: 40px; border-radius: var(--radius-md, 8px); border: 1px solid var(--color-border, #dfe4e9); background: transparent; color: inherit; opacity: .7; cursor: pointer; touch-action: manipulation; transition: transform .12s ease-out; }
+.ga .day:active { transform: scale(.94); }
+.ga .day[aria-pressed="true"] { background: var(--color-primary, #1A4F6E); border-color: var(--color-primary, #1A4F6E); color: #fff; opacity: 1; }
+.ga .quick { display: flex; gap: 4px; flex-wrap: wrap; }
+@media (prefers-reduced-motion: reduce) { .ga .day { transition: none; } }
 .ga .refusal { color: var(--color-error, #b3261e); font-size: 12px; margin: 0; }
 .ga .foot { display: flex; gap: 8px; justify-content: flex-end; }
 .ga .btn { font: inherit; font-size: 13px; min-height: 36px; padding: 0 14px; border-radius: var(--radius-md, 8px); border: 1px solid var(--color-border, #dfe4e9); background: transparent; color: inherit; cursor: pointer; }
@@ -558,6 +591,31 @@ export async function mount(container, ctx) {
 
   // ── Wording ──────────────────────────────────────────────
 
+  // ISO weekday (1 = Monday) → its name; 1 January 2024 was a Monday.
+  const weekdayFmt = (style) => new Intl.DateTimeFormat(locale, { weekday: style, timeZone: "UTC" });
+  const dayName = (d, style = "long") => weekdayFmt(style).format(new Date(Date.UTC(2024, 0, d)));
+  const EVERY = [1, 2, 3, 4, 5, 6, 7];
+  const daysOrAll = (days) => (Array.isArray(days) && days.length ? [...days].sort((a, b) => a - b) : EVERY);
+  const isRun = (d) => d.length > 2 && d.every((x, i) => i === 0 || x === d[i - 1] + 1);
+  /** « ven. » / « lun.–ven. » / « lun., mer. » — empty when it is every day. */
+  function shortDays(days) {
+    const d = daysOrAll(days);
+    if (d.length === 7) return "";
+    if (isRun(d)) return `${dayName(d[0], "short")}–${dayName(d[d.length - 1], "short")} `;
+    return `${d.map((x) => dayName(x, "short")).join(", ")} `;
+  }
+  /** « Tous les vendredis » / « Du lundi au vendredi » / « Les lundis et jeudis ». */
+  function daysSentence(days) {
+    const d = daysOrAll(days);
+    if (!d.length) return "";
+    if (d.length === 7) return t("allDays");
+    if (d.length === 1) return t("daysOne", { p: `${dayName(d[0])}s`, s: dayName(d[0]) });
+    if (isRun(d)) return t("daysRange", { a: dayName(d[0]), b: dayName(d[d.length - 1]) });
+    const names = d.map((x) => `${dayName(x)}s`);
+    const list = lang === "fr" ? `${names.slice(0, -1).join(", ")} et ${names[names.length - 1]}` : `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
+    return t("daysMany", { l: list });
+  }
+
   function validityOf(row) {
     if (!row.validFrom && !row.validUntil) return t("always");
     if (row.validFrom && row.validUntil) return t("between", { a: fmt(row.validFrom), b: fmt(row.validUntil) });
@@ -566,7 +624,7 @@ export async function mount(container, ctx) {
   }
   function hoursOf(row) {
     if (!row.timeWindows || !row.timeWindows.length) return t("anyHour");
-    return t("hours", { w: row.timeWindows.map((w) => `${w.from}–${w.to}`).join(", ") });
+    return t("hours", { w: row.timeWindows.map((w) => `${shortDays(w.days)}${w.from}–${w.to}`).join(" · ") });
   }
 
   // ── Rendering ────────────────────────────────────────────
@@ -1210,13 +1268,66 @@ export async function mount(container, ctx) {
       const windows = el("div", "windows");
       const addWindow = (window) => {
         const line = el("div", "window");
+        // The days are written down from the start (every day) and shown only on
+        // request: most accesses never need them.
+        let days = daysOrAll(window && window.days);
+        const times = el("div", "times");
         const from = el("input");
         from.type = "time";
         from.value = (window && window.from) || "08:00";
         const to = el("input");
         to.type = "time";
         to.value = (window && window.to) || "20:00";
-        line.append(from, document.createTextNode("→"), to, iconButton("x", t("removeHours"), () => line.remove()));
+        times.append(from, document.createTextNode("→"), to, iconButton("x", t("removeHours"), () => line.remove()));
+
+        const summary = el("div", "dayline");
+        const sentence = el("span", "say");
+        const toggle = el("button", "btn link", t("chooseDays"));
+        toggle.type = "button";
+        toggle.setAttribute("aria-expanded", "false");
+        summary.append(sentence, toggle);
+
+        const picker = el("div", "picker");
+        picker.hidden = true;
+        const grid = el("div", "days");
+        grid.setAttribute("role", "group");
+        const buttons = EVERY.map((d) => {
+          const b = el("button", "day", dayName(d, "narrow").toUpperCase());
+          b.type = "button";
+          b.setAttribute("aria-label", dayName(d));
+          b.onclick = () => {
+            days = days.includes(d) ? days.filter((x) => x !== d) : [...days, d].sort((a, c) => a - c);
+            paint();
+          };
+          grid.appendChild(b);
+          return b;
+        });
+        const quick = el("div", "quick");
+        for (const [label, set] of [[t("daysAll"), EVERY], [t("daysWeek"), [1, 2, 3, 4, 5]], [t("daysWeekend"), [6, 7]]]) {
+          const q = el("button", "btn link", label);
+          q.type = "button";
+          q.onclick = () => { days = [...set]; paint(); };
+          quick.appendChild(q);
+        }
+        picker.append(grid, quick);
+
+        const open = (on) => {
+          picker.hidden = !on;
+          toggle.textContent = on ? t("hideDays") : t("chooseDays");
+          toggle.setAttribute("aria-expanded", String(on));
+        };
+        toggle.onclick = () => open(picker.hidden);
+        const paint = () => {
+          buttons.forEach((b, i) => b.setAttribute("aria-pressed", String(days.includes(i + 1))));
+          sentence.textContent = days.length ? daysSentence(days) : t("bad_days");
+          sentence.classList.toggle("bad", !days.length);
+          // No day at all must be visible, whatever the toggle says.
+          if (!days.length) open(true);
+        };
+        paint();
+
+        line.getDays = () => days;
+        line.append(times, summary, picker);
         windows.appendChild(line);
       };
       for (const window of (row && row.timeWindows) || []) addWindow(window);
@@ -1235,8 +1346,8 @@ export async function mount(container, ctx) {
         const payload = {
           label: labelInput.value,
           timeWindows: [...windows.querySelectorAll(".window")].map((line) => {
-            const [from, to] = line.querySelectorAll("input");
-            return { from: from.value, to: to.value };
+            const [from, to] = line.querySelectorAll(".times input");
+            return { from: from.value, to: to.value, days: line.getDays() };
           }),
           ...collect(),
         };

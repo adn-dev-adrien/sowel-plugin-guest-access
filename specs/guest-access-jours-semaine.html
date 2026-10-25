@@ -1,0 +1,297 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Accès partagés : jours de la semaine</title>
+<style>
+:root {
+  --bg: #f4f6f8; --card: #fff; --text: #17212b; --muted: #5c6b79; --border: #dfe4e9;
+  --primary: #1A4F6E; --primary-soft: #e3eef4; --ok: #1e7a46; --ok-soft: #e1f3e8;
+  --err: #b3261e; --err-soft: #fbe9e7; --field: #fff;
+  --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, "Segoe UI", sans-serif;
+}
+:root[data-theme="dark"] {
+  --bg: #0f1419; --card: #181d24; --text: #e8edf2; --muted: #93a1af; --border: #2b333d;
+  --primary: #5aa9d1; --primary-soft: #1d3342; --ok: #5fcf8b; --ok-soft: #173325;
+  --err: #ff8a80; --err-soft: #3a1f1d; --field: #12171c;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.5 var(--font); }
+main { max-width: 980px; margin: 0 auto; padding: 24px 16px 64px; }
+h1 { font-size: 26px; line-height: 1.1; letter-spacing: -.02em; margin: 0 0 4px; }
+h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 0 0 8px; font-weight: 600; }
+.sub { color: var(--muted); margin: 0 0 20px; }
+.top { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; }
+.theme { font: inherit; font-size: 13px; padding: 6px 12px; border-radius: 8px; border: 1px solid var(--border); background: var(--card); color: var(--text); cursor: pointer; }
+.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 12px; margin-bottom: 24px; }
+.card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px; }
+.card p { margin: 0; font-size: 14px; }
+.stage { display: grid; grid-template-columns: minmax(0, 460px) minmax(0, 1fr); gap: 20px; align-items: start; margin-bottom: 24px; }
+@media (max-width: 800px) { .stage { grid-template-columns: 1fr; } }
+
+/* The editor — same tokens and proportions as the real panel */
+.sheet { background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 18px; display: grid; gap: 14px; }
+.sheet h3 { margin: 0; font-size: 17px; }
+.lbl { font-size: 12px; color: var(--muted); }
+.field { display: grid; gap: 6px; }
+input[type=text], input[type=time], select {
+  font: inherit; font-size: 14px; min-height: 40px; padding: 0 12px; border-radius: 8px;
+  border: 1px solid var(--border); background: var(--field); color: var(--text);
+}
+input:focus-visible, button:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+.window { border: 1px solid var(--border); border-radius: 10px; padding: 12px; display: grid; gap: 10px; transition: border-color .15s, background .15s; }
+.window.bad { border-color: var(--err); background: var(--err-soft); }
+.days { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; }
+.day {
+  font: inherit; font-size: 13px; font-weight: 600; min-height: 40px; border-radius: 10px;
+  border: 1px solid var(--border); background: transparent; color: var(--muted); cursor: pointer;
+  transition: transform .12s ease-out, background .15s, color .15s, border-color .15s;
+  touch-action: manipulation; -webkit-tap-highlight-color: transparent;
+}
+.day:active { transform: scale(.94); }
+.day[aria-pressed=true] { background: var(--primary); border-color: var(--primary); color: #fff; }
+:root[data-theme="dark"] .day[aria-pressed=true] { color: #0b1a24; }
+.picker { display: grid; gap: 8px; padding-top: 10px; border-top: 1px dashed var(--border); }
+.picker[hidden] { display: none; }
+.times { display: flex; gap: 8px; align-items: center; }
+.times input { flex: 1; min-width: 0; }
+.quick { display: flex; gap: 4px; flex-wrap: wrap; }
+.btn { font: inherit; font-size: 13px; min-height: 36px; padding: 0 14px; border-radius: 8px; border: 1px solid var(--border); background: transparent; color: inherit; cursor: pointer; }
+.btn.main { background: var(--primary); border-color: var(--primary); color: #fff; }
+:root[data-theme="dark"] .btn.main { color: #0b1a24; }
+.btn.link { border: 0; padding: 0 8px; color: var(--primary); min-height: 28px; }
+.btn.icon { width: 36px; padding: 0; font-size: 16px; }
+.line-foot { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; }
+.say { font-size: 13px; color: var(--text); font-weight: 600; }
+.refusal { margin: 0; font-size: 13px; color: var(--err); }
+.foot { display: flex; justify-content: flex-end; gap: 8px; }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+
+/* Right column */
+.side { display: grid; gap: 12px; }
+.row { display: flex; justify-content: space-between; gap: 10px; align-items: baseline; flex-wrap: wrap; }
+.row b { font-size: 15px; }
+.chip { font-size: 12px; padding: 2px 10px; border-radius: 99px; background: var(--primary-soft); color: var(--primary); }
+.tester { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px; }
+.verdict { margin-top: 10px; padding: 10px 12px; border-radius: 10px; font-size: 14px; }
+.verdict.ok { background: var(--ok-soft); color: var(--ok); }
+.verdict.no { background: var(--err-soft); color: var(--err); }
+.verdict small { display: block; opacity: .85; }
+.week { display: grid; grid-template-columns: 28px repeat(24, 1fr); gap: 2px; align-items: center; font-size: 11px; color: var(--muted); margin-top: 8px; }
+.week i { height: 14px; border-radius: 3px; background: var(--border); display: block; }
+.week i.on { background: var(--primary); }
+.week i.now { outline: 2px solid var(--text); outline-offset: 1px; }
+.hours { display: grid; grid-template-columns: 28px 1fr; font-size: 10px; color: var(--muted); margin-top: 4px; }
+.hours span { display: flex; justify-content: space-between; }
+.toast { position: fixed; left: 50%; bottom: 20px; transform: translate(-50%, 20px); background: var(--text); color: var(--bg); padding: 10px 16px; border-radius: 10px; font-size: 14px; opacity: 0; pointer-events: none; transition: opacity .2s, transform .2s; }
+.toast.show { opacity: 1; transform: translate(-50%, 0); }
+.decide li { margin-bottom: 8px; }
+.decide { margin: 0; padding-left: 18px; font-size: 14px; }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+</head>
+<body>
+<main>
+  <div class="top">
+    <div>
+      <h1>Jours de la semaine sur les plages horaires</h1>
+      <p class="sub">Plugin guest-access · éditeur d'un accès · maquette manipulable, rien n'est codé.</p>
+    </div>
+    <button class="theme" id="theme" type="button">Clair / sombre</button>
+  </div>
+
+  <div class="grid">
+    <div class="card"><h2>Constat</h2><p>Une plage horaire vaut tous les jours. « Tous les vendredis 18 h–22 h » est impossible.</p></div>
+    <div class="card"><h2>On propose</h2><p>Chaque plage a ses jours, tous cochés par défaut et repliés : on ne les voit que si on clique « Choisir les jours ». « Tous » les recoche d’un geste.</p></div>
+    <div class="card"><h2>On ne fait pas</h2><p>Plage à cheval sur minuit (22 h → 02 h) : toujours refusée. Pas de dates précises ni d'exceptions.</p></div>
+    <div class="card"><h2>Risque</h2><p>Faible : un accès sans jours enregistrés se comporte comme avant. Le refus de l'invité cite le prochain créneau avec son jour.</p></div>
+  </div>
+
+  <div class="stage">
+    <section class="sheet" aria-label="Éditeur d'un accès">
+      <h3>Artisan — M. Roux</h3>
+      <div class="field"><span class="lbl">Pour qui</span><input type="text" value="Artisan — M. Roux" aria-label="Pour qui"></div>
+      <div class="field"><span class="lbl">Horaires autorisés</span><div id="windows" style="display:grid;gap:10px"></div></div>
+      <div><button class="btn link" id="add" type="button">+ Ajouter une plage horaire</button></div>
+      <p class="refusal" id="refusal" hidden></p>
+      <div class="foot"><button class="btn" type="button" id="reset">Réinitialiser</button><button class="btn main" id="save" type="button">Enregistrer</button></div>
+    </section>
+
+    <div class="side">
+      <section class="card">
+        <h2>Dans la liste des accès</h2>
+        <div class="row"><b>Artisan — M. Roux</b><span class="chip" id="chip">—</span></div>
+        <div class="week" id="week"></div>
+        <div class="hours"><span></span><span><em>0 h</em><em>6 h</em><em>12 h</em><em>18 h</em><em>24 h</em></span></div>
+      </section>
+      <section class="card">
+        <h2>Essayer : le code marche-t-il ?</h2>
+        <div class="tester">
+          <select id="tDay" aria-label="Jour"></select>
+          <input type="time" id="tTime" value="19:30" aria-label="Heure">
+        </div>
+        <div class="verdict" id="verdict" role="status"></div>
+      </section>
+      <section class="card">
+        <h2>À trancher</h2>
+        <ol class="decide">
+          <li><b>Jours par plage</b> (reco) plutôt qu'un seul réglage de jours pour tout l'accès : permet « mar. 8 h–12 h » + « ven. 18 h–22 h » sur le même accès.</li>
+          <li><b>Raccourcis</b> « Tous », « Semaine », « Week-end » dans le volet ouvert : gardés ?</li>
+          <li><b>Cas d'usage vu</b> : l'invité refusé lit « Revenez vendredi à 18:00 » (au lieu de « à 18:00 »).</li>
+        </ol>
+      </section>
+    </div>
+  </div>
+</main>
+<div class="toast" id="toast" role="status"></div>
+
+<script>
+const NAMES = ["lundi","mardi","mercredi","jeudi","vendredi","samedi","dimanche"];
+const LETTERS = ["L","M","M","J","V","S","D"];
+const FIRST = [{days:[0,1,2,3,4,5,6], from:"08:00", to:"20:00"}];
+let windows = JSON.parse(JSON.stringify(FIRST));
+const $ = (id) => document.getElementById(id);
+const mins = (v) => { const m = /^(\d{1,2}):(\d{2})$/.exec(v || ""); return m ? +m[1]*60 + +m[2] : null; };
+const plural = (i) => NAMES[i] + "s";
+const all = [0,1,2,3,4,5,6];
+
+function say(w) {
+  const d = [...w.days].sort((a,b)=>a-b);
+  let days;
+  if (!d.length) days = "Aucun jour";
+  else if (d.length === 7) days = "Tous les jours";
+  else if (d.length === 1) days = "Tous les " + plural(d[0]);
+  else if (d.every((x,i) => i === 0 || x === d[i-1]+1) && d.length > 2) days = "Du " + NAMES[d[0]] + " au " + NAMES[d[d.length-1]];
+  else days = "Les " + d.slice(0,-1).map(plural).join(", ") + " et " + plural(d[d.length-1]);
+  return `${days}, de ${w.from} à ${w.to}`;
+}
+function problem(i) {
+  const w = windows[i], f = mins(w.from), t = mins(w.to);
+  if (!w.days.length) return "Choisissez au moins un jour.";
+  if (f === null || t === null) return "Heure incompréhensible (HH:MM).";
+  if (t <= f) return "La fin doit venir après le début.";
+  for (let j = 0; j < windows.length; j++) {
+    if (j === i) continue;
+    const o = windows[j], of = mins(o.from), ot = mins(o.to);
+    const shared = w.days.filter((d) => o.days.includes(d));
+    if (shared.length && of !== null && ot !== null && f < ot && of < t) {
+      return `Chevauche une autre plage le ${NAMES[shared[0]]}${shared.length > 1 ? " (et d'autres jours)" : ""}.`;
+    }
+  }
+  return null;
+}
+function render() {
+  const box = $("windows"); box.innerHTML = "";
+  windows.forEach((w, i) => {
+    const p = problem(i);
+    const el = document.createElement("div");
+    el.className = "window" + (p ? " bad" : "");
+    const days = document.createElement("div"); days.className = "days"; days.setAttribute("role", "group"); days.setAttribute("aria-label", "Jours");
+    all.forEach((d) => {
+      const b = document.createElement("button"); b.type = "button"; b.className = "day";
+      b.textContent = LETTERS[d]; b.setAttribute("aria-label", NAMES[d]); b.setAttribute("aria-pressed", w.days.includes(d));
+      b.onclick = () => { w.days = w.days.includes(d) ? w.days.filter((x) => x !== d) : [...w.days, d]; update(); };
+      days.appendChild(b);
+    });
+    const times = document.createElement("div"); times.className = "times";
+    const a = Object.assign(document.createElement("input"), { type: "time", value: w.from }); a.setAttribute("aria-label", "De");
+    const b2 = Object.assign(document.createElement("input"), { type: "time", value: w.to }); b2.setAttribute("aria-label", "À");
+    a.oninput = () => { w.from = a.value; softUpdate(); }; b2.oninput = () => { w.to = b2.value; softUpdate(); };
+    const arrow = document.createTextNode("→");
+    const rm = Object.assign(document.createElement("button"), { type: "button", className: "btn icon", textContent: "×" });
+    rm.setAttribute("aria-label", "Retirer cette plage"); rm.onclick = () => { windows.splice(i, 1); update(); };
+    times.append(a, arrow, b2, rm);
+    const quick = document.createElement("div"); quick.className = "quick";
+    [["Tous", all], ["Semaine", [0,1,2,3,4]], ["Week-end", [5,6]]].forEach(([label, set]) => {
+      const q = Object.assign(document.createElement("button"), { type: "button", className: "btn link", textContent: label });
+      q.onclick = () => { w.days = [...set]; update(); }; quick.appendChild(q);
+    });
+    const foot = document.createElement("div"); foot.className = "line-foot";
+    const s = document.createElement("span"); s.className = "say"; s.textContent = say(w);
+    const tg = Object.assign(document.createElement("button"), { type: "button", className: "btn link", textContent: w.open ? "Masquer les jours" : "Choisir les jours" });
+    tg.setAttribute("aria-expanded", !!w.open);
+    tg.onclick = () => { w.open = !w.open; update(); };
+    foot.append(s, tg);
+    const picker = document.createElement("div"); picker.className = "picker"; picker.hidden = !w.open;
+    picker.append(days, quick);
+    // A window with a day problem must show where it is, whatever the toggle says.
+    if (p && !w.days.length) { picker.hidden = false; w.open = true; tg.textContent = "Masquer les jours"; }
+    el.append(times, foot, picker);
+    if (p) { const r = document.createElement("p"); r.className = "refusal"; r.textContent = p; el.appendChild(r); }
+    box.appendChild(el);
+  });
+  side();
+}
+// Typing a time must not rebuild the inputs (it would steal focus).
+function softUpdate() {
+  [...$("windows").children].forEach((el, i) => {
+    const p = problem(i); el.classList.toggle("bad", !!p);
+    let r = el.querySelector(".refusal");
+    if (p) { if (!r) { r = document.createElement("p"); r.className = "refusal"; el.appendChild(r); } r.textContent = p; } else if (r) r.remove();
+    el.querySelector(".say").textContent = say(windows[i]);
+  });
+  side();
+}
+function update() { $("refusal").hidden = true; render(); }
+
+function allowed(day, minute) {
+  return windows.some((w) => w.days.includes(day) && mins(w.from) !== null && mins(w.to) !== null && minute >= mins(w.from) && minute < mins(w.to));
+}
+function nextOpening(day, minute) {
+  for (let k = 0; k < 8; k++) {
+    const d = (day + k) % 7;
+    const starts = windows.filter((w) => w.days.includes(d) && mins(w.from) !== null)
+      .map((w) => mins(w.from)).filter((s) => k > 0 || s > minute).sort((a, b) => a - b);
+    if (starts.length) return { d, k, s: starts[0] };
+  }
+  return null;
+}
+const hhmm = (m) => String(Math.floor(m / 60)).padStart(2, "0") + ":" + String(m % 60).padStart(2, "0");
+function side() {
+  // list chip: same shape as hoursOf()
+  const ok = windows.filter((w) => w.days.length && mins(w.from) !== null);
+  $("chip").textContent = windows.length ? windows.map(chip).join(" · ") : "À toute heure";
+  // week strip
+  const wk = $("week"); wk.innerHTML = "";
+  const td = +$("tDay").value, tm = mins($("tTime").value);
+  all.forEach((d) => {
+    const l = document.createElement("span"); l.textContent = LETTERS[d].toLowerCase() === "m" ? "m" : LETTERS[d]; l.textContent = ["lun","mar","mer","jeu","ven","sam","dim"][d]; wk.appendChild(l);
+    for (let h = 0; h < 24; h++) {
+      const c = document.createElement("i");
+      if (allowed(d, h * 60 + 30)) c.className = "on";
+      if (d === td && tm !== null && Math.floor(tm / 60) === h) c.classList.add("now");
+      wk.appendChild(c);
+    }
+  });
+  // verdict
+  const v = $("verdict");
+  if (!windows.length) { v.className = "verdict ok"; v.innerHTML = "Autorisé<small>Aucune plage : toute heure, tous les jours.</small>"; return; }
+  if (windows.some((_, i) => problem(i))) { v.className = "verdict no"; v.innerHTML = "Plages invalides<small>Corrigez l'éditeur pour tester.</small>"; return; }
+  if (tm === null) { v.className = "verdict no"; v.textContent = "Heure incompréhensible."; return; }
+  if (allowed(td, tm)) { v.className = "verdict ok"; v.innerHTML = `Autorisé<small>${NAMES[td]} ${hhmm(tm)} est dans une plage.</small>`; return; }
+  const n = nextOpening(td, tm);
+  v.className = "verdict no";
+  const when = !n ? "Aucun créneau ne s'ouvrira." : n.k === 0 ? `Revenez à ${hhmm(n.s)}.` : n.k === 1 ? `Revenez demain à ${hhmm(n.s)}.` : `Revenez ${NAMES[n.d]} à ${hhmm(n.s)}.`;
+  v.innerHTML = `Refusé : hors horaires<small>Ce que l'invité lit : « ${when} »</small>`;
+}
+function chip(w) {
+  const d = [...w.days].sort((a,b)=>a-b), ab = ["lun","mar","mer","jeu","ven","sam","dim"];
+  const days = d.length === 7 ? "" : d.length > 2 && d.every((x,i)=>i===0||x===d[i-1]+1) ? `${ab[d[0]]}–${ab[d[d.length-1]]} ` : d.map((x)=>ab[x]).join(", ") + " ";
+  return `${days}${w.from}–${w.to}`;
+}
+$("tDay").innerHTML = NAMES.map((n, i) => `<option value="${i}"${i === 4 ? " selected" : ""}>${n}</option>`).join("");
+$("tDay").onchange = $("tTime").oninput = side;
+$("add").onclick = () => { windows.push({ days: [...all], from: "08:00", to: "20:00" }); update(); };
+$("reset").onclick = () => { windows = JSON.parse(JSON.stringify(FIRST)); update(); };
+$("save").onclick = () => {
+  const i = windows.findIndex((_, k) => problem(k));
+  if (i >= 0) { const r = $("refusal"); r.textContent = problem(i); r.hidden = false; return; }
+  const t = $("toast"); t.textContent = "Enregistré (simulation)"; t.classList.add("show"); setTimeout(() => t.classList.remove("show"), 1600);
+};
+$("theme").onclick = () => { const r = document.documentElement; r.dataset.theme = r.dataset.theme === "dark" ? "" : "dark"; };
+if (matchMedia("(prefers-color-scheme: dark)").matches) document.documentElement.dataset.theme = "dark";
+render();
+</script>
+</body>
+</html>

@@ -15,7 +15,7 @@ import {
   MAX_OPENS_PER_ACCESS_PER_HOUR,
   MAX_OPENS_PER_GATE_PER_HOUR,
 } from "./model.js";
-import { formatHhMm, minutesOfDay, parseHhMm } from "./paris.js";
+import { formatHhMm, minutesOfDay, parseHhMm, weekdayOf } from "./paris.js";
 
 export interface EffectiveWindow {
   from: Date | null;
@@ -53,7 +53,7 @@ export function effectiveWindow(access: Access): EffectiveWindow {
 
 export type Decision =
   | { ok: true }
-  | { ok: false; reason: RefusalReason; activeAt?: string; nextOpeningAt?: string };
+  | { ok: false; reason: RefusalReason; activeAt?: string; nextOpeningAt?: string; nextOpeningDay?: number };
 
 export interface Counters {
   /** Opens by this access in the last hour. */
@@ -89,20 +89,44 @@ export function decide(access: Access, now: Date, counters: Counters): Decision 
   return { ok: true };
 }
 
-/** Inside one of the day's windows? Empty means any hour. */
+const EVERY_DAY = [1, 2, 3, 4, 5, 6, 7];
+
+/** The days a window applies to; a window saved before days existed is every day. */
+const daysOf = (w: TimeWindow): number[] =>
+  Array.isArray(w.days) && w.days.length ? w.days : EVERY_DAY;
+
+/** Inside one of the day's windows, on this day of the week? Empty means any hour. */
 export function hourCheck(windows: TimeWindow[], now: Date): Decision {
   if (!windows.length) return { ok: true };
   const minutes = minutesOfDay(now);
+  const today = weekdayOf(now);
   const parsed = windows
-    .map((w) => ({ from: parseHhMm(w.from), to: parseHhMm(w.to) }))
-    .filter((w): w is { from: number; to: number } => w.from !== null && w.to !== null);
+    .map((w) => ({ from: parseHhMm(w.from), to: parseHhMm(w.to), days: daysOf(w) }))
+    .filter((w): w is { from: number; to: number; days: number[] } => w.from !== null && w.to !== null);
 
   if (!parsed.length) return { ok: true };
-  if (parsed.some((w) => minutes >= w.from && minutes < w.to)) return { ok: true };
+  if (parsed.some((w) => w.days.includes(today) && minutes >= w.from && minutes < w.to)) {
+    return { ok: true };
+  }
 
-  const starts = parsed.map((w) => w.from).sort((a, b) => a - b);
-  const next = starts.find((start) => start > minutes) ?? starts[0];
-  return { ok: false, reason: "outside_hours", nextOpeningAt: formatHhMm(next) };
+  // The next start, today after now, then each following day; a week later is
+  // the same weekday again, so eight steps always find one.
+  for (let ahead = 0; ahead <= 7; ahead++) {
+    const day = ((today - 1 + ahead) % 7) + 1;
+    const starts = parsed
+      .filter((w) => w.days.includes(day) && (ahead > 0 || w.from > minutes))
+      .map((w) => w.from)
+      .sort((a, b) => a - b);
+    if (starts.length) {
+      return {
+        ok: false,
+        reason: "outside_hours",
+        nextOpeningAt: formatHhMm(starts[0]),
+        ...(ahead > 0 ? { nextOpeningDay: day } : {}),
+      };
+    }
+  }
+  return { ok: false, reason: "outside_hours" };
 }
 
 // ── What the owner may write ────────────────────────────────────────────
@@ -118,7 +142,7 @@ export type Refusal = { field: string; code: string } | null;
  */
 export function validateTimeWindows(windows: unknown): Refusal {
   if (!Array.isArray(windows)) return { field: "timeWindows", code: "not_a_list" };
-  const parsed: Array<{ from: number; to: number }> = [];
+  const parsed: Array<{ from: number; to: number; days: number[] }> = [];
   for (const window of windows) {
     const from = parseHhMm((window as TimeWindow)?.from);
     const to = parseHhMm((window as TimeWindow)?.to);
@@ -126,14 +150,37 @@ export function validateTimeWindows(windows: unknown): Refusal {
     // Midnight-crossing is refused rather than guessed: « 22:00 → 02:00 » reads
     // as two different intentions depending on who is asked.
     if (to <= from) return { field: "timeWindows", code: "end_before_start" };
-    parsed.push({ from, to });
+    const days = (window as TimeWindow).days;
+    // Absent is every day; present must name at least one real day. An empty
+    // list is refused rather than read as « every day », which is the opposite.
+    if (days !== undefined) {
+      const real = Array.isArray(days) && days.every((d) => Number.isInteger(d) && d >= 1 && d <= 7);
+      if (!real || !days.length) return { field: "timeWindows", code: "bad_days" };
+    }
+    parsed.push({ from, to, days: daysOf(window as TimeWindow) });
   }
-  parsed.sort((a, b) => a.from - b.from);
-  for (let i = 1; i < parsed.length; i++) {
-    // Two overlapping rules make the effective one unguessable.
-    if (parsed[i].from < parsed[i - 1].to) return { field: "timeWindows", code: "overlap" };
+  for (let i = 0; i < parsed.length; i++) {
+    for (let j = i + 1; j < parsed.length; j++) {
+      // Two overlapping rules make the effective one unguessable — but only on
+      // a day they share: Tuesday morning and Friday evening may overlap in hours.
+      const shareADay = parsed[i].days.some((d) => parsed[j].days.includes(d));
+      if (shareADay && parsed[i].from < parsed[j].to && parsed[j].from < parsed[i].to) {
+        return { field: "timeWindows", code: "overlap" };
+      }
+    }
   }
   return null;
+}
+
+/**
+ * What gets stored: days sorted and unique, and « all seven » written as no
+ * days at all, so an unrestricted window looks the same as it always did.
+ */
+export function normalizeTimeWindows(windows: TimeWindow[]): TimeWindow[] {
+  return windows.map((w) => {
+    const days = [...new Set(w.days ?? EVERY_DAY)].sort((a, b) => a - b);
+    return days.length === 7 ? { from: w.from, to: w.to } : { from: w.from, to: w.to, days };
+  });
 }
 
 export function validateRange(from: Date | null, to: Date | null): Refusal {

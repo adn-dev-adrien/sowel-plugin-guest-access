@@ -99,6 +99,13 @@ export function toWallClockInput(iso: string | null): string {
   return `${w.year}-${pad(w.month)}-${pad(w.day)}T${pad(w.hour)}:${pad(w.minute)}`;
 }
 
+/** Day of the week on the Paris calendar, ISO: 1 = Monday … 7 = Sunday. */
+export function weekdayOf(instant: Date): number {
+  const w = wallClockAt(instant);
+  const day = new Date(Date.UTC(w.year, w.month - 1, w.day)).getUTCDay();
+  return day === 0 ? 7 : day;
+}
+
 /** Minutes since Paris midnight, for the time-of-day windows. */
 export function minutesOfDay(instant: Date): number {
   const w = wallClockAt(instant);

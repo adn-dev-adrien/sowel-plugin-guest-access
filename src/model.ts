@@ -33,10 +33,15 @@ export interface AccessDevice {
   userAgent: string;
 }
 
-/** `08:00` → `20:00`, on the Paris wall clock, every day. */
+/**
+ * `08:00` → `20:00`, on the Paris wall clock. Every day unless `days` says
+ * otherwise: ISO weekdays, 1 = Monday … 7 = Sunday. Absent — which is every
+ * window saved before days existed — and « all seven » mean the same thing.
+ */
 export interface TimeWindow {
   from: string;
   to: string;
+  days?: number[];
 }
 
 /**

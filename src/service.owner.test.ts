@@ -104,6 +104,20 @@ describe("editing", () => {
     expect(service.get(access.id)?.stayWindow?.from).toBe(STAY.startsAt);
   });
 
+  it("keeps the days it is given, sorted, and writes « every day » as none", () => {
+    const { service } = start();
+    const access = service.createManual(
+      {
+        label: "Étudiants",
+        timeWindows: [{ from: "18:00", to: "22:00", days: [7, 5] }, { from: "08:00", to: "10:00", days: [1, 2, 3, 4, 5, 6, 7] }],
+      },
+      "adrien",
+    ).access!;
+    expect(access.timeWindows).toEqual([{ from: "18:00", to: "22:00", days: [5, 7] }, { from: "08:00", to: "10:00" }]);
+    expect(service.edit(access.id, { timeWindows: [{ from: "08:00", to: "12:00", days: [] }] }, "adrien").refusal)
+      .toMatchObject({ code: "bad_days" });
+  });
+
   it("names what changed in the journal", () => {
     const { service } = start();
     const access = service.createManual({ label: "Voisin" }, "adrien").access!;

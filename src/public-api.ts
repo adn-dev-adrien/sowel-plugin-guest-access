@@ -162,7 +162,11 @@ export function createPublicApi(deps: PublicDeps) {
         outcome: result.outcome,
         reason: result.outcome,
         ...(decision && !decision.ok
-          ? { activeAt: decision.activeAt, nextOpeningAt: decision.nextOpeningAt }
+          ? {
+              activeAt: decision.activeAt,
+              nextOpeningAt: decision.nextOpeningAt,
+              nextOpeningDay: decision.nextOpeningDay,
+            }
           : {}),
       });
     }

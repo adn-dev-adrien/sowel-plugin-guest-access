@@ -30,6 +30,7 @@ import {
   decide,
   effectiveWindow,
   hasEnded,
+  normalizeTimeWindows,
   validateEarlyOpen,
   validateExtension,
   validateRange,
@@ -173,7 +174,7 @@ export class GuestAccessService {
       validUntil: to ? to.toISOString() : null,
       earlyOpenedAt: null,
       extendedUntil: null,
-      timeWindows: windows as TimeWindow[],
+      timeWindows: normalizeTimeWindows(windows as TimeWindow[]),
       suspendedAt: null,
       revokedAt: null,
       devices: [],
@@ -214,7 +215,7 @@ export class GuestAccessService {
     if ("timeWindows" in input) {
       const refusal = validateTimeWindows(input.timeWindows);
       if (refusal) return { refusal };
-      patch.timeWindows = input.timeWindows as TimeWindow[];
+      patch.timeWindows = normalizeTimeWindows(input.timeWindows as TimeWindow[]);
     }
 
     // A stay's own window belongs to the reservation; what the owner may write

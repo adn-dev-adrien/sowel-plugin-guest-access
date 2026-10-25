@@ -135,6 +135,44 @@ describe("the owner's page", () => {
     expect(calls.find((c) => c.path === "/gates")?.init).toEqual({ method: "POST", body: { equipmentId: "eq-3" } });
   });
 
+  it("hides the days of a window until asked, and says them in a sentence meanwhile", async () => {
+    await open(state({ accesses: [row({ timeWindows: [{ from: "18:00", to: "22:00", days: [5] }, { from: "08:00", to: "12:00" }] })] }));
+    (container.querySelector('[aria-label="Modifier"]') as HTMLButtonElement).click();
+    const lines = [...container.querySelectorAll("dialog[open] .window")];
+    expect(lines.map((l) => l.querySelector(".say")!.textContent)).toEqual(["Tous les vendredis", "Tous les jours"]);
+    expect(lines.every((l) => (l.querySelector(".picker") as HTMLElement).hidden)).toBe(true);
+
+    (lines[0].querySelector(".dayline .btn") as HTMLButtonElement).click();
+    const picker = lines[0].querySelector(".picker") as HTMLElement;
+    expect(picker.hidden).toBe(false);
+    const pressed = [...picker.querySelectorAll(".day")].map((b) => b.getAttribute("aria-pressed"));
+    expect(pressed).toEqual(["false", "false", "false", "false", "true", "false", "false"]);
+  });
+
+  it("selects every day in one click, and sends the days it shows", async () => {
+    await open(state({ accesses: [row({ timeWindows: [{ from: "18:00", to: "22:00", days: [5] }] })] }));
+    (container.querySelector('[aria-label="Modifier"]') as HTMLButtonElement).click();
+    const line = container.querySelector("dialog[open] .window")!;
+    (line.querySelector(".dayline .btn") as HTMLButtonElement).click();
+    (line.querySelector(".quick .btn") as HTMLButtonElement).click(); // « Tous »
+    expect(line.querySelector(".say")!.textContent).toBe("Tous les jours");
+    (line.querySelectorAll(".day")[4] as HTMLButtonElement).click(); // untick Friday
+    (line.querySelectorAll(".day")[4] as HTMLButtonElement).click(); // and back
+    (container.querySelector("dialog[open] .btn.main") as HTMLButtonElement).click();
+    await flush();
+    const patch = calls.find((c) => c.path === "/accesses/a1")?.init as { body: { timeWindows: unknown } };
+    expect(patch.body.timeWindows).toEqual([{ from: "18:00", to: "22:00", days: [1, 2, 3, 4, 5, 6, 7] }]);
+  });
+
+  it("opens the days by itself when none is left, and says so", async () => {
+    await open(state({ accesses: [row({ timeWindows: [{ from: "18:00", to: "22:00", days: [5] }] })] }));
+    (container.querySelector('[aria-label="Modifier"]') as HTMLButtonElement).click();
+    const line = container.querySelector("dialog[open] .window")!;
+    (line.querySelectorAll(".day")[4] as HTMLButtonElement).click();
+    expect((line.querySelector(".picker") as HTMLElement).hidden).toBe(false);
+    expect(line.querySelector(".say")!.textContent).toBe("Choisissez au moins un jour.");
+  });
+
   it("says a recipe is missing instead of offering an empty list", async () => {
     await open(state({ catalog: [], recipe: { answering: false, lastResult: null } }));
     ([...container.querySelectorAll(".tab")].at(-1) as HTMLButtonElement).click();

@@ -8,6 +8,7 @@ import {
   validateEarlyOpen,
   validateExtension,
   validateRange,
+  normalizeTimeWindows,
   validateTimeWindows,
 } from "./validity.js";
 
@@ -119,6 +120,8 @@ describe("deciding a press", () => {
       ok: false,
       reason: "outside_hours",
       nextOpeningAt: "08:00",
+      // 6 September 2026 is a Sunday: the next opening is Monday's.
+      nextOpeningDay: 1,
     });
   });
 
@@ -237,5 +240,86 @@ describe("an access that has run its course", () => {
     expect(
       hasEnded(access({ kind: "manual", stayWindow: null }), new Date("2030-01-01T00:00:00Z")),
     ).toBe(false);
+  });
+});
+
+describe("days of the week on the hours", () => {
+  // 2026-01-06 is a Tuesday; Paris is UTC+1 in January.
+  const friday = [{ from: "18:00", to: "22:00", days: [5] }];
+  const at = (iso: string) => new Date(iso);
+
+  it("opens on the named day, inside the hours", () => {
+    expect(hourCheck(friday, at("2026-01-09T18:30:00Z"))).toEqual({ ok: true }); // Fri 19:30
+  });
+
+  it("refuses the same hours on another day, and names the day to come back", () => {
+    // Thu 19:30 Paris → tomorrow.
+    expect(hourCheck(friday, at("2026-01-08T18:30:00Z"))).toEqual({
+      ok: false,
+      reason: "outside_hours",
+      nextOpeningAt: "18:00",
+      nextOpeningDay: 5,
+    });
+    // Sat 19:30 → next Friday, six days on.
+    expect(hourCheck(friday, at("2026-01-10T18:30:00Z"))).toMatchObject({ nextOpeningDay: 5 });
+  });
+
+  it("on the right day but past the hours, waits for next week's, not today's", () => {
+    // Fri 23:00 Paris.
+    expect(hourCheck(friday, at("2026-01-09T22:00:00Z"))).toMatchObject({
+      nextOpeningAt: "18:00",
+      nextOpeningDay: 5,
+    });
+  });
+
+  it("keeps a window with no days, or with an empty list, on every day", () => {
+    expect(hourCheck([{ from: "08:00", to: "20:00" }], at("2026-01-10T12:00:00Z"))).toEqual({ ok: true });
+  });
+
+  it("reads the Paris weekday, not the UTC one", () => {
+    // Fri 23:30 UTC is already Saturday 00:30 in Paris.
+    const sat = [{ from: "00:00", to: "01:00", days: [6] }];
+    expect(hourCheck(sat, at("2026-01-09T23:30:00Z"))).toEqual({ ok: true });
+  });
+
+  it("lets two windows overlap in hours when they share no day", () => {
+    expect(
+      validateTimeWindows([
+        { from: "08:00", to: "12:00", days: [2] },
+        { from: "10:00", to: "14:00", days: [5] },
+      ]),
+    ).toBeNull();
+  });
+
+  it("refuses an overlap on a shared day, and an absent `days` shares them all", () => {
+    expect(
+      validateTimeWindows([
+        { from: "08:00", to: "12:00", days: [2, 5] },
+        { from: "10:00", to: "14:00", days: [5] },
+      ]),
+    ).toMatchObject({ code: "overlap" });
+    expect(
+      validateTimeWindows([
+        { from: "08:00", to: "12:00" },
+        { from: "10:00", to: "14:00", days: [3] },
+      ]),
+    ).toMatchObject({ code: "overlap" });
+  });
+
+  it("refuses no day at all, rather than reading it as every day", () => {
+    for (const days of [[], [0], [8], [1.5], "5", [null]]) {
+      expect(validateTimeWindows([{ from: "08:00", to: "12:00", days }])).toMatchObject({
+        code: "bad_days",
+      });
+    }
+  });
+
+  it("stores days sorted and unique, and all seven as no days", () => {
+    expect(normalizeTimeWindows([{ from: "18:00", to: "22:00", days: [7, 5, 5] }])).toEqual([
+      { from: "18:00", to: "22:00", days: [5, 7] },
+    ]);
+    expect(
+      normalizeTimeWindows([{ from: "08:00", to: "20:00", days: [1, 2, 3, 4, 5, 6, 7] }]),
+    ).toEqual([{ from: "08:00", to: "20:00" }]);
   });
 });

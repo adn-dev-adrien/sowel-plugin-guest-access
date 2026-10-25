@@ -46,7 +46,7 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     expired: "Cet accès a pris fin.",
     not_yet_active: "Votre accès commence le {when}.",
     suspended: "Votre accès est suspendu. Contactez la personne qui vous l'a donné.",
-    outside_hours: "En dehors des heures autorisées. Prochaine ouverture à {when}.",
+    outside_hours: "En dehors des heures autorisées. Prochaine ouverture : {when}.",
     too_many_opens: "Trop d'ouvertures sur la dernière heure.",
     gate_busy: "Une autre commande est en cours. Réessayez.",
     no_answer: "La maison n'a pas répondu. Réessayez, ou prévenez la personne qui vous a donné l'accès.",
@@ -73,7 +73,7 @@ const STRINGS: Record<Lang, Record<string, string>> = {
     expired: "This access has ended.",
     not_yet_active: "Your access starts on {when}.",
     suspended: "Your access is on hold. Please contact the person who gave it to you.",
-    outside_hours: "Outside the allowed hours. Next opening at {when}.",
+    outside_hours: "Outside the allowed hours. Next opening: {when}.",
     too_many_opens: "Too many openings in the last hour.",
     gate_busy: "Another command is running. Try again.",
     no_answer: "The house did not answer. Try again, or let the person who gave you access know.",
@@ -304,9 +304,17 @@ function say(message, calm) {
   note.hidden = !message;
 }
 
-function when(value) {
+function when(value, day) {
   if (!value) return "";
-  if (/^\\d{1,2}:\\d{2}$/.test(value)) return value;
+  if (/^\\d{1,2}:\\d{2}$/.test(value)) {
+    if (!day) return value;
+    // ISO weekday → a name in the guest's language; 1 January 2024 is a Monday.
+    try {
+      const name = new Intl.DateTimeFormat(LOCALE, { weekday: "long", timeZone: "UTC" })
+        .format(new Date(Date.UTC(2024, 0, day)));
+      return name + " " + value;
+    } catch { return value; }
+  }
   try {
     return new Intl.DateTimeFormat(LOCALE, {
       weekday: "long", day: "numeric", month: "long", hour: "2-digit", minute: "2-digit",
@@ -317,7 +325,7 @@ function when(value) {
 function reason(payload) {
   const key = payload && payload.reason ? payload.reason : "unknown";
   const text = T[key] || T.unknown;
-  return text.replace("{when}", when(payload && (payload.activeAt || payload.nextOpeningAt)));
+  return text.replace("{when}", when(payload && (payload.activeAt || payload.nextOpeningAt), payload && !payload.activeAt ? payload.nextOpeningDay : 0));
 }
 
 async function call(path, body) {

@@ -156,8 +156,14 @@ Sowel and the guests a page of their own, and treats guestFlow as one optional s
 9. **An override can only ever widen**: « Ouvrir dès » must precede the start, « Prolonger jusqu'au »
    must exceed the end. That is what lets guestFlow rewrite a stay's dates whenever the reservation
    moves without shortening an access behind the owner's back. Cutting one short is « Suspendre ».
-10. **Time windows apply every day**, may not cross midnight and may not overlap — two overlapping
-    rules make the effective one unguessable. A press outside them is told **when the next one opens**.
+10. **Time windows apply on the days they name** (ISO weekdays, 1 = Monday), **every day when none is
+    named**. They may not cross midnight and may not overlap **on a day they share** — two overlapping
+    rules make the effective one unguessable. A window with an empty or invalid `days` is refused
+    (`bad_days`), never read as « every day ». « All seven » is stored as no days, so an unrestricted
+    window looks as it always did. A press outside them is told **when the next one opens**, with its
+    weekday when it is not today (`nextOpeningDay`). The editor holds the days **folded**: a window
+    shows « Tous les jours » or « Tous les vendredis » and opens its seven buttons (with « Tous »,
+    « Semaine », « Week-end ») only on request, or by itself when none is left.
 11. **Ceilings at both levels**: 12 opens per hour per access, 30 per hour **per gate** — a busy gate
     does not starve the garage. Asked without a gate (the phone checking what it may do), the
     quietest of the access's gates stands in; every press is judged again on its own gate.
@@ -354,7 +360,6 @@ than the root.
 ## 7. Out of scope
 
 - A QR rendered here. guestFlow already renders one for a stay; a hand-made access is shared by link.
-- Days of the week on the time windows. « Every day 08:00 → 20:00 » covers the friend watering the
-  plants; « only on Tuesdays » is a different need, added the day it exists.
+- Dates or exceptions on the time windows (« not on 14 July »). Days of the week exist since 1.5.0.
 - Accounts for guests. The code and the link, as before.
 - Sending the invitation by SMS from the house.
